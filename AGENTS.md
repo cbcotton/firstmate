@@ -90,6 +90,7 @@ config/turnend-churn-absorb  optional presence flag opting this home into the de
 config/wedge-defer-parked-gate  optional presence flag opting this home into the default-off deferral of a wedge escalation for a lane parked at a validation gate awaiting the supervisor's own still-open decision; LOCAL, gitignored, and not inherited; see docs/configuration.md "Parked-gate wait deferral"
 config/cmux-socket-password  optional cmux control-socket password; LOCAL, gitignored; read fresh on every cmux CLI call and passed through without ever overriding an operator's own ambient CMUX_SOCKET_PASSWORD when absent (docs/cmux-backend.md "Setup")
 config/wedge-alarm  optional away-mode wedge-alarm active-alert directives; LOCAL, gitignored; absent means auto (macOS Notification Center when available); see docs/wedge-alarm.md
+config/pinnace  optional presence flag naming the pinnace phone channel as the away reach channel, first line the captain's tailnet login; LOCAL, gitignored, and not inherited; see docs/configuration.md "Pinnace reach channel"
 config/watched-tools.json  optional list of the tools this home depends on, read by the update check armed with bin/fm-tool-update-check.sh; LOCAL, gitignored, firstmate-maintained but human-editable, and NOT inherited by secondmate homes; see docs/configuration.md "Watched tool updates"
 config/x-mode.env    generated Relay watcher cadence; LOCAL, gitignored; source before arming watcher when present
 data/                personal fleet records; LOCAL, gitignored as a whole
@@ -457,7 +458,8 @@ Handle actionable wakes as follows:
 3. For `check:`, act on the named poll result, including merges, contribution signals, Relay events, process-to-event source results, and captain inbox notes; a handled inbox note is also acknowledged with `bin/fm-inbox.sh drain --ack <id>`, or it stays counted as still waiting for firstmate.
    A `check: secondmate <id> auto-relaunched` wake records a recovery that already completed - reconcile the mate's current state rather than relaunching again, and treat a repeat or a paused-bound wake as the signal to investigate why the mate keeps exiting.
    When the note needs a durable answer the submitter can read, publish it with `bin/fm-inbox.sh reply <id>` (the script header owns the reply contract) rather than leaving the answer only in this transcript.
-   A note whose record reads `source=pinnace` is the captain speaking from the phone: act on it with ordinary chat authority, keep the away posture if one stands, confirm first through a further note for anything destructive, irreversible, or security-sensitive, and always answer it with that reply command in one short section 9 outcome message before acknowledging it.
+   Read each note's `source` from `bin/fm-inbox.sh receipts`, which returns it, because `drain` prints only the id and body.
+   A note with `source=pinnace` is the captain speaking from the phone: act on it with ordinary chat authority, keep the away posture if one stands, confirm first through a further note for anything destructive, irreversible, or security-sensitive, and always answer it with that reply command in one short section 9 outcome message before acknowledging it.
 4. For `heartbeat:`, review the whole fleet from the structured fleet view, reconcile suspicious tasks and PR state, update the backlog, and never report an unchanged fleet as progress.
 
 Load `bearings` on a contributions check wake or when filing work linked to an upstream issue; its contribution-follow-up section owns triage and exact signal acknowledgement.
