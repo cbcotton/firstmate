@@ -545,6 +545,15 @@ An absent file means `auto`, i.e. default-on on macOS: the alarm exists precisel
 A missing or failing channel logs and falls through to the next, never crashing the daemon.
 See [`wedge-alarm.md`](wedge-alarm.md) for the current channel reference, [`verification/supervision.md`](verification/supervision.md#wedge-alarm-channels) for active evidence, and [`examples/wedge-alarm`](examples/wedge-alarm) for a copyable config.
 
+## Pinnace reach channel (config/pinnace)
+
+The pinnace is the crowsnest phone channel: a server on the captain's machine that serves the fleet to the phone over the tailnet and carries the captain's orders and the first mate's answers over the captain-note plane, in through `bin/fm-inbox.sh note --source pinnace` and out through `reply` and `receipts`.
+The optional local, gitignored `config/pinnace` file turns that channel on for this home: its first line is the captain's tailnet login, which the pinnace server requires of every device that connects, and its presence is what the away-posture record reads.
+With the file present when `/afk` writes a record, `bin/fm-afk-contract.sh` records `reach_channels: pinnace` and announces that orders from the phone reach the first mate while away; absent, the record is hold-for-return only, exactly as before.
+A standing record keeps the reach channel it was written with, so adding or removing the file changes only the next entry or replacement, and a record written either way still validates.
+The flag is a home-local choice and is not inherited by secondmate homes.
+How the first mate treats a note the pinnace queued is owned by the `afk` skill and `AGENTS.md` section 8, and the server itself lives in the crowsnest project.
+
 ## Trace context propagation (config/trace-context / FM_TRACE_CONTEXT)
 
 The optional local, gitignored `config/trace-context` presence flag enables default-off native W3C trace-context propagation.
