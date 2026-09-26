@@ -20,8 +20,8 @@
 #           fleet work and must not become fleet work.
 #
 # Usage:
-#   fm-inbox.sh note [--request-id <id>] [--json] [--] <text>...
-#   fm-inbox.sh note [--request-id <id>] [--json] -   (body from stdin)
+#   fm-inbox.sh note [--request-id <id>] [--source <token>] [--meta <key>=<value>]... [--json] [--] <text>...
+#   fm-inbox.sh note [--request-id <id>] [--source <token>] [--meta <key>=<value>]... [--json] -   (body from stdin)
 #   fm-inbox.sh announce [--json] <id>
 #   fm-inbox.sh reply [--json] <id> <text>... | reply [--json] <id> -
 #   fm-inbox.sh receipts [--after <cursor>] [--all-pending] [--all-handled] [--all-replies]
@@ -47,6 +47,14 @@
 # the duplicate wake this contract exists to remove. Notes written from here on
 # carry `announce_marker=1`, which is what makes a missing marker mean "not
 # announced" rather than "not known". Receipts report that state as null.
+# `note --source <token>` records which channel spoke, as the `source` header
+# that `receipts` returns: `text` when omitted (the terminal), `voice` from
+# `say`, and `pinnace` from the phone. A token is one or more of A-Za-z0-9._-
+# and nothing else. Each `--meta <key>=<value>` adds one more header line
+# beside it - the pinnace passes `node=<tailnet machine>` and `login=<tailnet
+# login>` so the record says who ordered what. A key follows the same token
+# rule and may not reuse a fixed header name (id, at, source, announce_marker,
+# request_id); a value is never empty and never holds a line break.
 # A note body is text, not options: only the flags above are parsed, anything
 # else starting with `--` begins the body, and `--` ends option parsing.
 # Human `note`/`list`/`drain` output and exit conventions stay as they were when
@@ -234,6 +242,28 @@ valid_note_id() {
   case "$1" in
     *[!A-Za-z0-9._-]*) return 1 ;;
   esac
+  return 0
+}
+
+valid_source() {
+  case "$1" in
+    ''|*[!A-Za-z0-9._-]*) return 1 ;;
+  esac
+  return 0
+}
+
+# One provenance header line: a token key that is not a fixed header name, and
+# a non-empty value with no line break, so the header block stays one line per
+# field and its `--` terminator still ends it.
+valid_meta() {  # <key>=<value>
+  local key value
+  case "$1" in *=*) ;; *) return 1 ;; esac
+  key=${1%%=*}
+  value=${1#*=}
+  valid_source "$key" || return 1
+  case "$key" in id|at|source|announce_marker|request_id) return 1 ;; esac
+  [ -n "$value" ] || return 1
+  case "$value" in *$'\n'*|*$'\r'*) return 1 ;; esac
   return 0
 }
 
@@ -470,32 +500,46 @@ queue_note() {
 }
 
 cmd_note() {
-  local body json=0 request_id=""
+  local body json=0 request_id="" source=text extra="" nl=$'\n'
+  local usage="usage: fm-inbox.sh note [--request-id <id>] [--source <token>] [--meta <key>=<value>]... [--json] [--] <text>... (or: note -)"
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --json) json=1; shift ;;
       --request-id)
-        [ "$#" -ge 2 ] || die "usage: fm-inbox.sh note [--request-id <id>] [--json] [--] <text>... (or: note -)"
+        [ "$#" -ge 2 ] || die "$usage"
         request_id=$2
         valid_request_id "$request_id" \
           || die "invalid request id (use 1-128 characters: A-Za-z0-9._:-)"
         shift 2
         ;;
+      --source)
+        [ "$#" -ge 2 ] || die "$usage"
+        source=$2
+        valid_source "$source" || die "invalid source token (use characters: A-Za-z0-9._-)"
+        shift 2
+        ;;
+      --meta)
+        [ "$#" -ge 2 ] || die "$usage"
+        valid_meta "$2" \
+          || die "invalid --meta (use <key>=<value>: a key of A-Za-z0-9._- that is not a fixed header name, and a non-empty value with no line break)"
+        extra="${extra:+$extra$nl}$2"
+        shift 2
+        ;;
       --) shift; break ;;
-      -h|--help) die "usage: fm-inbox.sh note [--request-id <id>] [--json] [--] <text>... (or: note -)" ;;
+      -h|--help) die "$usage" ;;
       *) break ;;
     esac
   done
   if [ "$#" -eq 0 ]; then
-    die "usage: fm-inbox.sh note [--request-id <id>] [--json] [--] <text>... (or: note -)"
+    die "$usage"
   elif [ "$1" = "-" ]; then
-    [ "$#" -eq 1 ] || die "usage: fm-inbox.sh note [--request-id <id>] [--json] -"
+    [ "$#" -eq 1 ] || die "$usage"
     body=$(cat; printf .)
     body=${body%.}
   else
     body="$*"
   fi
-  queue_note text "$body" "" "$request_id" "$json"
+  queue_note "$source" "$body" "$extra" "$request_id" "$json"
 }
 
 cmd_announce() {
