@@ -399,9 +399,9 @@ fm_afk_contract_render_announcement() {  # <path>
   words=$(fm_afk_contract_read_words "$path"; rc=$?; printf x; exit "$rc") || return 1
   words=${words%x}
   if [ -n "$words" ]; then
-    mandate_text='Your away instructions are recorded verbatim; the away session will carry them out where it can, and anything it is unsure of, or that needs you, waits for your return.'
+    mandate_text='Your away instructions are recorded verbatim; the away session will carry them out where it can.'
   else
-    mandate_text='No away instructions were recorded; the away session acts on standing authority only, and anything that needs you waits for your return.'
+    mandate_text='No away instructions were recorded; the away session acts on standing authority only.'
   fi
   printf 'Away posture recorded at %s: %s. %s %s Destructive, irreversible, and security-sensitive actions are never pre-authorizable, whatever the words say. Expected return: %s. Spend cap: %s concurrent workers.\n' \
     "$(fm_afk_contract_read_field "$path" confirmed)" \

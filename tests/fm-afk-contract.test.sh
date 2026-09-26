@@ -126,7 +126,7 @@ test_enter_writes_a_v2_record_in_one_step_and_announces_hold_for_return() {
   [ ! -e "$home/state/.afk-contract.proposed" ] || fail "enter staged a proposal instead of writing the record"
   assert_contains "$out" 'Away posture recorded at ' 'announcement opens with the recorded time'
   assert_contains "$out" 'hold-for-return only. No phone channel is configured; anything that needs you waits for your return.' 'announcement says hold-for-return only, aloud'
-  assert_contains "$out" 'Your away instructions are recorded verbatim; the away session will carry them out where it can, and anything it is unsure of, or that needs you, waits for your return.' 'announcement says the words will be carried out'
+  assert_contains "$out" 'Your away instructions are recorded verbatim; the away session will carry them out where it can.' 'announcement says the words will be carried out'
   assert_contains "$out" 'Destructive, irreversible, and security-sensitive actions are never pre-authorizable, whatever the words say.' 'announcement states the never-set'
   assert_contains "$out" 'Expected return: not given. Spend cap: 4 concurrent workers.' 'announcement carries the defaults'
   assert_contains "$out" 'Away posture (recorded):' 'the read-back follows the entry'
@@ -217,7 +217,7 @@ test_plain_entry_and_refresh_leave_no_wait() {
   home=$(make_home defaults)
   out=$(contract "$home" enter 2>&1) || fail "plain entry failed: $out"
   [ -f "$home/state/.afk-contract" ] || fail "plain entry did not write the record"
-  assert_contains "$out" 'No away instructions were recorded; the away session acts on standing authority only, and anything that needs you waits for your return.' 'plain announcement'
+  assert_contains "$out" 'No away instructions were recorded; the away session acts on standing authority only.' 'plain announcement'
   assert_contains "$out" 'hold-for-return only.' 'plain announcement says hold-for-return'
   assert_contains "$out" '  your words: (none)' 'a plain entry reads back no words'
   first=$(cat "$home/state/.afk-contract")
@@ -518,6 +518,7 @@ test_pinnace_flag_records_the_phone_as_the_reach_channel() {
   assert_contains "$out" ': the pinnace is the reach channel. Orders from your phone reach me while you are away, and anything that needs you is answered there.' 'announcement names the pinnace as the reach channel'
   assert_not_contains "$out" 'hold-for-return only' 'a pinnace home must not be announced as hold-for-return only'
   assert_not_contains "$out" 'No phone channel' 'a pinnace home must not deny its phone channel'
+  assert_not_contains "$out" 'waits for your return' 'a pinnace home must not say anything waits for the return'
   assert_contains "$out" 'Destructive, irreversible, and security-sensitive actions are never pre-authorizable, whatever the words say.' 'the never-set is restated with the pinnace'
   contract "$home" validate || fail "a pinnace record does not validate"
   out=$(contract "$home" readback) || fail "readback of a pinnace record failed"
