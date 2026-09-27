@@ -534,6 +534,54 @@ escaped=$(run_inbox "$home" note -- "--request-id is body text here") \
 assert_contains "$escaped" "queued " "-- escapes a body that looks like a flag"
 pass "a note body that opens with a double dash is queued as text"
 
+# --- note provenance: --source and --meta -----------------------------------
+
+# The pinnace (the phone channel) queues its orders as notes that say who
+# spoke, through the same header block `say` already fills for its extras.
+home=$(make_home provenance)
+prov_out=$(run_inbox "$home" note --source pinnace --meta node=phone --meta login=captain@example --json "merge it when green") \
+  || fail "a note with --source and --meta should be queued"
+prov_id=$(printf '%s' "$prov_out" | json_get id)
+prov_record="$home/state/inbox/$prov_id.note"
+assert_present "$prov_record" "the provenance note is recorded"
+prov_headers=$(sed -n '/^--$/q;p' "$prov_record")
+assert_contains "$prov_headers" "source=pinnace" "the record names the pinnace as its source"
+assert_contains "$prov_headers" "node=phone" "the record carries the node header"
+assert_contains "$prov_headers" "login=captain@example" "the record carries the login header"
+prov_receipts=$(run_inbox "$home" receipts) || fail "receipts of a provenance note should succeed"
+assert_equals "pinnace" "$(printf '%s' "$prov_receipts" | json_get pending 0 source)" \
+  "receipts return the pinnace source"
+assert_equals "merge it when green" "$(printf '%s' "$prov_receipts" | json_get pending 0 body)" \
+  "the provenance headers leave the body unchanged"
+default_out=$(run_inbox "$home" note --json "typed at the desk") || fail "a plain note should still queue"
+default_id=$(printf '%s' "$default_out" | json_get id)
+assert_equals "text" "$(sed -n 's/^source=//p' "$home/state/inbox/$default_id.note")" \
+  "the default source stays text"
+set +e
+space_source_out=$(run_inbox "$home" note --source 'pin nace' --json "nope" 2>&1)
+space_source_code=$?
+path_source_out=$(run_inbox "$home" note --source '../x' --json "nope" 2>&1)
+path_source_code=$?
+forged_meta_out=$(run_inbox "$home" note --meta 'source=forged' --json "nope" 2>&1)
+forged_meta_code=$?
+bare_meta_out=$(run_inbox "$home" note --meta 'novalue' --json "nope" 2>&1)
+bare_meta_code=$?
+newline_meta_out=$(run_inbox "$home" note --meta "$(printf 'node=phone\nid=forged')" --json "nope" 2>&1)
+newline_meta_code=$?
+set -e
+expect_code 1 "$space_source_code" "a source token with a space is refused"
+expect_code 1 "$path_source_code" "a path-like source token is refused"
+expect_code 1 "$forged_meta_code" "a meta key that reuses a fixed header is refused"
+expect_code 1 "$bare_meta_code" "a meta without = is refused"
+expect_code 1 "$newline_meta_code" "a meta value with a line break is refused"
+assert_contains "$space_source_out" "invalid source token" "an invalid source is rejected by name"
+assert_contains "$path_source_out" "invalid source token" "a path-like source is rejected by name"
+assert_contains "$forged_meta_out" "invalid --meta" "a reused header name is rejected by name"
+assert_contains "$bare_meta_out" "invalid --meta" "a meta without = is rejected by name"
+assert_contains "$newline_meta_out" "invalid --meta" "a line break in a meta value is rejected by name"
+assert_equals "2" "$(count_notes "$home")" "refused provenance flags write no note"
+pass "a note records its source and provenance headers, defaults to text, and refuses malformed tokens"
+
 # --- drain still acks by moving the note ------------------------------------
 
 home=$(make_home drain)

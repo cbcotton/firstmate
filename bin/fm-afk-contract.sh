@@ -9,8 +9,12 @@
 # in bin/fm-afk-return.sh calls `archive` through bin/fm-afk-launch.sh stop).
 # Being away changes how the captain is informed and what happens at a
 # captain-owned decision point, never the authority set. Hold-for-return is the
-# only reach profile this release records: there is no phone channel, and the
-# entry announcement says so every time.
+# default reach profile; a home whose opt-in config/pinnace flag exists (the
+# crowsnest phone channel, docs/configuration.md "Pinnace reach channel")
+# records the pinnace as the reach channel instead, and the entry announcement
+# names whichever applies every time. The flag is read when a record is
+# written, so a standing record keeps the reach channel it was written with
+# until new words replace it.
 #
 # ENTRY IS THE GO. `/afk` itself is the captain's go: `enter` writes the record
 # in the same turn, before any other work, and never waits for a further human
@@ -38,7 +42,7 @@
 #   entered: <UTC ISO 8601>
 #   entered_epoch: <seconds>
 #   expected_return: <UTC ISO 8601> | -
-#   reach_channels: none
+#   reach_channels: none | pinnace    pinnace when config/pinnace existed at write
 #   reach_announced: <the one-sentence reach announcement>
 #   spend_max_concurrent_workers: <n>
 #   confirmed: <UTC ISO 8601>       when this mandate was recorded; /afk itself
@@ -111,6 +115,7 @@ FM_AFK_CONTRACT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FM_ROOT="${FM_ROOT_OVERRIDE:-$(cd "$FM_AFK_CONTRACT_DIR/.." && pwd)}"
 FM_HOME="${FM_HOME:-${FM_ROOT_OVERRIDE:-$FM_ROOT}}"
 FM_AFK_CONTRACT_STATE="${FM_STATE_OVERRIDE:-$FM_HOME/state}"
+FM_AFK_CONTRACT_CONFIG="${FM_CONFIG_OVERRIDE:-$FM_HOME/config}"
 
 # shellcheck source=bin/fm-classify-lib.sh
 . "$FM_AFK_CONTRACT_DIR/fm-classify-lib.sh"
@@ -119,6 +124,7 @@ FM_AFK_CONTRACT_VERSION=2
 # Older record versions this script still reads (never writes).
 FM_AFK_CONTRACT_READABLE_VERSIONS="1 2"
 FM_AFK_CONTRACT_REACH_ANNOUNCED='No phone channel is configured; anything that needs you waits for your return.'
+FM_AFK_CONTRACT_REACH_ANNOUNCED_PINNACE='Orders from your phone reach me while you are away, and anything that needs you is answered there.'
 FM_AFK_CONTRACT_SPEND_DEFAULT=4
 # Generous against the longest legitimate holder, a merge waiting on the forge,
 # so the bound only ever trips on something genuinely wedged.
@@ -201,6 +207,34 @@ fm_afk_contract_now_iso() {
   date -u +%Y-%m-%dT%H:%M:%SZ
 }
 
+# --- reach channel ----------------------------------------------------------
+
+# The reach channel a record written now carries: `pinnace` while the home's
+# opt-in config/pinnace flag exists, otherwise `none` (hold-for-return only).
+fm_afk_contract_reach_channels() {
+  if [ -f "$FM_AFK_CONTRACT_CONFIG/pinnace" ]; then
+    printf 'pinnace'
+  else
+    printf 'none'
+  fi
+}
+
+# The one-sentence reach announcement recorded beside that channel.
+fm_afk_contract_reach_announced() {  # <channels>
+  case "$1" in
+    pinnace) printf '%s' "$FM_AFK_CONTRACT_REACH_ANNOUNCED_PINNACE" ;;
+    *) printf '%s' "$FM_AFK_CONTRACT_REACH_ANNOUNCED" ;;
+  esac
+}
+
+# The reach profile phrase the announcement and the read-back open with.
+fm_afk_contract_reach_profile() {  # <channels>
+  case "$1" in
+    pinnace) printf 'the pinnace is the reach channel' ;;
+    *) printf 'hold-for-return only' ;;
+  esac
+}
+
 # --- record writing ---------------------------------------------------------
 
 fm_afk_contract_validate_iso() {  # <ts>
@@ -210,13 +244,15 @@ fm_afk_contract_validate_iso() {  # <ts>
 # Render a whole record on stdout.
 # Inputs: WORDS (verbatim), EXPECTED_RETURN, SPEND.
 fm_afk_contract_render_record() {  # <entered-iso> <entered-epoch> <confirmed-iso> <confirmed-epoch>
-  local entered=$1 entered_epoch=$2 confirmed=$3 confirmed_epoch=$4
+  local entered=$1 entered_epoch=$2 confirmed=$3 confirmed_epoch=$4 reach announced
+  reach=$(fm_afk_contract_reach_channels)
+  announced=$(fm_afk_contract_reach_announced "$reach")
   printf 'version: %s\n' "$FM_AFK_CONTRACT_VERSION"
   printf 'entered: %s\n' "$entered"
   printf 'entered_epoch: %s\n' "$entered_epoch"
   printf 'expected_return: %s\n' "${EXPECTED_RETURN:--}"
-  printf 'reach_channels: none\n'
-  printf 'reach_announced: %s\n' "$FM_AFK_CONTRACT_REACH_ANNOUNCED"
+  printf 'reach_channels: %s\n' "$reach"
+  printf 'reach_announced: %s\n' "$announced"
   printf 'spend_max_concurrent_workers: %s\n' "${SPEND:-$FM_AFK_CONTRACT_SPEND_DEFAULT}"
   printf 'confirmed: %s\n' "$confirmed"
   printf 'confirmed_epoch: %s\n' "$confirmed_epoch"
@@ -310,7 +346,7 @@ fm_afk_contract_validate() {  # <path>
   expected=$(fm_afk_contract_read_field "$path" expected_return)
   [ "$expected" = - ] || fm_afk_contract_validate_iso "$expected" || { fm_afk_contract_log "record $path has no valid expected_return"; return 1; }
   reach=$(fm_afk_contract_read_field "$path" reach_channels)
-  [ "$reach" = none ] || { fm_afk_contract_log "record $path has no valid reach_channels"; return 1; }
+  case "$reach" in none|pinnace) ;; *) fm_afk_contract_log "record $path has no valid reach_channels"; return 1 ;; esac
   announced=$(fm_afk_contract_read_field "$path" reach_announced)
   [ -n "$announced" ] || { fm_afk_contract_log "record $path has no reach announcement"; return 1; }
   spend=$(fm_afk_contract_read_field "$path" spend_max_concurrent_workers)
@@ -334,14 +370,16 @@ fm_afk_contract_validate() {  # <path>
 # of the record for the captain at entry and for the away session on every wake.
 # It never asks for a go: the record already stands when it is printed.
 fm_afk_contract_render_readback() {  # <path> <title>
-  local path=$1 title=$2 words expected spend
+  local path=$1 title=$2 words expected spend reach profile
   expected=$(fm_afk_contract_read_field "$path" expected_return)
   spend=$(fm_afk_contract_read_field "$path" spend_max_concurrent_workers)
+  reach=$(fm_afk_contract_read_field "$path" reach_channels)
+  profile=$(fm_afk_contract_reach_profile "$reach")
   printf '%s\n' "$title"
   printf '  entered: %s\n' "$(fm_afk_contract_read_field "$path" entered)"
   printf '  expected return: %s\n' "$( [ "$expected" = - ] && printf 'not given' || printf '%s' "$expected")"
   printf '  spend cap: %s concurrent workers\n' "$spend"
-  printf '  reach: hold-for-return only. %s\n' "$(fm_afk_contract_read_field "$path" reach_announced)"
+  printf '  reach: %s. %s\n' "$profile" "$(fm_afk_contract_read_field "$path" reach_announced)"
   words=$(fm_afk_contract_read_words "$path"; rc=$?; printf x; exit "$rc") || return 1
   words=${words%x}
   if [ -n "$words" ]; then
@@ -354,17 +392,20 @@ fm_afk_contract_render_readback() {  # <path> <title>
 }
 
 fm_afk_contract_render_announcement() {  # <path>
-  local path=$1 expected words mandate_text
+  local path=$1 expected words mandate_text reach profile
   expected=$(fm_afk_contract_read_field "$path" expected_return)
+  reach=$(fm_afk_contract_read_field "$path" reach_channels)
+  profile=$(fm_afk_contract_reach_profile "$reach")
   words=$(fm_afk_contract_read_words "$path"; rc=$?; printf x; exit "$rc") || return 1
   words=${words%x}
   if [ -n "$words" ]; then
-    mandate_text='Your away instructions are recorded verbatim; the away session will carry them out where it can, and anything it is unsure of, or that needs you, waits for your return.'
+    mandate_text='Your away instructions are recorded verbatim; the away session will carry them out where it can.'
   else
-    mandate_text='No away instructions were recorded; the away session acts on standing authority only, and anything that needs you waits for your return.'
+    mandate_text='No away instructions were recorded; the away session acts on standing authority only.'
   fi
-  printf 'Away posture recorded at %s: hold-for-return only. %s %s Destructive, irreversible, and security-sensitive actions are never pre-authorizable, whatever the words say. Expected return: %s. Spend cap: %s concurrent workers.\n' \
+  printf 'Away posture recorded at %s: %s. %s %s Destructive, irreversible, and security-sensitive actions are never pre-authorizable, whatever the words say. Expected return: %s. Spend cap: %s concurrent workers.\n' \
     "$(fm_afk_contract_read_field "$path" confirmed)" \
+    "$profile" \
     "$(fm_afk_contract_read_field "$path" reach_announced)" \
     "$mandate_text" \
     "$( [ "$expected" = - ] && printf 'not given' || printf '%s' "$expected")" \

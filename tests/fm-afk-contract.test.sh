@@ -2,7 +2,8 @@
 # tests/fm-afk-contract.test.sh - the away-posture record owner
 # (bin/fm-afk-contract.sh): the captain's away words recorded verbatim as the
 # whole mandate, the read-back rendering, the entry announcement (hold-for-
-# return only), the one-step same-turn entry with no wait for a go, the
+# return only, or the pinnace when config/pinnace exists), the one-step
+# same-turn entry with no wait for a go, the
 # retired two-step entry refusing by name, the refresh and replace rules,
 # the archive at return, the version 2 record with version 1 still readable,
 # the retired clause and merge-grant apparatus refusing by name, and the read
@@ -125,7 +126,7 @@ test_enter_writes_a_v2_record_in_one_step_and_announces_hold_for_return() {
   [ ! -e "$home/state/.afk-contract.proposed" ] || fail "enter staged a proposal instead of writing the record"
   assert_contains "$out" 'Away posture recorded at ' 'announcement opens with the recorded time'
   assert_contains "$out" 'hold-for-return only. No phone channel is configured; anything that needs you waits for your return.' 'announcement says hold-for-return only, aloud'
-  assert_contains "$out" 'Your away instructions are recorded verbatim; the away session will carry them out where it can, and anything it is unsure of, or that needs you, waits for your return.' 'announcement says the words will be carried out'
+  assert_contains "$out" 'Your away instructions are recorded verbatim; the away session will carry them out where it can.' 'announcement says the words will be carried out'
   assert_contains "$out" 'Destructive, irreversible, and security-sensitive actions are never pre-authorizable, whatever the words say.' 'announcement states the never-set'
   assert_contains "$out" 'Expected return: not given. Spend cap: 4 concurrent workers.' 'announcement carries the defaults'
   assert_contains "$out" 'Away posture (recorded):' 'the read-back follows the entry'
@@ -216,7 +217,7 @@ test_plain_entry_and_refresh_leave_no_wait() {
   home=$(make_home defaults)
   out=$(contract "$home" enter 2>&1) || fail "plain entry failed: $out"
   [ -f "$home/state/.afk-contract" ] || fail "plain entry did not write the record"
-  assert_contains "$out" 'No away instructions were recorded; the away session acts on standing authority only, and anything that needs you waits for your return.' 'plain announcement'
+  assert_contains "$out" 'No away instructions were recorded; the away session acts on standing authority only.' 'plain announcement'
   assert_contains "$out" 'hold-for-return only.' 'plain announcement says hold-for-return'
   assert_contains "$out" '  your words: (none)' 'a plain entry reads back no words'
   first=$(cat "$home/state/.afk-contract")
@@ -503,6 +504,66 @@ test_version_1_record_is_replaced_by_a_version_2_record() {
   pass "new words over a live version 1 record archive it and write version 2 with the same session start"
 }
 
+# The pinnace (the crowsnest phone channel) is the reach channel only while the
+# home's opt-in config/pinnace flag exists when the record is written; without
+# it the record and the announcement are exactly what they were before.
+test_pinnace_flag_records_the_phone_as_the_reach_channel() {
+  local home out keys
+  home=$(make_home pinnace)
+  mkdir -p "$home/config"
+  printf 'captain@example.com\n' > "$home/config/pinnace"
+  out=$(contract "$home" enter --words 'merge it when green' 2>&1) || fail "entry with the pinnace flag failed: $out"
+  [ "$(contract "$home" field reach_channels)" = pinnace ] || fail "reach channels are not pinnace: $(contract "$home" field reach_channels)"
+  assert_contains "$out" 'Away posture recorded at ' 'announcement opens with the recorded time'
+  assert_contains "$out" ': the pinnace is the reach channel. Orders from your phone reach me while you are away, and anything that needs you is answered there.' 'announcement names the pinnace as the reach channel'
+  assert_not_contains "$out" 'hold-for-return only' 'a pinnace home must not be announced as hold-for-return only'
+  assert_not_contains "$out" 'No phone channel' 'a pinnace home must not deny its phone channel'
+  assert_not_contains "$out" 'waits for your return' 'a pinnace home must not say anything waits for the return'
+  assert_contains "$out" 'Destructive, irreversible, and security-sensitive actions are never pre-authorizable, whatever the words say.' 'the never-set is restated with the pinnace'
+  contract "$home" validate || fail "a pinnace record does not validate"
+  out=$(contract "$home" readback) || fail "readback of a pinnace record failed"
+  assert_contains "$out" '  reach: the pinnace is the reach channel. Orders from your phone reach me while you are away, and anything that needs you is answered there.' 'read-back names the pinnace'
+  keys=$(sed -n 's/^\([a-z_]*\):.*/\1/p' "$home/state/.afk-contract" | tr '\n' ' ')
+  [ "$keys" = 'version entered entered_epoch expected_return reach_channels reach_announced spend_max_concurrent_workers confirmed confirmed_epoch words ' ] \
+    || fail "the pinnace record carries fields beyond the fixed schema: $keys"
+  home=$(make_home flag-absent)
+  out=$(contract "$home" enter --words 'merge it when green' 2>&1) || fail "entry without the pinnace flag failed: $out"
+  [ "$(contract "$home" field reach_channels)" = none ] || fail "reach channels without the flag are not none"
+  assert_contains "$out" ': hold-for-return only. No phone channel is configured; anything that needs you waits for your return.' 'without the flag the announcement is unchanged'
+  assert_not_contains "$out" 'pinnace' 'without the flag nothing names the pinnace'
+  pass "config/pinnace records the pinnace as the reach channel and announces it; without the flag nothing changes"
+}
+
+# A standing record keeps the reach channel it was written with: a version 2
+# record carrying none still validates and refreshes untouched after the flag
+# appears, a pinnace record still validates after the flag is removed, and any
+# other channel value is refused.
+test_reach_channel_records_validate_whichever_way_the_flag_moves() {
+  local home out rc
+  home=$(make_home reach-none-then-flag)
+  contract "$home" enter --words 'merge it when green' >/dev/null 2>&1 || fail "entry without the flag failed"
+  [ "$(contract "$home" field reach_channels)" = none ] || fail "the record did not start at none"
+  mkdir -p "$home/config"
+  printf 'captain@example.com\n' > "$home/config/pinnace"
+  contract "$home" validate || fail "a version 2 record with none must still validate once the flag exists"
+  out=$(contract "$home" enter 2>&1) || fail "refresh after the flag appeared failed: $out"
+  assert_contains "$out" 'already recorded at' 'a refresh leaves the standing record untouched'
+  assert_contains "$out" ': hold-for-return only. No phone channel is configured' 'a refresh announces the recorded channel, not the flag'
+  [ "$(contract "$home" field reach_channels)" = none ] || fail "a refresh rewrote the reach channel from the flag"
+  contract "$home" enter --words 'now with the phone' >/dev/null 2>&1 || fail "replacement with the flag failed"
+  [ "$(contract "$home" field reach_channels)" = pinnace ] || fail "new words did not record the pinnace"
+  rm -f "$home/config/pinnace"
+  contract "$home" validate || fail "a pinnace record must still validate after the flag is removed"
+  sed -i.bak 's/^reach_channels: pinnace$/reach_channels: pager/' "$home/state/.afk-contract" && rm -f "$home/state/.afk-contract.bak"
+  set +e
+  out=$(contract "$home" validate 2>&1)
+  rc=$?
+  set -e
+  [ "$rc" -ne 0 ] || fail "an unknown reach channel must be refused"
+  assert_contains "$out" 'no valid reach_channels' 'an unknown reach channel is refused by name'
+  pass "reach channel records validate as written, a refresh keeps the recorded channel, and an unknown channel is refused"
+}
+
 # The record-mutating commands share one lock with the subsystems that read this
 # record's authority and then act on it (bin/fm-pr-merge.sh reads the record
 # and merges). While a reader holds that lock, enter and archive must refuse
@@ -577,4 +638,6 @@ test_inputs_are_validated
 test_retired_clause_and_grant_inputs_are_usage_errors_by_name
 test_version_1_record_still_validates_reads_and_archives
 test_version_1_record_is_replaced_by_a_version_2_record
+test_pinnace_flag_records_the_phone_as_the_reach_channel
+test_reach_channel_records_validate_whichever_way_the_flag_moves
 test_record_changes_refuse_while_a_reader_holds_the_lock

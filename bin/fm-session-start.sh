@@ -879,7 +879,7 @@ subsection "AFK"
 # The away posture is the record (bin/fm-afk-contract.sh); the legacy flag
 # still marks a running daemon on the harnesses that launch one.
 if [ -f "$STATE/.afk-contract" ]; then
-  printf 'present - away posture recorded at %s (hold-for-return only; bin/fm-afk-contract.sh readback for the mandate)' \
+  printf 'present - away posture recorded at %s (bin/fm-afk-contract.sh readback for the mandate and the reach channel)' \
     "$("$SCRIPT_DIR/fm-afk-contract.sh" field entered 2>/dev/null || printf unknown)"
   if [ -e "$STATE/.afk" ]; then
     if [ "$AFK_MODE" = quiet ]; then

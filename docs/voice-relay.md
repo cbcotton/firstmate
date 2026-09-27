@@ -34,6 +34,7 @@ The relay reads records and queues work. It never changes a project, and the
 queueing half is `bin/fm-inbox.sh note`, the same surface the captain's own
 out-of-band capture already uses, rather than a second queue.
 `bin/fm-inbox.sh` remains the single owner of that queue, including request-id deduplication, receipts JSON, and the primary reply record.
+A note's `source` header says which channel spoke: `fm-inbox.sh say` keeps `voice`, the handover here takes the default `text`, and the pinnace phone channel shares the same plane with `source=pinnace` beside its `node=` and `login=` headers, with `bin/fm-inbox.sh --help` owning those provenance flags.
 
 ## What it costs in time
 
