@@ -1000,6 +1000,9 @@ This section is the single owner of the canonical schema and its per-field seman
 
 ```json
 {
+  "sailors": {
+    "<sailor name>": { "title": "<optional display name>", "host": "<optional machine description>", "endpoint": "<http(s) OpenAI-compatible base URL>", "status": "<live|placeholder>", "models": ["<model id>"], "max_concurrent": 1 }
+  },
   "rules": [
     {
       "when": "<natural-language condition describing a kind of task>",
@@ -1007,14 +1010,16 @@ This section is the single owner of the canonical schema and its per-field seman
       "min_confidence": 0.85,
       "floor": { "scope": "<quota-axi scope>", "min_percent": 20, "provider": "<quota-axi provider>" },
       "use": [
-        { "harness": "<adapter>", "model": "<optional model>", "effort": "<low|medium|high|xhigh|max|ultra, optional>", "provider": "<optional quota-axi provider>", "floor": { "scope": "<quota-axi scope>", "min_percent": 50 } }
+        { "harness": "<adapter>", "model": "<optional model>", "effort": "<low|medium|high|xhigh|max|ultra, optional>", "provider": "<optional quota-axi provider>", "floor": { "scope": "<quota-axi scope>", "min_percent": 50 } },
+        { "harness": "opencode", "sailor": "<sailor name>", "model": "<a model listed for that sailor>" }
       ],
       "why": "<optional rationale that helps firstmate choose>"
     }
   ],
   "default": [
     { "harness": "<adapter>", "model": "<optional model>", "effort": "<optional effort>" }
-  ]
+  ],
+  "sailor_fallback": { "harness": "<adapter>", "model": "<optional model>", "effort": "<optional effort>" }
 }
 ```
 
@@ -1027,6 +1032,7 @@ This section is the single owner of the canonical schema and its per-field seman
 | `use` and optional top-level `default` | Accept one profile object or a non-empty array of profile objects; the single-object form remains fully backward-compatible. |
 | Profile `harness` | Required in every profile. |
 | Profile `model` and `effort`; rule `why` | Optional. |
+| `sailors`, profile `sailor`, and `sailor_fallback` | Optional; see "Named sailors" below. |
 
 **Fields applied only by typed resolution**
 
@@ -1078,11 +1084,40 @@ This single-provider table is separate from the frozen legacy mapping used by `f
 
 See [`docs/examples/crew-dispatch.json`](examples/crew-dispatch.json) for a starting point to copy into local `config/crew-dispatch.json`; its Pi default declares the `claude` provider required for typed resolution of that Anthropic model.
 
+**Named sailors**
+
+A sailor is a named machine serving local models through an OpenAI-compatible endpoint, so ordinary work can run on it instead of a paid model.
+`bin/fm-sailor.sh` owns the checks below and its header owns their mechanics.
+
+- `sailors` maps each sailor's name (lowercase letters, digits, and single dashes) to its `endpoint`, its `status`, and the `models` it may be asked for; `title`, `host`, and `max_concurrent` (default 1) are optional.
+- A profile with `sailor` must use the `opencode` harness and name a `model` from that sailor's list; `fm-spawn.sh --sailor` then points the worker's OpenCode at that endpoint.
+- A `placeholder` sailor is never dispatched, even when something answers at its address; only the captain changes its status to `live`.
+- A `live` sailor is eligible only while `bin/fm-sailor.sh check <sailor> <model>` passes: its endpoint must answer within a few seconds and list the model, and this home must hold fewer than `max_concurrent` tasks on it.
+  The capacity count is per home, so homes that share one machine each count only their own tasks.
+- When every sailor candidate a matched rule or default offers is refused, firstmate uses `sailor_fallback` (one profile object or a non-empty array, never itself a sailor), for example Opus 5.5 in a home orchestrated through Claude Code.
+- Without `sailor_fallback`, sailor work waits in the queue until a sailor answers.
+  A home that must never reach Anthropic, such as a Privateer home, declares no `sailor_fallback` and no Claude profile at all.
+- With typed dispatch resolution on, each sailor profile must also declare a `provider`, as every OpenCode profile must; quota-axi measures no local machine, so the resolver hands sailor rules back to firstmate's own intake.
+
+```json
+{
+  "sailors": {
+    "tiller": { "title": "Tiller", "host": "this Mac", "endpoint": "http://127.0.0.1:11234/v1", "status": "live", "models": ["<vendor coder build>"], "max_concurrent": 1 },
+    "stoker": { "title": "Stoker", "host": "RTX 4090 box", "endpoint": "http://stoker.<tailnet>.ts.net:8000/v1", "status": "placeholder", "models": ["<vendor coder build>"] }
+  },
+  "default": [
+    { "harness": "opencode", "sailor": "stoker", "model": "<vendor coder build>" },
+    { "harness": "opencode", "sailor": "tiller", "model": "<vendor coder build>" }
+  ],
+  "sailor_fallback": { "harness": "claude", "model": "claude-opus-5-5" }
+}
+```
+
 **Validation and diagnostics**
 
 - When the file exists, bootstrap validates it with `jq`.
 - Valid files stay silent by default; with `FM_BOOTSTRAP_VERBOSE_FACTS=1`, bootstrap emits `BOOTSTRAP_INFO: crew dispatch active config/crew-dispatch.json`, one `BOOTSTRAP_INFO:` fact per rule, and one fact for the optional default profile set.
-- Malformed JSON, malformed rules, an empty or malformed profile array, an unverified harness, or an effort value unsupported by that harness is reported as `CREW_DISPATCH: invalid config/crew-dispatch.json - ...`.
+- Malformed JSON, malformed rules, an empty or malformed profile array, an unverified harness, an effort value unsupported by that harness, or a malformed sailor map, sailor reference, or `sailor_fallback` is reported as `CREW_DISPATCH: invalid config/crew-dispatch.json - ...`.
 - While typed resolution is active, malformed `approval`, `min_confidence`, `floor`, and present `provider` declarations receive the same diagnostic; without the key those inert declarations preserve the pre-existing bootstrap behavior.
 - Missing `jq` is reported through the normal `MISSING: jq` install-consent flow.
 - While the file remains present, no crewmate or scout spawn may proceed without an explicit resolved harness; malformed configuration must be reported and corrected rather than selected around.

@@ -92,6 +92,8 @@ It takes no harness, model, or provider and returns a fact, not a route: only `a
 Never launch a vendor CLI yourself, and never probe a credential store the candidate does not use.
 Grok prepaid `credits` are unrelated to paid-window headroom; never read them as exhaustion.
 
+A candidate naming a `sailor` has `bin/fm-sailor.sh check <sailor> <model>` as its catalog and liveness evidence: quote a `refused:` line as the concrete evidence that blocks it, and treat its absent quota rows as disclosed uncertainty (`docs/configuration.md` "Named sailors" owns the fallback when every sailor candidate is refused).
+
 Malformed configuration is an actionable error, not a candidate to rank around.
 
 ### 2. Reasoning-class fit

@@ -1104,6 +1104,23 @@ test_crew_dispatch_active_rules_are_verbose_bootstrap_info() {
   pass "bootstrap surfaces active crew-dispatch rules only as verbose BOOTSTRAP_INFO"
 }
 
+test_crew_dispatch_sailors_are_verbose_bootstrap_info() {
+  local case_dir fakebin out expect
+  case_dir="$TMP_ROOT/dispatch-sailors"
+  mkdir -p "$case_dir/home/config"
+  printf '%s\n' manual > "$case_dir/home/config/backlog-backend"
+  printf '%s\n' '{"sailors":{"tiller":{"endpoint":"http://127.0.0.1:1/v1","status":"live","models":["coder"]}},"rules":[{"when":"clear-path code","use":{"harness":"opencode","sailor":"tiller","model":"coder"}}],"sailor_fallback":{"harness":"claude","model":"claude-opus-5-5"}}' > "$case_dir/home/config/crew-dispatch.json"
+  fakebin=$(make_fake_toolchain "$case_dir")
+  add_real_jq "$fakebin"
+
+  out=$(PATH="$fakebin:$BASE_PATH" FM_HOME="$case_dir/home" FM_ROOT_OVERRIDE="$case_dir/home" \
+    FM_BOOTSTRAP_VERBOSE_FACTS=1 FM_FAKE_TREEHOUSE_LEASE_HELP=1 "$ROOT/bin/fm-bootstrap.sh")
+
+  expect=$'BOOTSTRAP_INFO: crew dispatch active config/crew-dispatch.json\nBOOTSTRAP_INFO: crew dispatch rule: clear-path code -> opencode/coder@tiller\nBOOTSTRAP_INFO: crew dispatch sailor fallback: claude/claude-opus-5-5'
+  [ "$out" = "$expect" ] || fail "sailor verbose info block mismatch"$'\n'"expected: $expect"$'\n'"actual:   $out"
+  pass "bootstrap names each profile's sailor and the sailor fallback in verbose BOOTSTRAP_INFO"
+}
+
 test_crew_dispatch_validation() {
   local label body expect mode case_dir fakebin out child_env n
   n=0
@@ -1182,6 +1199,13 @@ default array profile without harness is flagged^{"default":[{"model":"gpt-5.5"}
 default array malformed effort is flagged^{"default":[{"harness":"codex","effort":3}]}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - default profile model and effort must be non-empty strings, and provider must match ^[a-z0-9]+(-[a-z0-9]+)*\z when present
 default profile floor without min_percent is flagged^{"default":[{"harness":"codex","floor":{"scope":"all_models"}}]}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - default profile floor needs scope and min_percent 0..100
 default profile floor provider override is flagged^{"default":{"harness":"codex","floor":{"scope":"all_models","min_percent":50,"provider":"claude"}}}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - default profile floor needs scope and min_percent 0..100
+named sailors and a fallback are accepted^{"sailors":{"tiller":{"endpoint":"http://127.0.0.1:1/v1","status":"live","models":["coder"],"max_concurrent":2},"stoker":{"endpoint":"http://stoker.invalid:8000/v1","status":"placeholder","models":["coder"]}},"rules":[{"when":"clear-path code","use":[{"harness":"opencode","sailor":"stoker","model":"coder"},{"harness":"opencode","sailor":"tiller","model":"coder"}]}],"default":{"harness":"opencode","sailor":"tiller","model":"coder"},"sailor_fallback":{"harness":"claude","model":"claude-opus-5-5"}}^empty^
+unknown sailor reference is flagged^{"sailors":{"tiller":{"endpoint":"http://127.0.0.1:1/v1","status":"live","models":["coder"]}},"default":{"harness":"opencode","sailor":"flint","model":"coder"}}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - profile names unknown sailor flint
+sailor on a non-opencode harness is flagged^{"sailors":{"tiller":{"endpoint":"http://127.0.0.1:1/v1","status":"live","models":["coder"]}},"default":{"harness":"claude","sailor":"tiller","model":"coder"}}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - sailor tiller profile must use harness opencode
+sailor model outside its list is flagged^{"sailors":{"tiller":{"endpoint":"http://127.0.0.1:1/v1","status":"live","models":["coder"]}},"rules":[{"when":"code","use":{"harness":"opencode","sailor":"tiller","model":"uncensored-merge"}}]}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - model uncensored-merge is not listed for sailor tiller
+sailor without an http endpoint is flagged^{"sailors":{"tiller":{"endpoint":"127.0.0.1:1","status":"live","models":["coder"]}}}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - sailor tiller needs an http(s) endpoint
+sailor fallback naming a sailor is flagged^{"sailors":{"tiller":{"endpoint":"http://127.0.0.1:1/v1","status":"live","models":["coder"]}},"sailor_fallback":{"harness":"opencode","sailor":"tiller","model":"coder"}}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - sailor_fallback must not name a sailor
+sailor fallback harness is verified^{"sailor_fallback":{"harness":"spaceship"}}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - unverified harness: spaceship
 ROWS
 
   case_dir="$TMP_ROOT/dispatch-opt-in-gate"
@@ -1266,4 +1290,5 @@ test_network_sweeps_recheck_lock_ownership
 test_network_phases_record_per_step_elapsed_times
 test_tasks_axi_verdict_handoff_is_consumed_once
 test_crew_dispatch_active_rules_are_verbose_bootstrap_info
+test_crew_dispatch_sailors_are_verbose_bootstrap_info
 test_crew_dispatch_validation
