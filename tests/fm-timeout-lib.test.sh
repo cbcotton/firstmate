@@ -18,7 +18,7 @@ TMP_ROOT=$(fm_test_tmproot fm-timeout-lib)
 # timeout variant: fm_exec_timed must take its perl watchdog here.
 PERL_ONLY="$TMP_ROOT/perl-only-bin"
 mkdir -p "$PERL_ONLY"
-for tool in perl bash sleep; do
+for tool in perl bash sh sleep; do
   ln -s "$(command -v "$tool")" "$PERL_ONLY/$tool"
 done
 
@@ -97,7 +97,7 @@ test_the_bound_replaces_the_calling_shell() {
     rm -f "$dir/caller" "$dir/parent"
     (
       . "$ROOT/bin/fm-timeout-lib.sh"
-      printf '%s\n' "$BASHPID" > "$dir/caller"
+      printf '%s\n' "${BASHPID:-$(exec sh -c 'printf "%s\n" "$PPID"')}" > "$dir/caller"
       PATH=$path fm_exec_timed 5 1 bash -c 'echo "$PPID" > "$1"' _ "$dir/parent"
     ) || fail "the bounded probe failed under PATH=$path"
     caller=$(cat "$dir/caller")
@@ -199,7 +199,7 @@ test_an_owner_that_dies_during_startup_ends_the_command() {
   PATH=$PERL_ONLY bash -c '
     . "$1/bin/fm-timeout-lib.sh"
     (
-      echo "$BASHPID" > "$2/watchdog"
+      echo "${BASHPID:-$(exec sh -c "echo \$PPID")}" > "$2/watchdog"
       while kill -0 "$$" 2>/dev/null; do sleep 0.05; done
       fm_exec_timed 60 1 bash -c "exec sleep 300"
     ) >/dev/null 2>&1 &
@@ -216,6 +216,80 @@ test_an_owner_that_dies_during_startup_ends_the_command() {
     sleep 0.02
   done
   pass "fm_exec_timed ends the command when its owner dies during watchdog startup"
+}
+
+# no_bashpid_shell: print a bash that runs without BASHPID, as stock macOS
+# /bin/bash 3.2 does. Bash 4.x drops BASHPID on unset; later releases refuse
+# to, so where no such shell exists the caller reports a skip instead.
+no_bashpid_shell() {
+  local sh
+  for sh in /bin/bash "$(command -v bash)"; do
+    [ -x "$sh" ] || continue
+    if "$sh" -uc 'unset BASHPID 2>/dev/null; [ -z "${BASHPID+set}" ]' 2>/dev/null; then
+      printf '%s\n' "$sh"
+      return 0
+    fi
+  done
+  return 1
+}
+
+# Stock macOS Bash 3.2 has no BASHPID, and firstmate's scripts run under set -u,
+# so the bound must still run the command there, from the calling script and
+# from a subshell alike.
+test_runs_under_set_u_without_bashpid() {
+  local sh out rc=0
+  if ! sh=$(no_bashpid_shell); then
+    pass "fm_exec_timed under set -u without BASHPID (skipped: every bash here keeps BASHPID)"
+    return 0
+  fi
+  out=$(PATH=$PERL_ONLY "$sh" -uc '
+    unset BASHPID 2>/dev/null
+    . "$1/bin/fm-timeout-lib.sh"
+    ( fm_exec_timed 5 1 bash -c "echo from-subshell; exit 3" ) 2>&1
+    echo "subshell-rc=$?"
+    fm_exec_timed 5 1 bash -c "echo from-script; exit 4"
+  ' _ "$ROOT" 2>&1) || rc=$?
+  assert_contains "$out" "from-subshell" "the bound did not run the command from a subshell without BASHPID: $out"
+  assert_contains "$out" "subshell-rc=3" "the bound lost the subshell command's status without BASHPID: $out"
+  assert_contains "$out" "from-script" "the bound did not run the command from the script without BASHPID: $out"
+  [ "$rc" -eq 4 ] || fail "the bound lost the script command's status without BASHPID (rc=$rc): $out"
+  pass "fm_exec_timed runs the command under set -u without BASHPID, from a script or a subshell"
+}
+
+# Without BASHPID a nested subshell still names the calling script as its
+# owner, not the script's own parent: when that script dies the command ends
+# although the watchdog's direct parent, the outer subshell, lives on.
+test_a_nested_subshell_without_bashpid_watches_the_script() {
+  local sh dir watchdog started
+  if ! sh=$(no_bashpid_shell); then
+    pass "fm_exec_timed owner without BASHPID (skipped: every bash here keeps BASHPID)"
+    return 0
+  fi
+  dir="$TMP_ROOT/nested-owner"
+  mkdir -p "$dir"
+  PATH=$PERL_ONLY "$sh" -uc '
+    unset BASHPID 2>/dev/null
+    . "$1/bin/fm-timeout-lib.sh"
+    (
+      (
+        sh -c "echo \$PPID" > "$2/watchdog"
+        while kill -0 "$$" 2>/dev/null; do sleep 0.05; done
+        fm_exec_timed 60 1 bash -c "exec sleep 300"
+      )
+    ) >/dev/null 2>&1 &
+    exit 0
+  ' _ "$ROOT" "$dir"
+  wait_for_file "$dir/watchdog"
+  watchdog=$(cat "$dir/watchdog")
+  started=$SECONDS
+  while kill -0 "$watchdog" 2>/dev/null; do
+    if [ "$((SECONDS - started))" -ge 15 ]; then
+      kill -KILL "$watchdog" 2>/dev/null || true
+      fail "a nested subshell without BASHPID did not watch its calling script"
+    fi
+    sleep 0.02
+  done
+  pass "fm_exec_timed without BASHPID watches the calling script from a nested subshell"
 }
 
 # perl is preferred whenever it exists, because only its watchdog can reap a
@@ -308,6 +382,8 @@ test_a_descendant_holding_the_output_cannot_outlast_the_bound
 test_a_signal_to_the_bounding_process_reaches_the_command
 test_a_named_owner_that_is_gone_ends_the_command
 test_an_owner_that_dies_during_startup_ends_the_command
+test_runs_under_set_u_without_bashpid
+test_a_nested_subshell_without_bashpid_watches_the_script
 test_perl_is_preferred_over_timeout
 test_refuses_rather_than_running_unbounded
 test_rejects_malformed_bounds_before_running_anything
