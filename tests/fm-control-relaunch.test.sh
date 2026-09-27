@@ -742,7 +742,7 @@ add_sailor_task() {
   local dir=$1 id=$2
   add_ship_task "$dir" "$id" opencode
   sed 's/^model=default$/model=qwen-coder/' "$dir/home/state/$id.meta" > "$dir/home/state/$id.meta.tmp"
-  printf 'sailor=tiller\n' >> "$dir/home/state/$id.meta.tmp"
+  printf 'sailor=tiller\ndispatched_at=1790000000\n' >> "$dir/home/state/$id.meta.tmp"
   mv "$dir/home/state/$id.meta.tmp" "$dir/home/state/$id.meta"
   mkdir -p "$dir/home/config"
   printf '%s\n' '{"sailors":{"tiller":{"endpoint":"http://127.0.0.1:11234/v1","status":"live","models":["qwen-coder"]}}}' \
@@ -765,6 +765,8 @@ test_same_harness_relaunch_keeps_the_sailor() {
   [ "$(meta_field "$dir" rl-sailor sailor)" = tiller ] || fail "the sailor should carry across a same-harness relaunch"
   [ "$(meta_field "$dir" rl-sailor model)" = qwen-coder ] || fail "the sailor's model should carry across a same-harness relaunch"
   [ "$(grep -c '^sailor=' "$dir/home/state/rl-sailor.meta")" = 1 ] || fail "the record must carry exactly one sailor line"
+  [ "$(grep -c '^dispatched_at=1790000000$' "$dir/home/state/rl-sailor.meta")" = 1 ] \
+    || fail "a relaunch must keep the task's dispatch stamp exactly once, so its task-scoped grants still apply"
   assert_grep "--model 'tiller/qwen-coder'" "$dir/fake/literal" "the replacement launch should still address the model through the sailor"
   pass "fm-control relaunch: a same-harness relaunch keeps the task on its sailor, capacity counting it only once"
 }

@@ -848,11 +848,30 @@ An OpenCode secondmate is a firstmate primary in its own home and keeps every to
 Under `restricted`, a worker may read, search, and edit inside its own copy, make local Git commits and branches, run `no-mistakes axi`, and use its own task's brief directory, status file, and steering inbox exactly as its instructions spell them.
 Everything else is denied: every path outside the copy, `git push`, any other shell command, web fetch and search, and sub-agents.
 OpenCode checks each part of a compound shell command separately, so an allowed first command cannot carry a denied second one.
-A denied worker is told, in its launch instructions, to report what it needs as a keyed decision rather than look for another route, so widening a worker's permissions stays the captain's call.
+A denied worker is told, in its launch instructions, to report what it needs as a keyed decision rather than look for another route, so widening a worker's permissions stays the captain's call; [permission grants](#permission-grants-statepermission-grantsjsonl) record that call.
 
 `bin/fm-opencode-permissions.sh` owns the baseline, the composition order, and the worker note; its `compose <task-id>` prints the exact profile a launch would carry.
 [`verification/local-sailors.md`](verification/local-sailors.md) records the live evidence, and `tests/fm-opencode-restricted-live-e2e.test.sh` re-proves it against the installed OpenCode with a scripted model and no model tokens.
 The file is read on every spawn and relaunch and is inherited into secondmate homes, where it governs their own OpenCode crewmates.
+
+## Permission grants (state/permission-grants.jsonl)
+
+The captain can widen or narrow a restricted OpenCode worker's permissions during a session, from chat or from the phone.
+A worker that hits a denial asks through a `perm-` decision, or the captain says it unprompted; firstmate records the captain's answer with `bin/fm-permission-grant.sh grant` and applies it by relaunching the worker with `bin/fm-control.sh <task> relaunch`, which keeps the task, its copy, and its sailor.
+
+| Scope | Lasts |
+| --- | --- |
+| `task` | That task only, until its cleanup; a later task reusing the id starts without it |
+| `session` | Every OpenCode worker, until this home's first mate session ends |
+| `standing` | Every OpenCode worker, until revoked |
+
+Each grant allows or denies one OpenCode permission and pattern, and `revoke` withdraws one.
+Every grant and revocation is an append-only record carrying the captain's exact words, the channel they came through (`chat` or `pinnace`), and an optional note or message reference.
+Grants fold into the restricted profile oldest first, after the baseline and before the worker's own protocol rules, so the captain's latest word wins and no grant can break a worker's status or inbox commands.
+
+A deny is always accepted.
+An allow is refused, at every scope, for what the captain approves only one action at a time and firstmate then performs itself rather than delegating: blanket allows, web access, credential, system, or whole-home paths, this firstmate home, privilege escalation, a push that can force, delete, or match by wildcard, branch, tag, or history deletion, merging, recursive or out-of-copy deletion, credential or keychain access, system configuration, network tools, global installs or downloaded code, fleet, permission, or sandbox control, and anything that names Anthropic or Claude.
+`bin/fm-permission-grant.sh` owns the record, the scope bindings, and the refusal list; `list` shows the grants in force and `active --task <id>` prints what a launch would fold in.
 
 ## Sailor sandbox (config/sailor-sandbox)
 

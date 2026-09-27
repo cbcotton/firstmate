@@ -19,12 +19,14 @@
 #
 # compose prints one compact JSON object, the `permission` value for that
 # task's launch. For `allow` it is exactly {"*":"allow"}. For `restricted` it is
-# two layers, in this order, because OpenCode evaluates every rule in order
+# these layers, in this order, because OpenCode evaluates every rule in order
 # and the last matching rule wins (docs/verification/local-sailors.md):
 #   1. the baseline, whose catch-all "*": "deny" comes first;
-#   2. the worker protocol: the task's own brief directory, steering inbox, and
+#   2. every permission grant in force for the task, oldest first
+#      (bin/fm-permission-grant.sh active), so the captain's latest word wins;
+#   3. the worker protocol: the task's own brief directory, steering inbox, and
 #      status file under external_directory, and the exact shell commands the
-#      brief tells a worker to run against them.
+#      brief tells a worker to run against them, last so no grant can break it.
 # A later layer's rule for a pattern replaces an earlier rule for the same
 # pattern and moves to the end, so it wins over every earlier pattern. A
 # permission given as a string means that action for the pattern "*", and a
@@ -176,14 +178,22 @@ compose_layers() {
 }
 
 cmd_compose() {
-  local id=$1 profile
+  local id=$1 profile grants layer
+  local -a layers
   case "$id" in '' | .* | *[!A-Za-z0-9._-]*) die "invalid task id '$id'" ;; esac
   profile=$(selected_profile) || exit 2
   if [ "$profile" = allow ]; then
     printf '%s\n' '{"*":"allow"}'
     return 0
   fi
-  compose_layers "$(printf '%s' "$BASELINE" | jq -c .)" "$(protocol_layer "$id")"
+  grants=$(FM_HOME="$FM_HOME" FM_STATE_OVERRIDE="$STATE" "$SCRIPT_DIR/fm-permission-grant.sh" active --task "$id") ||
+    die "the permission grants for task $id could not be read"
+  layers=("$(printf '%s' "$BASELINE" | jq -c .)")
+  while IFS= read -r layer; do
+    [ -z "$layer" ] || layers+=("$layer")
+  done < <(printf '%s' "$grants" | jq -c '.[]')
+  layers+=("$(protocol_layer "$id")")
+  compose_layers "${layers[@]}"
 }
 
 cmd_worker_note() {

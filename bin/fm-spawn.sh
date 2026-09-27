@@ -4913,6 +4913,10 @@ preserve_relaunch_meta() {
   echo "effort=${EFFORT:-default}"
   [ -z "$SAILOR" ] || echo "sailor=$SAILOR"
   [ "$SAILOR_SANDBOX" != 1 ] || echo "sandbox=seatbelt"
+  # The dispatch stamp a task-scoped permission grant binds to
+  # (bin/fm-permission-grant.sh): written once, kept across relaunches, so a
+  # later task that reuses this id never inherits this one's grants.
+  [ "$RELAUNCH" -eq 1 ] || echo "dispatched_at=$(date +%s)"
   # The worker account pin, only when this home declares one, so an unpinned
   # task record stays byte-identical.
   [ -z "$WORKER_ACCOUNT" ] || echo "account=$WORKER_ACCOUNT_DECLARED"

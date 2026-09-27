@@ -822,6 +822,7 @@ test_opencode_sailor_launch_points_at_the_sailor() {
   assert_contains "$out" "spawned $id harness=opencode kind=ship mode=no-mistakes yolo=off sailor=tiller" "spawn did not report the sailor"
   assert_meta_profile "$HOME_DIR/state/$id.meta" opencode qwen-coder high
   assert_grep "sailor=tiller" "$HOME_DIR/state/$id.meta" "meta missing sailor=tiller"
+  assert_grep "dispatched_at=" "$HOME_DIR/state/$id.meta" "a fresh spawn must stamp its dispatch for task-scoped permission grants"
   launch=$(cat "$LAUNCH_LOG")
   # The title carries a quote, so the provider entry must close and reopen the
   # launch's single-quoted assignment around it.
