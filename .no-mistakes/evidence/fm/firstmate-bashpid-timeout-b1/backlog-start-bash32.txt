@@ -1,0 +1,11 @@
+=== BEFORE fix (base 829023f8 bin/), /bin/bash 3.2, set -u, FM_TASKS_AXI_TIMEOUT=30 ===
+bash=3.2.57(1)-release BASHPID-set=
+fm_backlog_start rc=1 error=/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/tmp.U1VSTcD3GD/bin/fm-timeout-lib.sh: line 209: BASHPID: unbound variable
+  crowsnest-l1,queued,task,"-",crowsnest locale fix crowsnest-l1
+  crowsnest-l2,queued,task,"-",crowsnest locale fix crowsnest-l2
+
+=== AFTER fix (worktree bin/), /bin/bash 3.2, set -u, FM_TASKS_AXI_TIMEOUT=30 ===
+bash=3.2.57(1)-release BASHPID-set=
+fm_backlog_start rc=0 error=
+  crowsnest-l1,queued,task,"-",crowsnest locale fix crowsnest-l1
+  crowsnest-l2,in_flight,task,"-",crowsnest locale fix crowsnest-l2

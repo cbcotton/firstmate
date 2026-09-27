@@ -1,0 +1,3 @@
+=== same tests with BASE (unguarded $BASHPID) bin/fm-timeout-lib.sh ===
+not ok - the watchdog did not pass the command's own status through (rc=1)
+exit=1
