@@ -1,0 +1,11 @@
+
+Orphan status logs (state/*.status without matching .meta)
+--------------------------------------------------------------------------------
+(none)
+
+AFK
+--------------------------------------------------------------------------------
+present - away posture recorded at 2026-09-27T06:17:21Z (bin/fm-afk-contract.sh readback for the mandate and the reach channel); no daemon runs, the ordinary supervision session continues.
+
+================================================================================
+NETWORK CHECKS

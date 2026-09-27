@@ -1,0 +1,31 @@
+  Ran 2 shell commands
+⏺ Captain, away mode is on and your instructions are recorded word for word. Your phone is the channel for reaching you. Orders you send from it reach me while you are out, and
+  anything that needs you gets answered there.
+  What I read your words as asking:
+  - I treat each order from your phone as if you had typed it here. I act on it and send you a short reply on the phone.
+  - Anything I'm unsure about waits. I tell you about it on the phone rather than guessing.
+  Limits that still apply:
+  - Nothing in your words is outside what I can do while you're away.
+  - Destructive, irreversible or security-sensitive actions can't be approved in advance, even from the phone. If an order needs one, I'll ask you to confirm with a second phone
+    message before doing it.
+  - A merge with failing checks never goes through while you're away. Landing work that exists only as a local branch waits for your return.
+  You gave no expected return time. I will run at most four workers at once.
+  There is no work under way right now, and no projects or queued tasks are registered here. The startup checks passed, including GitHub sign-in. Monitoring is running and will
+  pick up your phone orders as they arrive. To change these instructions, send the away command again with new words.
+✻ Sautéed for 1m 23s · done 8:21 AM · 1 shell still running
+❯ : Firstmate operational input waiting: read '/private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-lab.r6MwOp/state/operational-inbox/1790490231-d4ac54adeaa97221.msg' and
+  handle its contents as Firstmate operational input.
+  Ran 1 shell command
+⏺ Verified as Firstmate's. Staying away and handling the inbox note.
+  Ran 1 shell command
+⏺ The note came from the captain's phone. The fleet is empty, so I'm answering and acknowledging it.
+  Ran 1 shell command
+⏺ Captain, I answered your phone question and away mode is still on.
+  You asked what the fleet is doing and whether anything is waiting on you. The answer sent to your phone was:
+  ▎ Captain, the fleet is idle. No work is under way and nothing is waiting on you. Monitoring is running and I will act on your next phone order.
+  I checked this before replying. No work is running and there are no open decisions. Your note is marked handled, and monitoring continues for your next phone order.
+✻ Cooked for 18s · done 8:24 AM · 1 shell still running
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ bypass permissions on · 1 shell · ← for agents · ↓ to manage

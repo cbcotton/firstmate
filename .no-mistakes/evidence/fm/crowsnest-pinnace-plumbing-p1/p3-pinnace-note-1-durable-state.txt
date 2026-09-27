@@ -1,0 +1,58 @@
+### receipts after the first mate handled pinnace note 1
+{
+    "schema": "fm-inbox-receipts.v1",
+    "home": "T/fm-lab.r6MwOp",
+    "generated": "2026-09-27T06:28:46Z",
+    "pending": [],
+    "handled": [
+        {
+            "id": "1790490114-XV2ztx",
+            "at": "2026-09-27T06:21:54Z",
+            "source": "pinnace",
+            "request_id": "pinnace:44fec563-c0c9-46e0-9d7d-57057aeae15a",
+            "body": "What is the fleet doing right now, and is anything waiting on me? Keep it short.",
+            "acknowledged": true,
+            "announced": true,
+            "reply": {
+                "id": "1790490114-XV2ztx",
+                "at": "2026-09-27T06:24:08Z",
+                "body": "Captain, the fleet is idle. No work is under way and nothing is waiting on you. Monitoring is running and I will act on your next phone order.",
+                "cursor": "000000000001"
+            }
+        }
+    ],
+    "replies": [
+        {
+            "id": "1790490114-XV2ztx",
+            "at": "2026-09-27T06:24:08Z",
+            "body": "Captain, the fleet is idle. No work is under way and nothing is waiting on you. Monitoring is running and I will act on your next phone order.",
+            "cursor": "000000000001"
+        }
+    ],
+    "reply_cursor": "000000000001",
+    "omitted": []
+}
+
+### the reply record state/inbox/.replies/1790490114-XV2ztx
+id=1790490114-XV2ztx
+at=2026-09-27T06:24:08Z
+seq=1
+--
+Captain, the fleet is idle. No work is under way and nothing is waiting on you. Monitoring is running and I will act on your next phone order.
+
+### the handled note record
+id=1790490114-XV2ztx
+at=2026-09-27T06:21:54Z
+source=pinnace
+announce_marker=1
+request_id=pinnace:44fec563-c0c9-46e0-9d7d-57057aeae15a
+node=captains-phone
+login=captain@example.com
+--
+What is the fleet doing right now, and is anything waiting on me? Keep it short.
+### the daemon's escalation record the doorbell named
+⁣FIRSTMATE_OP: v1 away-supervisor: Supervisor escalate (1 event(s)): check: captain inbox note 1790490114-XV2ztx - What is the fleet doing right now, and is anything waiting on me? Keep it short. (pre-read; re-arm not needed — watcher daemon-managed)
+### away posture still standing
+pinnace
+/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.r6MwOp/state/.afk
+/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.r6MwOp/state/.afk-contract

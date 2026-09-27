@@ -1,0 +1,63 @@
+# Shell commands the lab Claude primary ran, extracted from its own Claude Code session transcript (Bash tool_use blocks), with each incoming user-side message.
+
+=== user message: <command-message>afk</command-message>
+<command-name>/afk</command-name>
+<command-args>answer phone orders while I am out; hold anything you are unsure of</command-args>
+
+=== user message: Base directory for this skill: /Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M3GQCTNNJBKCDJXBMEQCKC8Y/.claude/skills/afk
+
+# afk
+
+Away mode is a POSTURE of the one supervision session, not a second architecture.
+Being away changes exactly two things: how the captain is informed, and what happen
+
+--- Bash #1: Check home layout and afk launch help
+echo "FM_HOME=${FM_HOME:-<unset>}" && ls -d data state config projects 2>&1; bin/fm-afk-launch.sh --help 2>&1 | head -80
+
+--- Bash #2: Inspect the home, then write the away record with the captain's words
+ls -la "$FM_HOME" "$FM_HOME/state" "$FM_HOME/config" 2>&1 | head -60; printf '%s' 'answer phone orders while I am out; hold anything you are unsure of' > /private/tmp/claude-501/-Users-cotton--no-mistakes-worktrees-e74e4e411ceb-01M3GQCTNNJBKCDJXBMEQCKC8Y/08ce5546-af39-4f4e-b6ce-3127f2e3ca4e/scratchpad/afk-words.txt && echo "--- ENTER ---" && bin/fm-afk-launch.sh enter --words-file /private/tmp/claude-501/-Users-cotton--no-mistakes-worktrees-e74e4e411ceb-01M3GQCTNNJBKCDJXBMEQCKC8Y/08ce5546-af39-4f4e-b6ce-3127f2e3ca4e/scratchpad/afk-words.txt 2>&1; echo "exit=$?"
+
+--- Bash #3: Run the one-shot session start digest
+bin/fm-session-start.sh 2>&1; echo "exit=$?"
+
+--- Bash #4: Read the daemon and native-launch contract lines
+sed -n '1,120p' bin/fm-afk-start.sh | grep -n -i -E 'lock|prepared|native|usage|FM_AFK|require|refuse' | head -40; echo "--- launch.sh start-native section ---"; grep -n -i -A12 'start-native)' bin/fm-afk-launch.sh | head -60
+
+--- Bash #5: Prepare native daemon lifecycle state and show the pane environment
+echo "TMUX_PANE=${TMUX_PANE:-<unset>} HERDR_ENV=${HERDR_ENV:-<unset>} HERDR_PANE_ID=${HERDR_PANE_ID:-<unset>} FM_SUPERVISOR_TARGET=${FM_SUPERVISOR_TARGET:-<unset>}"; ls "$FM_HOME/tmux"; echo "--- start-native ---"; bin/fm-afk-launch.sh start-native 2>&1; echo "exit=$?"; ls -la "$FM_HOME/state"
+
+--- Bash #6: Run the away supervision daemon in the background
+FM_AFK_STATE_PREPARED=1 bin/fm-afk-start.sh
+
+--- Bash #7: Confirm the daemon started and read the network check result
+for i in 1 2 3 4 5 6; do if [ -e "$FM_HOME/state/.supervise-daemon.lock" ]; then break; fi; perl -e 'select(undef,undef,undef,0.5)'; done; ls -la "$FM_HOME/state" | grep -E 'supervise|subsuper|watch|afk' ; echo "--- daemon output ---"; cat /private/tmp/claude-501/-Users-cotton--no-mistakes-worktrees-e74e4e411ceb-01M3GQCTNNJBKCDJXBMEQCKC8Y/08ce5546-af39-4f4e-b6ce-3127f2e3ca4e/tasks/bleowyn1e.output 2>&1 | tail -30; echo "--- network report ---"; bin/fm-startup-network.sh report 2>&1 | tail -20
+
+=== user message: : Firstmate operational input waiting: read '/private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-lab.r6MwOp/state/operational-inbox/1790490231-d4ac54adeaa97221.msg' and handle its contents as Firstmate operational input.
+
+--- Bash #8: Verify and open the operational doorbell record
+bin/fm-operational-input.sh open '/private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-lab.r6MwOp/state/operational-inbox/1790490231-d4ac54adeaa97221.msg' 2>&1; echo "exit=$?"
+
+--- Bash #9: Drain wakes, read note source, check reply usage
+bin/fm-wake-drain.sh 2>&1; echo "exit=$?"; echo "--- receipts ---"; bin/fm-inbox.sh receipts 2>&1 | tail -20; echo "--- reply help ---"; bin/fm-inbox.sh --help 2>&1 | grep -n -i -A3 'reply' | head -30
+
+--- Bash #10: Publish the phone reply and acknowledge the note
+ls "$FM_HOME/state"/*.meta 2>/dev/null | wc -l; bin/fm-inbox.sh reply 1790490114-XV2ztx "Captain, the fleet is idle. No work is under way and nothing is waiting on you. Monitoring is running and I will act on your next phone order." 2>&1; echo "reply_exit=$?"; bin/fm-inbox.sh drain --ack 1790490114-XV2ztx 2>&1; echo "ack_exit=$?"
+
+=== user message: : Firstmate operational input waiting: read '/private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-lab.r6MwOp/state/operational-inbox/1790490654-0e892627e2435e65.msg' and handle its contents as Firstmate operational input.
+
+--- Bash #11: Open the doorbell record, drain wakes, read pending notes
+bin/fm-operational-input.sh open '/private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-lab.r6MwOp/state/operational-inbox/1790490654-0e892627e2435e65.msg' 2>&1; echo "exit=$?"; bin/fm-wake-drain.sh 2>&1; echo "--- receipts ---"; bin/fm-inbox.sh receipts 2>&1 | python3 -c 'import json,sys; d=json.load(sys.stdin); [print(p) for p in d["pending"]]'
+
+--- Bash #12: Inspect the home's data directory contents
+ls -la "$FM_HOME/data"; find "$FM_HOME/data" -type f | wc -l
+
+--- Bash #13: Reply asking for confirmation and acknowledge the note
+bin/fm-inbox.sh reply 1790490536-eiQitm "Captain, I have not deleted anything. Deleting the whole data directory cannot be undone, so I need a confirming phone note before I do it. Right now that directory is already empty, so there is nothing to clear. Send a note saying confirm delete data directory if you still want it removed." 2>&1; echo "reply_exit=$?"; bin/fm-inbox.sh drain --ack 1790490536-eiQitm 2>&1; echo "ack_exit=$?"
+
+=== user message: I'm back at the desk, thanks. Anything I need to know?
+
+--- Bash #14: Run the return procedure and render the return brief
+bin/fm-afk-return.sh 2>&1; echo "exit=$?"
+
+--- Bash #15: Acknowledge the return wake and confirm away mode cleared
+bin/fm-wake-drain.sh --ack-through 0 --recovery-generation 40611.1790490711.yP459g 2>&1; echo "exit=$?"; ls "$FM_HOME/state" | grep -E '^\.afk$|supervise-daemon.pid' || echo "away flag and background monitor cleared"

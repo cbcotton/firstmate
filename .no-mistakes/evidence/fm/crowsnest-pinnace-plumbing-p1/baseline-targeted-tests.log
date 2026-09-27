@@ -1,0 +1,46 @@
+FM_TEST_BEGIN 2026-09-27T06:13:02Z tests/fm-inbox.test.sh family=unclassified expected_gate_skip=none
+ok - plain note, list, and wake stay on the historical human path
+ok - plain note keeps exit 1 for a saved-but-unannounced failure
+ok - the same request id returns the original note as a distinguishable replay
+ok - a crash between recording the request id and publishing the note reuses the original id
+ok - saved-but-unannounced notes are repairable without creating a second note
+ok - repair and replay do not wake firstmate for an already-acknowledged note
+ok - receipts JSON is bounded by fixed bounds and discloses what it omitted
+ok - notes that predate the announcement marker are unknown, not re-announced
+ok - the reply channel is durable and its cursor is a strict order
+ok - the reply cursor never goes backwards when the sequence counter is lost
+ok - a reply without a valid sequence is reported as malformed
+ok - a non-UTF-8 note does not break the receipts view
+ok - readiness says unknown (or not-receivable) instead of inferring liveness from a lock
+ok - empty bodies and unsafe request ids are refused
+ok - a note body that opens with a double dash is queued as text
+ok - a note records its source and provenance headers, defaults to text, and refuses malformed tokens
+ok - drain --ack still moves the note to handled
+FM_TEST_END 2026-09-27T06:13:13Z tests/fm-inbox.test.sh exit=0 duration_ms=10826 gate_skip=false
+FM_TEST_BEGIN 2026-09-27T06:13:13Z tests/fm-afk-contract.test.sh family=afk expected_gate_skip=none
+ok - the read-back renders the words verbatim beside the expected return, spend cap, and reach line
+ok - words preserve their final newline shape in storage and read-back
+ok - one enter call writes a version 2 record, announces hold-for-return only, reads it back without asking for a go, and every read subcommand reflects it
+ok - the retired propose, confirm, and --proposal inputs are refused by name and write nothing
+ok - enter removes a proposal an older version left behind and records only the new words
+ok - a same-turn entry records never-set words verbatim, adds no authority field, and restates the never-set
+ok - a plain entry records no mandate in one step, and a refresh leaves the standing record untouched
+ok - new words archive the old words and keep the session start
+ok - a failed replacement keeps the standing posture live
+ok - a failed final replacement publication rolls back its superseded archive
+ok - validation and archive refuse damaged words blocks
+ok - a words line that lost its record prefix fails validate, read, read-back, and archive instead of truncating the mandate
+ok - archive keys the record by its entry time, empties the posture, and is idempotent
+ok - malformed inputs and foreign record versions are refused rather than guessed
+ok - retired clause fields, --grant, and the clause and grant subcommands are refused by name
+ok - a version 1 record validates, reads its words and scalars with the clause and grant sections ignored, refreshes untouched, and archives
+ok - new words over a live version 1 record archive it and write version 2 with the same session start
+ok - config/pinnace records the pinnace as the reach channel and announces it; without the flag nothing changes
+ok - reach channel records validate as written, a refresh keeps the recorded channel, and an unknown channel is refused
+ok - enter and archive refuse while the record is locked, and proceed once it clears
+FM_TEST_END 2026-09-27T06:13:28Z tests/fm-afk-contract.test.sh exit=0 duration_ms=14600 gate_skip=false
+FM_TEST_SUMMARY total=2 failed=0 skipped_gate=0 duration_ms=25557
+FM_TEST_SUMMARY_FAMILY family=afk count=1 duration_ms=14600 failed=0
+FM_TEST_SUMMARY_FAMILY family=unclassified count=1 duration_ms=10826 failed=0
+FM_TEST_SLOWEST rank=1 script=tests/fm-afk-contract.test.sh duration_ms=14600
+FM_TEST_SLOWEST rank=2 script=tests/fm-inbox.test.sh duration_ms=10826

@@ -1,0 +1,157 @@
+
+### A. config/pinnace present: /afk entry records the pinnace and announces it
+$ fm-afk-launch.sh enter --words merge the windows fix when green --expected-return 2026-09-28T08:00:00Z --spend 2
+Away posture recorded at 2026-09-27T06:15:09Z: the pinnace is the reach channel. Orders from your phone reach me while you are away, and anything that needs you is answered there. Your away instructions are recorded verbatim; the away session will carry them out where it can. Destructive, irreversible, and security-sensitive actions are never pre-authorizable, whatever the words say. Expected return: 2026-09-28T08:00:00Z. Spend cap: 2 concurrent workers.
+Away posture (recorded):
+  entered: 2026-09-27T06:15:09Z
+  expected return: 2026-09-28T08:00:00Z
+  spend cap: 2 concurrent workers
+  reach: the pinnace is the reach channel. Orders from your phone reach me while you are away, and anything that needs you is answered there.
+  your words (verbatim):
+    merge the windows fix when green
+[exit 0]
+
+### A1. the record on disk
+version: 2
+entered: 2026-09-27T06:15:09Z
+entered_epoch: 1790489709
+expected_return: 2026-09-28T08:00:00Z
+reach_channels: pinnace
+reach_announced: Orders from your phone reach me while you are away, and anything that needs you is answered there.
+spend_max_concurrent_workers: 2
+confirmed: 2026-09-27T06:15:09Z
+confirmed_epoch: 1790489709
+words: |-
+  merge the windows fix when green
+
+### A2. field, validate, readback
+$ fm-afk-contract.sh field reach_channels
+pinnace
+[exit 0]
+$ fm-afk-contract.sh validate
+[exit 0]
+$ fm-afk-contract.sh readback
+Away posture (recorded):
+  entered: 2026-09-27T06:15:09Z
+  expected return: 2026-09-28T08:00:00Z
+  spend cap: 2 concurrent workers
+  reach: the pinnace is the reach channel. Orders from your phone reach me while you are away, and anything that needs you is answered there.
+  your words (verbatim):
+    merge the windows fix when green
+[exit 0]
+
+### A3. a bare /afk refresh on the pinnace home announces the recorded channel with no 'waits for your return' tail
+$ fm-afk-launch.sh enter
+fm-afk-contract: away posture already recorded at 2026-09-27T06:15:09Z; a refresh leaves it untouched
+Away posture recorded at 2026-09-27T06:15:09Z: the pinnace is the reach channel. Orders from your phone reach me while you are away, and anything that needs you is answered there. Your away instructions are recorded verbatim; the away session will carry them out where it can. Destructive, irreversible, and security-sensitive actions are never pre-authorizable, whatever the words say. Expected return: 2026-09-28T08:00:00Z. Spend cap: 2 concurrent workers.
+Away posture (recorded):
+  entered: 2026-09-27T06:15:09Z
+  expected return: 2026-09-28T08:00:00Z
+  spend cap: 2 concurrent workers
+  reach: the pinnace is the reach channel. Orders from your phone reach me while you are away, and anything that needs you is answered there.
+  your words (verbatim):
+    merge the windows fix when green
+[exit 0]
+
+### A4. the return archives a pinnace record cleanly
+$ fm-afk-launch.sh stop
+fm-afk-launch: away-posture record archived at /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.exnxsK/state/afk-contracts/1790489709.afk-contract
+fm-afk-launch: away mode stopped; no daemon terminal was running, .afk cleared, and the posture record archived
+[exit 0]
+1790489709.afk-contract
+archived reach_channels: pinnace
+
+### B. no flag: entry is exactly the hold-for-return record and announcement as before
+$ fm-afk-launch.sh enter --words merge the windows fix when green
+Away posture recorded at 2026-09-27T06:15:10Z: hold-for-return only. No phone channel is configured; anything that needs you waits for your return. Your away instructions are recorded verbatim; the away session will carry them out where it can. Destructive, irreversible, and security-sensitive actions are never pre-authorizable, whatever the words say. Expected return: not given. Spend cap: 4 concurrent workers.
+Away posture (recorded):
+  entered: 2026-09-27T06:15:10Z
+  expected return: not given
+  spend cap: 4 concurrent workers
+  reach: hold-for-return only. No phone channel is configured; anything that needs you waits for your return.
+  your words (verbatim):
+    merge the windows fix when green
+[exit 0]
+$ fm-afk-contract.sh field reach_channels
+none
+[exit 0]
+$ grep -c pinnace state/.afk-contract
+0
+[exit 1]
+
+### B1. a bare /afk with no words and no flag
+$ fm-afk-launch.sh enter
+Away posture recorded at 2026-09-27T06:15:10Z: hold-for-return only. No phone channel is configured; anything that needs you waits for your return. No away instructions were recorded; the away session acts on standing authority only. Destructive, irreversible, and security-sensitive actions are never pre-authorizable, whatever the words say. Expected return: not given. Spend cap: 4 concurrent workers.
+Away posture (recorded):
+  entered: 2026-09-27T06:15:10Z
+  expected return: not given
+  spend cap: 4 concurrent workers
+  reach: hold-for-return only. No phone channel is configured; anything that needs you waits for your return.
+  your words: (none)
+[exit 0]
+
+### C. a standing version-2 none record survives the flag appearing; refresh keeps it; new words re-record; flag removal keeps a pinnace record valid; unknown channel refused
+version: 2, reach_channels: none
+$ fm-afk-contract.sh validate
+[exit 0]
+$ fm-afk-launch.sh enter
+fm-afk-contract: away posture already recorded at 2026-09-27T06:15:10Z; a refresh leaves it untouched
+Away posture recorded at 2026-09-27T06:15:10Z: hold-for-return only. No phone channel is configured; anything that needs you waits for your return. Your away instructions are recorded verbatim; the away session will carry them out where it can. Destructive, irreversible, and security-sensitive actions are never pre-authorizable, whatever the words say. Expected return: not given. Spend cap: 4 concurrent workers.
+Away posture (recorded):
+  entered: 2026-09-27T06:15:10Z
+  expected return: not given
+  spend cap: 4 concurrent workers
+  reach: hold-for-return only. No phone channel is configured; anything that needs you waits for your return.
+  your words (verbatim):
+    merge it when green
+[exit 0]
+after refresh with flag present, reach_channels: none
+$ fm-afk-launch.sh enter --words now the phone is on
+fm-afk-contract: replaced the earlier away posture; its record is archived at /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.lhAppw/state/afk-contracts/1790489710-superseded-1790489711.afk-contract
+Away posture recorded at 2026-09-27T06:15:11Z: the pinnace is the reach channel. Orders from your phone reach me while you are away, and anything that needs you is answered there. Your away instructions are recorded verbatim; the away session will carry them out where it can. Destructive, irreversible, and security-sensitive actions are never pre-authorizable, whatever the words say. Expected return: not given. Spend cap: 4 concurrent workers.
+Away posture (recorded):
+  entered: 2026-09-27T06:15:10Z
+  expected return: not given
+  spend cap: 4 concurrent workers
+  reach: the pinnace is the reach channel. Orders from your phone reach me while you are away, and anything that needs you is answered there.
+  your words (verbatim):
+    now the phone is on
+[exit 0]
+after new words, reach_channels: pinnace
+1790489710-superseded-1790489711.afk-contract
+$ fm-afk-contract.sh validate
+[exit 0]
+$ fm-afk-contract.sh readback
+Away posture (recorded):
+  entered: 2026-09-27T06:15:10Z
+  expected return: not given
+  spend cap: 4 concurrent workers
+  reach: the pinnace is the reach channel. Orders from your phone reach me while you are away, and anything that needs you is answered there.
+  your words (verbatim):
+    now the phone is on
+[exit 0]
+$ fm-afk-contract.sh validate
+fm-afk-contract: record /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.lhAppw/state/.afk-contract has no valid reach_channels
+[exit 1]
+$ fm-afk-launch.sh enter
+fm-afk-contract: record /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.lhAppw/state/.afk-contract has no valid reach_channels
+[exit 1]
+
+### D. presence is the switch: an empty config/pinnace still turns the channel on; a directory of that name does not
+empty flag file -> reach_channels: pinnace
+directory named pinnace -> reach_channels: none
+
+### E. a hand-written version 1 record with none (the older schema) still validates and reads back
+$ fm-afk-contract.sh validate
+[exit 0]
+$ fm-afk-contract.sh readback
+Away posture (recorded):
+  entered: 2026-09-20T10:00:00Z
+  expected return: not given
+  spend cap: 4 concurrent workers
+  reach: hold-for-return only. No phone channel is configured; anything that needs you waits for your return.
+  your words (verbatim):
+    merge it when green
+[exit 0]
+
+all lab homes removed

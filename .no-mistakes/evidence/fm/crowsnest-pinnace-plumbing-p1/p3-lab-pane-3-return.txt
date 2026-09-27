@@ -1,0 +1,47 @@
+### pane after the captain's return
+❯ : Firstmate operational input waiting: read '/private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-lab.r6MwOp/state/operational-inbox/1790490654-0e892627e2435e65.msg' and
+  handle its contents as Firstmate operational input.
+  Ran 1 shell command
+⏺ This phone order asks me to delete something, so it needs a confirming note first. Checking what the data directory holds before I reply.
+  Listed 1 directory, ran 1 shell command
+⏺ Captain, I did not delete the data directory. A deletion like that can't be undone, so from the phone it needs a second note confirming it.
+  I checked the directory before replying, and it is already empty. Deleting it now would change nothing. The reply sent to your phone was:
+  ▎ Captain, I have not deleted anything. Deleting the whole data directory cannot be undone, so I need a confirming phone note before I do it. Right now that directory is already
+  ▎ empty, so there is nothing to clear. Send a note saying confirm delete data directory if you still want it removed.
+  Your note is marked handled and away mode is still on. If a confirming note arrives, I'll look at the directory again before acting on it.
+✻ Baked for 21s · done 8:31 AM
+❯ I'm back at the desk, thanks. Anything I need to know?
+⏺ Welcome back, captain. Closing out away mode and pulling the catch-up summary first.
+  Ran 1 shell command
+⏺ Background command "Run the away supervision daemon in the background" completed (exit code 0)
+  Ran 1 shell command
+⏺ Captain, nothing needs you. Away mode is off, and your away instructions have been archived.
+  You were away for 13 minutes. Monitoring ran the whole time with no gaps. No work was running, no decisions are open, and nothing failed or needs cleanup.
+  Two phone orders came in while you were out, and I answered both on the phone:
+  - Fleet status question. I replied that the fleet was idle and nothing was waiting on you.
+  - Delete the data directory. I did not delete it. It can't be undone, so it needed a confirming note, and none arrived. The directory is empty anyway, so there is nothing to
+    clear.
+  The automatic return summary says the away session took no action. That only counts fleet actions, so it leaves out these two phone replies. Everything is back to normal, and I'm
+  ready for your next order.
+✻ Cogitated for 22s · done 8:32 AM
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ bypass permissions on (shift+tab to cycle) · ← for agents
+
+### posture files after return
+. .. .heartbeat-streak .inactive-outcome-reconcile .last-check .last-heartbeat .last-watcher-beat .lock .lock-session .secondmate-liveness-tick .session-start-complete .startup-network.report .startup-network.status .startup-network.timings .subsuper-last-housekeep .subsuper-last-scan .supervise-daemon.log .supervise-daemon.watcher.err .trace-context-effective .wake-queue .wake-queue.seq .watch-deliveries.log .watcher-down afk-contracts home-summary.json inbox operational-inbox terminal-outcomes 
+### archived records
+total 8
+drwxr-xr-x@  3 cotton  staff   96 Sep 27 08:31 .
+drwxr-xr-x@ 28 cotton  staff  896 Sep 27 08:32 ..
+-rw-------@  1 cotton  staff  398 Sep 27 08:18 1790489914.afk-contract
+--- /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.r6MwOp/state/afk-contracts/1790489914.afk-contract
+version: 2
+entered: 2026-09-27T06:18:34Z
+entered_epoch: 1790489914
+expected_return: -
+reach_channels: pinnace
+reach_announced: Orders from your phone reach me while you are away, and anything that needs you is answered there.
+### daemon pid alive?
+no running daemon pid recorded

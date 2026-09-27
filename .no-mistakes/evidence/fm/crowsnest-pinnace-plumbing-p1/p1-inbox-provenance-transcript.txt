@@ -1,0 +1,172 @@
+
+### 1. the pinnace queues an order with provenance (request-id as the plan prescribes)
+$ fm-inbox.sh note --source pinnace --meta node=mac.home --meta login=captain@example.com --request-id pinnace:0d3f4c1a --json merge the windows fix when green
+{"schema":"fm-inbox-note.v1","outcome":"created","id":"1790489608-7abgEo","request_id":"pinnace:0d3f4c1a","saved":true,"announced":true,"acknowledged":false,"path":"/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.fOQNGR/state/inbox/1790489608-7abgEo.note"}
+[exit 0]
+
+### 1a. the durable record (1790489608-7abgEo.note) carries source, node, and login headers above the body
+id=1790489608-7abgEo
+at=2026-09-27T06:13:28Z
+source=pinnace
+announce_marker=1
+request_id=pinnace:0d3f4c1a
+node=mac.home
+login=captain@example.com
+--
+merge the windows fix when green
+
+### 1b. receipts return source=pinnace and the unchanged body
+$ fm-inbox.sh receipts
+{"schema":"fm-inbox-receipts.v1","home":"T/fm-lab.fOQNGR","generated":"2026-09-27T06:13:28Z","pending":[{"id":"1790489608-7abgEo","at":"2026-09-27T06:13:28Z","source":"pinnace","request_id":"pinnace:0d3f4c1a","body":"merge the windows fix when green","acknowledged":false,"announced":true,"reply":null}],"handled":[],"replies":[],"reply_cursor":"","omitted":[]}
+[exit 0]
+
+### 1c. a retry of the same request id replays the original note with its source intact
+$ fm-inbox.sh note --source pinnace --meta node=mac.home --meta login=captain@example.com --request-id pinnace:0d3f4c1a --json merge the windows fix when green
+{"schema":"fm-inbox-note.v1","outcome":"replay","id":"1790489608-7abgEo","request_id":"pinnace:0d3f4c1a","saved":true,"announced":true,"acknowledged":false,"path":"/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.fOQNGR/state/inbox/1790489608-7abgEo.note"}
+[exit 0]
+notes on disk: 1
+
+### 1d. the wake queue holds exactly one inbox wake for it
+1
+1790489608	1	check	inbox:1790489608-7abgEo	check: captain inbox note 1790489608-7abgEo - merge the windows fix when green
+
+### 2. body on stdin, the way the pinnace server sends it
+{"schema":"fm-inbox-note.v1","outcome":"created","id":"1790489609-3lRTFM","request_id":null,"saved":true,"announced":true,"acknowledged":false,"path":"/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.fOQNGR/state/inbox/1790489609-3lRTFM.note"}
+[exit 0]
+id=1790489609-3lRTFM
+at=2026-09-27T06:13:29Z
+source=pinnace
+announce_marker=1
+node=phone
+login=captain@example.com
+--
+
+### 3. a plain terminal note keeps the default source=text and no extra headers
+$ fm-inbox.sh note typed at the desk
+queued 1790489609-oBAuKj
+  typed at the desk
+  firstmate will pick this up at its next check.
+[exit 0]
+id=1790489609-oBAuKj
+at=2026-09-27T06:13:29Z
+source=text
+announce_marker=1
+--
+
+### 4. human list and drain output print only the id and the body (no source header)
+$ fm-inbox.sh list
+1790489608-7abgEo
+    merge the windows fix when green
+1790489609-3lRTFM
+    What is the fleet doing right now?
+1790489609-oBAuKj
+    typed at the desk
+[exit 0]
+$ fm-inbox.sh drain
+1790489608-7abgEo
+    merge the windows fix when green
+1790489609-3lRTFM
+    What is the fleet doing right now?
+1790489609-oBAuKj
+    typed at the desk
+
+Ack with: fm-inbox.sh drain --ack <id>...
+[exit 0]
+
+### 5. adversarial: malformed source tokens and forged or malformed meta are refused and write nothing
+$ fm-inbox.sh note --source pin nace --json nope
+fm-inbox: invalid source token (use characters: A-Za-z0-9._-)
+[exit 1]
+$ fm-inbox.sh note --source ../x --json nope
+fm-inbox: invalid source token (use characters: A-Za-z0-9._-)
+[exit 1]
+$ fm-inbox.sh note --source  --json nope
+fm-inbox: invalid source token (use characters: A-Za-z0-9._-)
+[exit 1]
+$ fm-inbox.sh note --source pinnace
+id=forged --json nope
+fm-inbox: invalid source token (use characters: A-Za-z0-9._-)
+[exit 1]
+$ fm-inbox.sh note --source pinnace;rm --json nope
+fm-inbox: invalid source token (use characters: A-Za-z0-9._-)
+[exit 1]
+$ fm-inbox.sh note --source pinnace --meta source=forged --json nope
+fm-inbox: invalid --meta (use <key>=<value>: a key of A-Za-z0-9._- that is not a fixed header name, and a non-empty value with no line break)
+[exit 1]
+$ fm-inbox.sh note --source pinnace --meta id=forged --json nope
+fm-inbox: invalid --meta (use <key>=<value>: a key of A-Za-z0-9._- that is not a fixed header name, and a non-empty value with no line break)
+[exit 1]
+$ fm-inbox.sh note --source pinnace --meta at=1999 --json nope
+fm-inbox: invalid --meta (use <key>=<value>: a key of A-Za-z0-9._- that is not a fixed header name, and a non-empty value with no line break)
+[exit 1]
+$ fm-inbox.sh note --source pinnace --meta announce_marker=0 --json nope
+fm-inbox: invalid --meta (use <key>=<value>: a key of A-Za-z0-9._- that is not a fixed header name, and a non-empty value with no line break)
+[exit 1]
+$ fm-inbox.sh note --source pinnace --meta request_id=x --json nope
+fm-inbox: invalid --meta (use <key>=<value>: a key of A-Za-z0-9._- that is not a fixed header name, and a non-empty value with no line break)
+[exit 1]
+$ fm-inbox.sh note --source pinnace --meta novalue --json nope
+fm-inbox: invalid --meta (use <key>=<value>: a key of A-Za-z0-9._- that is not a fixed header name, and a non-empty value with no line break)
+[exit 1]
+$ fm-inbox.sh note --source pinnace --meta node= --json nope
+fm-inbox: invalid --meta (use <key>=<value>: a key of A-Za-z0-9._- that is not a fixed header name, and a non-empty value with no line break)
+[exit 1]
+$ fm-inbox.sh note --source pinnace --meta =value --json nope
+fm-inbox: invalid --meta (use <key>=<value>: a key of A-Za-z0-9._- that is not a fixed header name, and a non-empty value with no line break)
+[exit 1]
+$ fm-inbox.sh note --source pinnace --meta bad key=x --json nope
+fm-inbox: invalid --meta (use <key>=<value>: a key of A-Za-z0-9._- that is not a fixed header name, and a non-empty value with no line break)
+[exit 1]
+$ fm-inbox.sh note --source pinnace --meta node=phone
+id=forged --json nope
+fm-inbox: invalid --meta (use <key>=<value>: a key of A-Za-z0-9._- that is not a fixed header name, and a non-empty value with no line break)
+[exit 1]
+$ fm-inbox.sh note --source pinnace --meta node=phoneid=forged --json nope
+fm-inbox: invalid --meta (use <key>=<value>: a key of A-Za-z0-9._- that is not a fixed header name, and a non-empty value with no line break)
+[exit 1]
+$ fm-inbox.sh note --source --json nope
+queued 1790489609-KdnM5s
+  nope
+  firstmate will pick this up at its next check.
+[exit 0]
+$ fm-inbox.sh note --meta --json nope
+fm-inbox: invalid --meta (use <key>=<value>: a key of A-Za-z0-9._- that is not a fixed header name, and a non-empty value with no line break)
+[exit 1]
+notes before refusals: 3, after: 4
+inbox wakes after refusals: 4
+
+### 6. edge: a value may itself contain '=' and a key may use dots and dashes
+$ fm-inbox.sh note --source pinnace --meta tailnet.node-name=mac=home --json edge
+{"schema":"fm-inbox-note.v1","outcome":"created","id":"1790489609-w717KZ","request_id":null,"saved":true,"announced":true,"acknowledged":false,"path":"/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.fOQNGR/state/inbox/1790489609-w717KZ.note"}
+[exit 0]
+id=1790489609-w717KZ
+at=2026-09-27T06:13:29Z
+source=pinnace
+announce_marker=1
+tailnet.node-name=mac=home
+--
+
+### 7. --help documents the provenance flags
+$ fm-inbox.sh note --help
+fm-inbox: usage: fm-inbox.sh note [--request-id <id>] [--source <token>] [--meta <key>=<value>]... [--json] [--] <text>... (or: note -)
+[exit 1]
+$ fm-inbox.sh --help | grep -n "source\|--meta"
+22:  fm-inbox.sh note [--request-id <id>] [--source <token>] [--meta <key>=<value>]... [--json] [--] <text>...
+23:  fm-inbox.sh note [--request-id <id>] [--source <token>] [--meta <key>=<value>]... [--json] -   (body from stdin)
+49:`note --source <token>` records which channel spoke, as the `source` header
+52:and nothing else. Each `--meta <key>=<value>` adds one more header line
+55:rule and may not reuse a fixed header name (id, at, source, announce_marker,
+
+### 8. the first mate answers the pinnace note with reply, then acknowledges; receipts show both
+$ fm-inbox.sh reply 1790489608-7abgEo Merged the windows fix; it was green at its live head.
+replied 1790489608-7abgEo
+[exit 0]
+$ fm-inbox.sh drain --ack 1790489608-7abgEo
+acked 1790489608-7abgEo
+[exit 0]
+$ fm-inbox.sh receipts
+{"schema":"fm-inbox-receipts.v1","home":"T/fm-lab.fOQNGR","generated":"2026-09-27T06:13:30Z","pending":[{"id":"1790489609-w717KZ","at":"2026-09-27T06:13:29Z","source":"pinnace","request_id":null,"body":"edge","acknowledged":false,"announced":true,"reply":null},{"id":"1790489609-oBAuKj","at":"2026-09-27T06:13:29Z","source":"text","request_id":null,"body":"typed at the desk","acknowledged":false,"announced":true,"reply":null},{"id":"1790489609-KdnM5s","at":"2026-09-27T06:13:29Z","source":"--json","request_id":null,"body":"nope","acknowledged":false,"announced":true,"reply":null},{"id":"1790489609-3lRTFM","at":"2026-09-27T06:13:29Z","source":"pinnace","request_id":null,"body":"What is the fleet doing right now?","acknowledged":false,"announced":true,"reply":null}],"handled":[{"id":"1790489608-7abgEo","at":"2026-09-27T06:13:28Z","source":"pinnace","request_id":"pinnace:0d3f4c1a","body":"merge the windows fix when green","acknowledged":true,"announced":true,"reply":{"id":"1790489608-7abgEo","at":"2026-09-27T06:13:30Z","body":"Merged the windows fix; it was green at its live head.","cursor":"000000000001"}}],"replies":[{"id":"1790489608-7abgEo","at":"2026-09-27T06:13:30Z","body":"Merged the windows fix; it was green at its live head.","cursor":"000000000001"}],"reply_cursor":"000000000001","omitted":[]}
+[exit 0]
+
+### teardown
+lab removed: /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.fOQNGR
