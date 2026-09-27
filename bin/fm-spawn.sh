@@ -2037,7 +2037,7 @@ launch_template() {
       printf '%s' 'codex __MODELFLAG____EFFORTFLAG__--dangerously-bypass-approvals-and-sandbox --disable hooks -c "notify=[\"bash\",\"-c\",\"touch __TURNEND__\"]" "$(__OPINPUT__ encode launch-brief < __BRIEF__)"'
     fi
     ;;
-  opencode) printf '%s' 'OPENCODE_CONFIG_CONTENT='\''{"permission":{"*":"allow"}__OCPROVIDER____EFFORTFLAG__}'\'' opencode __MODELFLAG__--prompt "$(__OPINPUT__ encode launch-brief < __BRIEF__)"' ;;
+  opencode) printf '%s' 'OPENCODE_CONFIG_CONTENT='\''{"permission":__OCPERMISSION____OCPROVIDER____EFFORTFLAG__}'\'' opencode __MODELFLAG__--prompt "$(__OPINPUT__ encode launch-brief < __BRIEF__)"' ;;
   pi | pi-signed)
     printf '%s' '__PIBIN____PITUIMODE____PIRESUME__'
     if [ "$kind" = secondmate ]; then
@@ -2388,6 +2388,17 @@ if [ "$SAILOR_SET" -eq 0 ] && [ "$RELAUNCH" -eq 1 ] && [ "$HARNESS" = opencode ]
     SAILOR=$RELAUNCH_SAILOR
     MODEL=$RELAUNCH_SAILOR_MODEL
   fi
+fi
+# OpenCode permission profile (header above; docs/configuration.md "OpenCode
+# permission profile"). Resolved before any endpoint, worktree, or record exists,
+# so an invalid selector refuses the spawn. A secondmate is a firstmate primary
+# in its own home and keeps every tool, as it does today.
+OC_PERMISSION_JSON='{"*":"allow"}'
+OC_WORKER_NOTE=
+if [ "$HARNESS" = opencode ] && [ "$RAW_LAUNCH" = 0 ] && [ "$KIND" != secondmate ]; then
+  OC_PERMISSION_JSON=$(FM_HOME="$FM_HOME" FM_STATE_OVERRIDE="$STATE" FM_DATA_OVERRIDE="$DATA" FM_CONFIG_OVERRIDE="$CONFIG" \
+    "$SCRIPT_DIR/fm-opencode-permissions.sh" compose "$ID") || exit 1
+  OC_WORKER_NOTE=$(FM_HOME="$FM_HOME" FM_CONFIG_OVERRIDE="$CONFIG" "$SCRIPT_DIR/fm-opencode-permissions.sh" worker-note) || exit 1
 fi
 SAILOR_PROVIDER_JSON=
 if [ -n "$SAILOR" ]; then
@@ -3039,6 +3050,9 @@ if [ "$KIND" = ship ] || [ "$KIND" = scout ]; then
       cat "$SOURCE_BRIEF" &&
       if [ "$KIND" = ship ] && [ "$MODE" = no-mistakes ]; then
         fm_brief_intent_overlay "$CAPTAIN_INTENT"
+      fi &&
+      if [ -n "${OC_WORKER_NOTE:-}" ]; then
+        printf '%s\n' "$OC_WORKER_NOTE"
       fi
   } >"$BRIEF_TMP" || {
     rm -f -- "$BRIEF_TMP"
@@ -4994,6 +5008,10 @@ fi
 LAUNCH=${LAUNCH//__MODELFLAG__/$MODELFLAG}
 LAUNCH=${LAUNCH//__EFFORTFLAG__/$EFFORTFLAG}
 LAUNCH=${LAUNCH//__OCPROVIDER__/$OCPROVIDER}
+# The permission block lands inside the same single-quoted assignment, and a
+# restricted profile's shell patterns quote their paths.
+OCPERMISSION=${OC_PERMISSION_JSON//\'/\'\\\'\'}
+LAUNCH=${LAUNCH//__OCPERMISSION__/$OCPERMISSION}
 # Relaunch session continuity. Computed here, where the adopted endpoint (T) is
 # known, and substituted only into the Pi-family template's `__PIRESUME__`
 # placeholder; an empty value leaves every other launch byte-identical.

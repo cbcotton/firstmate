@@ -57,4 +57,23 @@ One `edit` call failed on an inexact match and succeeded on retry.
 - A later `external_directory` deny overrides the skill-directory allows OpenCode adds on its own, so a worker that needs a skill or a file outside its project needs an explicit allow after that deny.
 - Each denial message shows the model the full rule list it was checked against.
 
-Refresh this record by repeating the run above after an OpenCode or model-server upgrade.
+## The composed restricted profile holds against the real OpenCode
+
+Verified 2026-09-27 with OpenCode 1.18.32 by `tests/fm-opencode-restricted-live-e2e.test.sh`, which composes the profile with `bin/fm-opencode-permissions.sh compose` for a throwaway home selecting `restricted` and drives `opencode run` against a scripted OpenAI-compatible server on a loopback port.
+The server answers each model request with the next scripted tool call, so the run is deterministic and spends no model tokens; each verdict is read from the filesystem or from the tool result OpenCode returned to the model.
+
+| Scripted tool call | Result |
+| --- | --- |
+| `edit` of `a.txt` inside the copy | Allowed |
+| `git commit -am "say bar"` | Allowed |
+| `git push origin main` | Denied; the bare remote kept one commit |
+| `git status && rm -f a.txt` | Denied; `a.txt` still exists although `git status*` is allowed |
+| The brief's status command against the task's own status file | Allowed; the line was appended |
+| `mv` of the task's inbox message into `handled/` | Allowed |
+| `read` of `/etc/hosts` | Denied; the tool result carried no file contents |
+
+An earlier live run with a local model under the same profile also denied `git log -1; touch inside-probe` inside the copy, although `git log*` is allowed: OpenCode checks each part of a compound command on its own.
+Each guard run took 9 to 16 seconds.
+`opencode run` reads its standard input whenever it is not a terminal and waits for it to close before its first model request, so a run whose caller holds an open pipe never starts; the guard gives it `/dev/null`, and fails after 120 seconds naming the OpenCode version.
+
+Refresh this record by repeating the runs above after an OpenCode or model-server upgrade.

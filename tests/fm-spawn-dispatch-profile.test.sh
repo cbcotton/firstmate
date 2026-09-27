@@ -867,6 +867,59 @@ test_sailor_requires_opencode_and_a_model() {
   pass "--sailor refuses a non-opencode harness and a missing model"
 }
 
+test_opencode_restricted_profile_reaches_the_launch_and_brief() {
+  local rec id out status launch composed
+  id=profile-oc-restricted-r1
+  rec=$(make_spawn_case profile-oc-restricted opencode "$id")
+  read_case_record "$rec"
+  printf 'restricted\n' > "$HOME_DIR/config/opencode-permission-profile"
+
+  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR" --model anthropic/claude-sonnet-4-5)
+  status=$?
+  expect_code 0 "$status" "an opencode spawn under the restricted profile should succeed"$'\n'"$out"
+  composed=$(FM_HOME="$HOME_DIR" "$ROOT/bin/fm-opencode-permissions.sh" compose "$id")
+  # The composed profile quotes its shell patterns' paths, so every quote must
+  # close and reopen the launch's single-quoted assignment.
+  composed=${composed//\'/\'\\\'\'}
+  launch=$(cat "$LAUNCH_LOG")
+  assert_contains "$launch" \
+    "OPENCODE_CONFIG_CONTENT='{\"permission\":$composed}' opencode --model 'anthropic/claude-sonnet-4-5' --prompt" \
+    "the restricted profile did not reach the launch intact"
+  assert_grep "# Restricted tools" "$HOME_DIR/data/$id/launch-brief.md" "a restricted worker's launch brief must carry the restricted-tools note"
+  pass "the restricted OpenCode profile reaches the launch intact and adds its note to the launch brief"
+}
+
+test_opencode_invalid_permission_profile_refuses_before_endpoint_or_metadata() {
+  local rec id out status
+  id=profile-oc-badprofile-r2
+  rec=$(make_spawn_case profile-oc-badprofile opencode "$id")
+  read_case_record "$rec"
+  printf 'bypass\n' > "$HOME_DIR/config/opencode-permission-profile"
+
+  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR")
+  status=$?
+  expect_code 1 "$status" "an unknown opencode permission profile must refuse the spawn"
+  assert_contains "$out" "holds 'bypass'; accepted values are: allow" "the refusal must name the accepted values"
+  [ ! -e "$HOME_DIR/state/$id.meta" ] || fail "a refused spawn must leave no task record"
+  [ ! -s "$LAUNCH_LOG" ] || fail "a refused spawn must launch nothing"
+  pass "an unknown opencode permission profile refuses before any endpoint or record exists"
+}
+
+test_non_opencode_harness_ignores_the_opencode_permission_profile() {
+  local rec id out status
+  id=profile-oc-claude-r3
+  rec=$(make_spawn_case profile-oc-claude claude "$id")
+  read_case_record "$rec"
+  printf 'restricted\n' > "$HOME_DIR/config/opencode-permission-profile"
+
+  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR")
+  status=$?
+  expect_code 0 "$status" "a claude spawn must not read the opencode permission profile"$'\n'"$out"
+  assert_not_contains "$(cat "$LAUNCH_LOG")" "OPENCODE_CONFIG_CONTENT" "a claude launch must not carry an opencode permission block"
+  assert_no_grep "# Restricted tools" "$HOME_DIR/data/$id/launch-brief.md" "a claude worker's brief must not carry the opencode note"
+  pass "a non-opencode launch ignores the opencode permission profile"
+}
+
 test_opencode_omits_variant_when_model_family_lacks_effort() {
   local rec id out status launch
   id=profile-opencode-omit-z7d
@@ -1771,6 +1824,9 @@ test_opencode_omits_variant_when_model_family_lacks_effort
 test_opencode_sailor_launch_points_at_the_sailor
 test_placeholder_sailor_refuses_before_endpoint_or_metadata
 test_sailor_requires_opencode_and_a_model
+test_opencode_restricted_profile_reaches_the_launch_and_brief
+test_opencode_invalid_permission_profile_refuses_before_endpoint_or_metadata
+test_non_opencode_harness_ignores_the_opencode_permission_profile
 test_native_effort_validator_keeps_axes_separate
 test_native_pi_ultra_is_explicit_and_model_scoped
 test_batch_preserves_native_ultra

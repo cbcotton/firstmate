@@ -9,7 +9,7 @@ Start with the directory layout, then use the setting reference for the behavior
 | --- | --- |
 | Firstmate's code, private files, or project location | [FM_HOME](#fm_home) and [operational home layout](#operational-home-layout-and-state) |
 | Task windows and worker tools | [Runtime backend](#runtime-backend-configbackend--fm_backend) and [harness support](#harness-support) |
-| Worker permissions, accounts, or environment | [Claude permission mode](#claude-permission-mode-configclaude-permission-mode), [worker account pin](#worker-account-pin-configclaude-account-configpi-account), and [worker launch environment](#worker-launch-environment-configlaunch-env-allowlist) |
+| Worker permissions, accounts, or environment | [Claude permission mode](#claude-permission-mode-configclaude-permission-mode), [OpenCode permission profile](#opencode-permission-profile-configopencode-permission-profile), [worker account pin](#worker-account-pin-configclaude-account-configpi-account), and [worker launch environment](#worker-launch-environment-configlaunch-env-allowlist) |
 | Backlog, preferences, and memory | [Backlog backend](#backlog-backend-taskstoml--configbacklog-backend), [captain preferences](#captain-preferences-datacaptainmd--datacaptain-sharedmd), and [startup memory budget](#startup-memory-budget-configstartup-memory-budget) |
 | Supervision and presentation | [Pi supervision branch](#pi-supervision-branch), [supervision host](#supervision-host-configsupervision-host), and [Calm preference](#calm-preference-configcalm) |
 | Persistent secondmates | [Secondmate routes](#secondmate-routes-datasecondmatesmd) |
@@ -830,6 +830,29 @@ The diagnostic names the accepted values; Firstmate never falls back to a permis
 The file is a captain-wide safety preference, so it is inherited into secondmate homes under the [`secondmate-provisioning`](../.agents/skills/secondmate-provisioning/SKILL.md) inherited-local-material contract; a secondmate's own Claude crewmates then launch on the same posture.
 
 The [Claude adapter reference](../.agents/skills/harness-adapters/references/harness/claude.md) records the verified shape of both launches and which once-per-machine dialog each one can meet.
+
+## OpenCode permission profile (config/opencode-permission-profile)
+
+The optional local, gitignored `config/opencode-permission-profile` selects the permission block every OpenCode crewmate and scout launch carries, including control-plane relaunches.
+OpenCode has no safety classifier, so this profile is the only thing between an OpenCode worker's model and the tools it asks for.
+
+| Token | Launch permission |
+| --- | --- |
+| `allow` | Every tool allowed, the launch's historical `{"*":"allow"}` |
+| `restricted` | A default-deny profile composed for the task |
+
+An absent file means `allow`, so an unconfigured home launches byte-for-byte as before.
+Any other value, or an unreadable file, refuses every OpenCode crewmate or scout spawn from that home before any endpoint, worktree, or task record exists, and the diagnostic names the accepted values.
+An OpenCode secondmate is a firstmate primary in its own home and keeps every tool.
+
+Under `restricted`, a worker may read, search, and edit inside its own copy, make local Git commits and branches, run `no-mistakes axi`, and use its own task's brief directory, status file, and steering inbox exactly as its instructions spell them.
+Everything else is denied: every path outside the copy, `git push`, any other shell command, web fetch and search, and sub-agents.
+OpenCode checks each part of a compound shell command separately, so an allowed first command cannot carry a denied second one.
+A denied worker is told, in its launch instructions, to report what it needs as a keyed decision rather than look for another route, so widening a worker's permissions stays the captain's call.
+
+`bin/fm-opencode-permissions.sh` owns the baseline, the composition order, and the worker note; its `compose <task-id>` prints the exact profile a launch would carry.
+[`verification/local-sailors.md`](verification/local-sailors.md) records the live evidence, and `tests/fm-opencode-restricted-live-e2e.test.sh` re-proves it against the installed OpenCode with a scripted model and no model tokens.
+The file is read on every spawn and relaunch and is inherited into secondmate homes, where it governs their own OpenCode crewmates.
 
 ## Worker account pin (config/claude-account, config/pi-account)
 
