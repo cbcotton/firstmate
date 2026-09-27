@@ -76,4 +76,29 @@ An earlier live run with a local model under the same profile also denied `git l
 Each guard run took 9 to 16 seconds.
 `opencode run` reads its standard input whenever it is not a terminal and waits for it to close before its first model request, so a run whose caller holds an open pipe never starts; the guard gives it `/dev/null`, and fails after 120 seconds naming the OpenCode version.
 
+## A sandboxed sailor launch confines the real OpenCode
+
+Verified 2026-09-27 on macOS 26.6 with OpenCode 1.18.32 by `tests/fm-sailor-sandbox-live-e2e.test.sh`.
+The test runs `bin/fm-spawn.sh --sailor` for real in a throwaway home with `config/sailor-sandbox` present, records the launch command through a fake tmux, and runs that exact command on a pseudo-terminal, so the interactive OpenCode starts inside `sandbox-exec` exactly as a worker pane would.
+The sailor's endpoint is a scripted OpenAI-compatible server on a loopback port, and the OpenCode permission profile is left at `allow`, so the sandbox alone decides every step.
+
+| Scripted step | Result |
+| --- | --- |
+| Edit `README.md` inside the copy | Allowed |
+| `git commit -qam "sailor edit"` | Allowed |
+| The worker's status append to its own status file | Allowed |
+| Write to a directory under `/private/tmp` outside every allowed path | Denied |
+| Append to the task's own record in `state/` | Denied |
+| Write `pre-commit` into the repository's Git hooks | Denied |
+| `curl https://example.com/` | Denied |
+| Firstmate's busy-state plugin recording the worker's state | Allowed |
+
+An earlier run of the same wrapper with `opencode run` also denied a write to the home directory, a connection to another loopback port, and a connection to the tmux server socket, while writes to `$TMPDIR` succeeded.
+
+The sandboxed interactive OpenCode waited about 74 seconds before its first model request whenever the copy held the busy-state plugin's `.opencode/` directory, and about 4 seconds without it.
+OpenCode writes a `.gitignore` there naming `package.json`, `bun.lock`, and `node_modules`, which points at a plugin-package install the sandbox's network rules block; `OPENCODE_DISABLE_MODELS_FETCH` and `OPENCODE_DISABLE_DEFAULT_PLUGINS` did not shorten the wait, and `OPENCODE_FAST_BOOT` stopped the run.
+After the wait every step ran in about 6 seconds.
+
+Not yet verified live: a no-mistakes pipeline run started from inside the sandbox, which relies on the no-mistakes socket and gate repository allowances.
+
 Refresh this record by repeating the runs above after an OpenCode or model-server upgrade.

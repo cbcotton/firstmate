@@ -867,6 +867,77 @@ test_sailor_requires_opencode_and_a_model() {
   pass "--sailor refuses a non-opencode harness and a missing model"
 }
 
+# A fake sandbox-exec stands in for macOS's, so the launch shape is pinned on
+# every platform; tests/fm-sailor-sandbox-live-e2e.test.sh runs the real one.
+fake_sandbox_exec() {  # <fakebin> <exit-status>
+  printf '#!/usr/bin/env bash\nexit %s\n' "$2" > "$1/sandbox-exec"
+  chmod +x "$1/sandbox-exec"
+}
+
+test_sandboxed_sailor_launch_runs_inside_the_sandbox() {
+  local rec id out status launch state data wt
+  id=profile-sailor-sandbox-x1
+  rec=$(make_spawn_case profile-sailor-sandbox opencode "$id")
+  read_case_record "$rec"
+  enable_sailors "$HOME_DIR" "$FAKEBIN_DIR" live
+  fake_sandbox_exec "$FAKEBIN_DIR" 0
+  : > "$HOME_DIR/config/sailor-sandbox"
+
+  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR" --harness opencode --model qwen-coder --sailor tiller)
+  status=$?
+  expect_code 0 "$status" "a sandboxed sailor spawn should succeed"$'\n'"$out"
+  assert_contains "$out" "sailor=tiller sandbox=seatbelt" "spawn did not report the sandbox"
+  assert_grep "sandbox=seatbelt" "$HOME_DIR/state/$id.meta" "meta missing sandbox=seatbelt"
+  launch=$(cat "$LAUNCH_LOG")
+  state="$HOME_DIR/state"
+  data="$HOME_DIR/data"
+  wt=$(cd "$WT_DIR" && pwd -P)
+  # Every token is shell-quoted, flags included.
+  assert_contains "$launch" "'$ROOT/bin/fm-sandbox-exec.sh' 'run' '--write' '$wt' " "the launch must start OpenCode through the sandbox, writing to its own copy"
+  assert_contains "$launch" "/.git/hooks' '--deny-write' " "the repository's Git hooks must be unwritable"
+  assert_contains "$launch" "'--write-prefix' '$state/$id.status'" "the worker must be able to append its status"
+  assert_contains "$launch" "'--deny-write' '$state' '--deny-write' '$data'" "this home's state and data must be denied whole"
+  assert_contains "$launch" "'--write-prefix' '$data/$id/report'" "the worker must be able to write its report"
+  assert_not_contains "$launch" "'--write-prefix' '$state/$id.'" "the worker must not get its whole task record prefix"
+  assert_contains "$launch" "'--connect' 'http://127.0.0.1:11234/v1' '--unix-socket' " "the sailor's endpoint and, for a no-mistakes ship, the pipeline socket must be reachable"
+  assert_contains "$launch" " -- opencode --model 'tiller/qwen-coder' --prompt" "the sandbox must wrap the sailor's own OpenCode launch"
+  pass "a sandboxed sailor launch starts OpenCode inside the sandbox with only its own paths and endpoint"
+}
+
+test_sandbox_that_cannot_run_refuses_the_sailor() {
+  local rec id out status
+  id=profile-sailor-nosandbox-x2
+  rec=$(make_spawn_case profile-sailor-nosandbox opencode "$id")
+  read_case_record "$rec"
+  enable_sailors "$HOME_DIR" "$FAKEBIN_DIR" live
+  fake_sandbox_exec "$FAKEBIN_DIR" 1
+  : > "$HOME_DIR/config/sailor-sandbox"
+
+  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR" --harness opencode --model qwen-coder --sailor tiller)
+  status=$?
+  expect_code 1 "$status" "a sailor that cannot be sandboxed must be refused"
+  assert_contains "$out" "refusing to launch sailor tiller unconfined" "sandbox refusal missing"
+  [ ! -e "$HOME_DIR/state/$id.meta" ] || fail "a refused spawn must leave no task record"
+  [ ! -s "$LAUNCH_LOG" ] || fail "a refused spawn must launch nothing"
+  pass "a home that asks for the sailor sandbox where it cannot run refuses the sailor spawn"
+}
+
+test_sandbox_leaves_non_sailor_opencode_launches_alone() {
+  local rec id out status
+  id=profile-oc-nosailor-x3
+  rec=$(make_spawn_case profile-oc-nosailor opencode "$id")
+  read_case_record "$rec"
+  fake_sandbox_exec "$FAKEBIN_DIR" 0
+  : > "$HOME_DIR/config/sailor-sandbox"
+
+  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR" --model anthropic/claude-sonnet-4-5)
+  status=$?
+  expect_code 0 "$status" "a non-sailor opencode spawn should succeed"$'\n'"$out"
+  assert_not_contains "$(cat "$LAUNCH_LOG")" "fm-sandbox-exec.sh" "only a sailor launch runs inside the sandbox"
+  assert_no_grep "sandbox=" "$HOME_DIR/state/$id.meta" "a non-sailor task must not record a sandbox"
+  pass "the sailor sandbox leaves a non-sailor OpenCode launch unchanged"
+}
+
 test_opencode_restricted_profile_reaches_the_launch_and_brief() {
   local rec id out status launch composed
   id=profile-oc-restricted-r1
@@ -1827,6 +1898,9 @@ test_sailor_requires_opencode_and_a_model
 test_opencode_restricted_profile_reaches_the_launch_and_brief
 test_opencode_invalid_permission_profile_refuses_before_endpoint_or_metadata
 test_non_opencode_harness_ignores_the_opencode_permission_profile
+test_sandboxed_sailor_launch_runs_inside_the_sandbox
+test_sandbox_that_cannot_run_refuses_the_sailor
+test_sandbox_leaves_non_sailor_opencode_launches_alone
 test_native_effort_validator_keeps_axes_separate
 test_native_pi_ultra_is_explicit_and_model_scoped
 test_batch_preserves_native_ultra

@@ -854,6 +854,27 @@ A denied worker is told, in its launch instructions, to report what it needs as 
 [`verification/local-sailors.md`](verification/local-sailors.md) records the live evidence, and `tests/fm-opencode-restricted-live-e2e.test.sh` re-proves it against the installed OpenCode with a scripted model and no model tokens.
 The file is read on every spawn and relaunch and is inherited into secondmate homes, where it governs their own OpenCode crewmates.
 
+## Sailor sandbox (config/sailor-sandbox)
+
+The optional local, gitignored presence flag `config/sailor-sandbox` runs every [named sailor](#crew-dispatch-profiles-configcrew-dispatchjson) launch inside a macOS Seatbelt sandbox, as a floor under the [OpenCode permission profile](#opencode-permission-profile-configopencode-permission-profile): the profile decides which tools a sailor may call, and the sandbox bounds what any of those calls can reach.
+Create the file to turn it on and delete it to turn it off; it is inherited into secondmate homes.
+
+Inside the sandbox a sailor can write only to:
+
+- its own copy and that repository's Git metadata, never the repository's hooks or Git configuration;
+- its task temp directory and OpenCode's own data, state, and cache directories;
+- exactly the files its instructions tell it to write: its status line, inbox acknowledgements, busy state, the opt-in fleet ledger, its report, and its pipeline findings.
+
+The rest of this home's state and data, including the sailor's own task record and instructions, is unwritable.
+It can connect only to its sailor's endpoint, the DNS resolver, and, for a no-mistakes ship, the no-mistakes socket and gate repository.
+A sailor endpoint on this machine is pinned to its port; one on another machine allows that port on every host, because a Seatbelt rule can name only the local host or any host.
+Reads are not confined, and the sandbox is not a boundary against same-user system services that start programs outside it.
+
+A home with the flag refuses a sailor spawn on a machine where `sandbox-exec` cannot run, rather than launching the sailor unconfined; ordinary OpenCode workers on hosted models are unaffected.
+The sandboxed OpenCode spends about 75 seconds at startup failing to reach the package registry for its plugin directory before it works normally.
+`bin/fm-sandbox-exec.sh` owns the profile, `bin/fm-spawn.sh` owns the paths and endpoints a sailor launch passes, and `tests/fm-sailor-sandbox-live-e2e.test.sh` re-proves the confinement against the installed OpenCode without model tokens.
+A no-mistakes run from inside the sandbox is not yet verified live; [`verification/local-sailors.md`](verification/local-sailors.md) records what is.
+
 ## Worker account pin (config/claude-account, config/pi-account)
 
 A home that mixes accounts for one runner, such as a work login and a personal one, can pin the account its own Claude and Pi workers launch on.
@@ -1121,6 +1142,7 @@ A sailor is a named machine serving local models through an OpenAI-compatible en
 - Without `sailor_fallback`, sailor work waits in the queue until a sailor answers.
   A home that must never reach Anthropic, such as a Privateer home, declares no `sailor_fallback` and no Claude profile at all.
 - With typed dispatch resolution on, each sailor profile must also declare a `provider`, as every OpenCode profile must; quota-axi measures no local machine, so the resolver hands sailor rules back to firstmate's own intake.
+- [Sailor sandbox](#sailor-sandbox-configsailor-sandbox) optionally confines every sailor launch on macOS.
 
 ```json
 {
