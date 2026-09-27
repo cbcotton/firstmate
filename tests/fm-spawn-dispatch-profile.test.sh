@@ -795,6 +795,78 @@ test_opencode_emits_variant_for_openai_family_effort() {
   pass "opencode emits the variant for an effort the openai family exposes"
 }
 
+# A named sailor needs a dispatch file naming it and an endpoint that answers;
+# a fake curl in the case's fakebin stands in for the sailor's model server.
+enable_sailors() {  # <home> <fakebin> <tiller-status>
+  local home=$1 fakebin=$2 status=$3
+  printf '%s\n' "{\"sailors\":{\"tiller\":{\"title\":\"Tiller's box\",\"endpoint\":\"http://127.0.0.1:11234/v1\",\"status\":\"$status\",\"models\":[\"qwen-coder\"]}},\"default\":{\"harness\":\"opencode\",\"sailor\":\"tiller\",\"model\":\"qwen-coder\"}}" \
+    > "$home/config/crew-dispatch.json"
+  cat > "$fakebin/curl" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' "${!#}" >> "${FM_FAKE_CURL_LOG:-/dev/null}"
+printf '%s' '{"data":[{"id":"qwen-coder"}]}'
+SH
+  chmod +x "$fakebin/curl"
+}
+
+test_opencode_sailor_launch_points_at_the_sailor() {
+  local rec id out status launch
+  id=profile-sailor-s1
+  rec=$(make_spawn_case profile-sailor opencode "$id")
+  read_case_record "$rec"
+  enable_sailors "$HOME_DIR" "$FAKEBIN_DIR" live
+
+  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR" --harness opencode --model qwen-coder --sailor tiller --effort high)
+  status=$?
+  expect_code 0 "$status" "an opencode spawn on a live sailor should succeed"$'\n'"$out"
+  assert_contains "$out" "spawned $id harness=opencode kind=ship mode=no-mistakes yolo=off sailor=tiller" "spawn did not report the sailor"
+  assert_meta_profile "$HOME_DIR/state/$id.meta" opencode qwen-coder high
+  assert_grep "sailor=tiller" "$HOME_DIR/state/$id.meta" "meta missing sailor=tiller"
+  launch=$(cat "$LAUNCH_LOG")
+  # The title carries a quote, so the provider entry must close and reopen the
+  # launch's single-quoted assignment around it.
+  assert_contains "$launch" \
+    "OPENCODE_CONFIG_CONTENT='{\"permission\":{\"*\":\"allow\"},\"provider\":{\"tiller\":{\"npm\":\"@ai-sdk/openai-compatible\",\"name\":\"Tiller'\\''s box\",\"options\":{\"baseURL\":\"http://127.0.0.1:11234/v1\"},\"models\":{\"qwen-coder\":{\"name\":\"qwen-coder\"}}}}}' opencode --model 'tiller/qwen-coder' --prompt" \
+    "sailor launch did not carry the sailor as its provider and address the model through it"
+  assert_not_contains "$launch" '"variant"' "a sailor's reasoning depth is its server's, so no effort variant may be written"
+  pass "an opencode sailor launch carries the sailor as its provider and records sailor=<name>"
+}
+
+test_placeholder_sailor_refuses_before_endpoint_or_metadata() {
+  local rec id out status
+  id=profile-sailor-placeholder-s2
+  rec=$(make_spawn_case profile-sailor-placeholder opencode "$id")
+  read_case_record "$rec"
+  enable_sailors "$HOME_DIR" "$FAKEBIN_DIR" placeholder
+
+  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR" --harness opencode --model qwen-coder --sailor tiller)
+  status=$?
+  expect_code 1 "$status" "a placeholder sailor must refuse the spawn"
+  assert_contains "$out" "error: sailor tiller cannot take task $id: sailor tiller is a placeholder" "placeholder refusal missing"
+  [ ! -e "$HOME_DIR/state/$id.meta" ] || fail "a refused sailor spawn must leave no task record"
+  [ ! -s "$LAUNCH_LOG" ] || fail "a refused sailor spawn must launch nothing"
+  pass "a placeholder sailor refuses the spawn before any endpoint or record exists"
+}
+
+test_sailor_requires_opencode_and_a_model() {
+  local rec id out status
+  id=profile-sailor-shape-s3
+  rec=$(make_spawn_case profile-sailor-shape opencode "$id")
+  read_case_record "$rec"
+  enable_sailors "$HOME_DIR" "$FAKEBIN_DIR" live
+
+  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR" --harness claude --model qwen-coder --sailor tiller)
+  status=$?
+  expect_code 1 "$status" "a sailor on claude must be refused"
+  assert_contains "$out" "error: --sailor requires --harness opencode" "harness refusal missing"
+  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR" --harness opencode --sailor tiller)
+  status=$?
+  expect_code 1 "$status" "a sailor without a model must be refused"
+  assert_contains "$out" "error: --sailor requires --model" "model refusal missing"
+  [ ! -e "$HOME_DIR/state/$id.meta" ] || fail "a refused sailor spawn must leave no task record"
+  pass "--sailor refuses a non-opencode harness and a missing model"
+}
+
 test_opencode_omits_variant_when_model_family_lacks_effort() {
   local rec id out status launch
   id=profile-opencode-omit-z7d
@@ -1696,6 +1768,9 @@ test_opencode_threads_model_and_effort_variant
 test_opencode_without_effort_keeps_launch_config_unchanged
 test_opencode_emits_variant_for_openai_family_effort
 test_opencode_omits_variant_when_model_family_lacks_effort
+test_opencode_sailor_launch_points_at_the_sailor
+test_placeholder_sailor_refuses_before_endpoint_or_metadata
+test_sailor_requires_opencode_and_a_model
 test_native_effort_validator_keeps_axes_separate
 test_native_pi_ultra_is_explicit_and_model_scoped
 test_batch_preserves_native_ultra

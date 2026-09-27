@@ -736,6 +736,52 @@ test_same_harness_relaunch_keeps_the_profile_axes() {
   pass "fm-control relaunch: a same-harness relaunch keeps the profile axes it was running with"
 }
 
+# add_sailor_task <case-dir> <id>: an opencode task running on the live sailor
+# tiller, with a fake curl standing in for the sailor's model server.
+add_sailor_task() {
+  local dir=$1 id=$2
+  add_ship_task "$dir" "$id" opencode
+  sed 's/^model=default$/model=qwen-coder/' "$dir/home/state/$id.meta" > "$dir/home/state/$id.meta.tmp"
+  printf 'sailor=tiller\n' >> "$dir/home/state/$id.meta.tmp"
+  mv "$dir/home/state/$id.meta.tmp" "$dir/home/state/$id.meta"
+  mkdir -p "$dir/home/config"
+  printf '%s\n' '{"sailors":{"tiller":{"endpoint":"http://127.0.0.1:11234/v1","status":"live","models":["qwen-coder"]}}}' \
+    > "$dir/home/config/crew-dispatch.json"
+  cat > "$dir/fakebin/curl" <<'SH'
+#!/usr/bin/env bash
+printf '%s' '{"data":[{"id":"qwen-coder"}]}'
+SH
+  chmod +x "$dir/fakebin/curl"
+  printf 'opencode' > "$dir/fake/command"
+  printf 'opencode' > "$dir/fake/becomes"
+}
+
+test_same_harness_relaunch_keeps_the_sailor() {
+  local dir out rc
+  dir=$(new_case keepsailor rl-sailor)
+  add_sailor_task "$dir" rl-sailor
+  out=$(run_control "$dir" rl-sailor relaunch --note "same sailor"); rc=$?
+  expect_code 0 "$rc" "a same-harness relaunch of a sailor task should succeed"$'\n'"$out"
+  [ "$(meta_field "$dir" rl-sailor sailor)" = tiller ] || fail "the sailor should carry across a same-harness relaunch"
+  [ "$(meta_field "$dir" rl-sailor model)" = qwen-coder ] || fail "the sailor's model should carry across a same-harness relaunch"
+  [ "$(grep -c '^sailor=' "$dir/home/state/rl-sailor.meta")" = 1 ] || fail "the record must carry exactly one sailor line"
+  assert_grep "--model 'tiller/qwen-coder'" "$dir/fake/literal" "the replacement launch should still address the model through the sailor"
+  pass "fm-control relaunch: a same-harness relaunch keeps the task on its sailor, capacity counting it only once"
+}
+
+test_escalation_off_a_sailor_drops_it() {
+  local dir out rc
+  dir=$(new_case escalate rl-escalate)
+  add_sailor_task "$dir" rl-escalate
+  printf 'claude' > "$dir/fake/becomes"
+  out=$(run_control "$dir" rl-escalate relaunch --harness claude --model claude-opus-5-5 --effort xhigh --note "sailor struggled"); rc=$?
+  expect_code 0 "$rc" "escalating a sailor task onto another harness should succeed"$'\n'"$out"
+  [ "$(meta_field "$dir" rl-escalate harness)" = claude ] || fail "the record should follow the escalation"
+  [ "$(meta_field "$dir" rl-escalate model)" = claude-opus-5-5 ] || fail "the escalation model should be recorded"
+  ! grep -q '^sailor=' "$dir/home/state/rl-escalate.meta" || fail "a task moved off OpenCode must no longer name a sailor"
+  pass "fm-control relaunch: escalating a sailor task onto another harness drops the sailor"
+}
+
 test_native_ultra_relaunch_preserves_profile_and_rejects_before_stop() {
   local dir out rc id=rl-ultra
   dir=$(new_case native-ultra "$id")
@@ -2399,6 +2445,8 @@ test_harness_switch_does_not_carry_the_old_profile_axes
 test_harness_switch_resolves_a_prefixed_recorded_harness
 test_prefixed_recorded_harness_requires_explicit_replacement
 test_same_harness_relaunch_keeps_the_profile_axes
+test_same_harness_relaunch_keeps_the_sailor
+test_escalation_off_a_sailor_drops_it
 test_native_ultra_relaunch_preserves_profile_and_rejects_before_stop
 test_signed_out_worker_account_pin_refuses_before_stop
 test_worker_account_pin_follows_the_relaunch
