@@ -815,6 +815,7 @@ test_opencode_sailor_launch_points_at_the_sailor() {
   rec=$(make_spawn_case profile-sailor opencode "$id")
   read_case_record "$rec"
   enable_sailors "$HOME_DIR" "$FAKEBIN_DIR" live
+  : > "$HOME_DIR/config/fleet-ledger"
 
   out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR" --harness opencode --model qwen-coder --sailor tiller --effort high)
   status=$?
@@ -823,6 +824,8 @@ test_opencode_sailor_launch_points_at_the_sailor() {
   assert_meta_profile "$HOME_DIR/state/$id.meta" opencode qwen-coder high
   assert_grep "sailor=tiller" "$HOME_DIR/state/$id.meta" "meta missing sailor=tiller"
   assert_grep "dispatched_at=" "$HOME_DIR/state/$id.meta" "a fresh spawn must stamp its dispatch for task-scoped permission grants"
+  assert_equals '"tiller"' "$(jq -c 'select(.event == "task.dispatched") | .sailor' "$HOME_DIR/state/fleet-ledger.jsonl")" \
+    "the ledger's dispatch record must name the sailor so the widget and phone can show it"
   launch=$(cat "$LAUNCH_LOG")
   # The title carries a quote, so the provider entry must close and reopen the
   # launch's single-quoted assignment around it.
