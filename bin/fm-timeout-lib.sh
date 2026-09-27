@@ -207,8 +207,9 @@ fm_exec_timed() {  # <seconds> <grace-seconds> <command...>
   fi
   owner=${FM_EXEC_TIMED_OWNER_PID:-$$}
   # Bash 3.2 has no BASHPID and keeps $$ in subshells; a child shell's PPID
-  # names this process there.
-  self=${BASHPID:-$(exec sh -c 'printf "%s\n" "$PPID"')}
+  # names this process there. $BASH keeps that child off the caller's PATH.
+  # shellcheck disable=SC2016  # $PPID expands in the child shell.
+  self=${BASHPID:-$(exec "$BASH" -c 'printf "%s\n" "$PPID"')}
   [ "$owner" != "$self" ] || owner=$PPID
   unset FM_EXEC_TIMED_OWNER_PID
   if command -v perl >/dev/null 2>&1; then
