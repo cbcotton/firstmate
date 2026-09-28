@@ -873,6 +873,43 @@ test_answer_records_and_closes() {
   pass "answer records the captain's words, closes idempotently, and releases routed work"
 }
 
+# With the fleet ledger on (docs/fleet-ledger.md), each newly recorded answer -
+# a close or a release - is one task.decided record keyed by the held task,
+# carrying the captain's words; an exact retry records nothing more, and a home
+# without the flag gets no ledger at all.
+test_answer_records_decided_in_the_fleet_ledger() {
+  local home rows
+  home=$(make_home answer-ledger)
+  : > "$home/config/fleet-ledger"
+  run_captain "$home" hold sample-lamp-call \
+    --title "Pick the lamp" --reason "captain lamp choice pending" --repo sample >/dev/null \
+    || fail "could not hold the lamp call"
+  run_captain "$home" hold sample-rope-call \
+    --title "Pick the rope" --reason "captain rope choice pending" --repo sample >/dev/null \
+    || fail "could not hold the rope call"
+  printf 'Captain chose the brass lamp.\n' > "$home/lamp.txt"
+  printf 'Captain said: use the hemp rope,\nthen carry on.\n' > "$home/rope.txt"
+  run_captain "$home" answer sample-lamp-call --decision-file "$home/lamp.txt" >/dev/null \
+    || fail "could not answer the lamp call"
+  run_captain "$home" answer sample-lamp-call --decision-file "$home/lamp.txt" >/dev/null \
+    || fail "the identical lamp answer retry was not idempotent"
+  run_captain "$home" answer sample-rope-call --decision-file "$home/rope.txt" --release >/dev/null \
+    || fail "could not release the rope call"
+  rows=$(jq -c 'select(.event == "task.decided") | [.task, .answer]' "$home/state/fleet-ledger.jsonl" 2>/dev/null)
+  assert_equals '["sample-lamp-call","Captain chose the brass lamp."]
+["sample-rope-call","Captain said: use the hemp rope,\nthen carry on."]' "$rows" "decided rows"
+
+  home=$(make_home answer-ledger-off)
+  run_captain "$home" hold sample-lamp-call \
+    --title "Pick the lamp" --reason "captain lamp choice pending" --repo sample >/dev/null \
+    || fail "could not hold the lamp call with the ledger off"
+  printf 'Captain chose the brass lamp.\n' > "$home/lamp.txt"
+  run_captain "$home" answer sample-lamp-call --decision-file "$home/lamp.txt" >/dev/null \
+    || fail "could not answer the lamp call with the ledger off"
+  assert_equals "" "$(cd "$home/state" && find . -name '*fleet-ledger*')" "ledger files with the flag absent"
+  pass "flag on: an answered or released captain call is one task.decided record with the captain's words; retries and flag-off homes add none"
+}
+
 # --release lifts the hold instead of closing, preserving the work item's own
 # body under the record; a re-held task later accepts a new answer.
 test_release_frees_held_work() {
@@ -4039,6 +4076,7 @@ test_hold_decodes_a_bare_scalar_body_without_the_nonref_default
 test_retained_body_keeps_its_utf8_bytes
 test_completion_gate_attests_and_transfers
 test_answer_records_and_closes
+test_answer_records_decided_in_the_fleet_ledger
 test_release_frees_held_work
 test_hold_stamp_precedes_hold_visibility
 test_interrupted_answer_preserves_hold_age

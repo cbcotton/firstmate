@@ -160,6 +160,107 @@ EOF
   pass "flag on: registering a PR records task.pr_ready with its full URL after the task's pending status lines, and the merge-time re-record adds nothing"
 }
 
+test_pr_registration_records_the_ready_lines_risk_and_touches() {
+  local pr_url=https://github.com/acme/sample/pull/11 next_url=https://github.com/acme/sample/pull/12 rows out
+  make_case on-pr-risk on
+  printf '#!/usr/bin/env bash\nexit 1\n' > "$FAKEBIN/gh"
+  chmod +x "$FAKEBIN/gh"
+  out=$(in_home "$ROOT/bin/fm-spawn.sh" "$TASK" "$PROJ_DIR" --mode direct-PR --yolo off 2>&1) \
+    || fail "spawn failed: $out"
+  {
+    printf 'done: PR %s risk=high touches=an older ready line\n' "$pr_url"
+    printf 'done [at=1790000000]: PR %s risk=medium touches=network route, read-only\n' "$pr_url"
+    printf 'done: PR %s risk=low touches=a different PR\n' "$next_url"
+  } >> "$HOME_DIR/state/$TASK.status"
+  out=$(in_home "$ROOT/bin/fm-pr-check.sh" "$TASK" "$pr_url" 2>&1) || fail "PR registration failed: $out"
+  printf 'done: PR %s risk=severe\n' "$next_url" >> "$HOME_DIR/state/$TASK.status"
+  out=$(in_home "$ROOT/bin/fm-pr-check.sh" "$TASK" "$next_url" 2>&1) || fail "replacement PR registration failed: $out"
+  rows=$(ledger_rows 'select(.event == "task.pr_ready") | [.pr, .risk, .touches]')
+  assert_equals "$(cat <<EOF
+["$pr_url","medium","network route, read-only"]
+["$next_url",null,null]
+EOF
+)" "$rows" "PR-ready risk rows"
+  pass "flag on: a registered PR's record carries the risk and touches of the newest ready line naming it, and null for a line without a known risk"
+}
+
+# A fake no-mistakes whose `axi` overview and `axi status` both serve
+# FM_FAKE_AXI_STATUS, the run bin/fm-crew-state.sh attributes to the task.
+install_fake_nm_run() {
+  cat > "$FAKEBIN/no-mistakes" <<'SH'
+#!/usr/bin/env bash
+case "${1:-} ${2:-}" in
+  "axi status"|"axi ") printf '%s\n' "${FM_FAKE_AXI_STATUS:-}" ;;
+esac
+exit 0
+SH
+  chmod +x "$FAKEBIN/no-mistakes"
+}
+
+# The task's run as `no-mistakes axi status` prints it.
+nm_run_status() {  # <run-id> <run-status> <review> <test> <document> <pr>
+  cat <<EOF
+run:
+  id: "$1"
+  branch: fm/$TASK
+  status: $2
+  head: "$(git -C "$WT_DIR" rev-parse HEAD)"
+  pr: ""
+  findings: none
+  steps[9]{step,status,findings,duration_ms}:
+    intent,completed,0,1
+    rebase,completed,0,1
+    review,$3,0,1
+    test,$4,0,1
+    document,$5,0,1
+    lint,pending,0,0
+    push,pending,0,0
+    pr,$6,0,0
+    ci,pending,0,0
+EOF
+}
+
+read_crew_state() {  # <axi status output>: print fm-crew-state.sh's line for TASK
+  in_home env FM_FAKE_AXI_STATUS="$1" "$ROOT/bin/fm-crew-state.sh" "$TASK" 2>&1
+}
+
+test_crew_state_records_validation_steps() {
+  local rows out
+  make_case on-validation on
+  install_fake_nm_run
+  fm_write_meta "$HOME_DIR/state/$TASK.meta" "window=firstmate:fm-$TASK" "worktree=$WT_DIR" \
+    "kind=ship" "mode=no-mistakes" "project=sample" "harness=claude"
+  out=$(read_crew_state "$(nm_run_status 01RUNA running running pending pending pending)")
+  assert_contains "$out" "state: working · source: run-step" "crew state while review runs"
+  read_crew_state "$(nm_run_status 01RUNA running running pending pending pending)" >/dev/null
+  out=$(read_crew_state "$(nm_run_status 01RUNA awaiting_approval awaiting_approval pending pending pending)")
+  assert_contains "$out" "state: parked · source: run-step" "crew state at the review gate"
+  read_crew_state "$(nm_run_status 01RUNA running completed completed fixing pending)" >/dev/null
+  read_crew_state "$(nm_run_status 01RUNA failed completed completed completed failed)" >/dev/null
+  read_crew_state "$(nm_run_status 01RUNB running running pending pending pending)" >/dev/null
+  rows=$(ledger_rows 'select(.event == "task.validation") | [.task, .run, .step, .outcome]')
+  assert_equals "$(cat <<EOF
+["$TASK","01RUNA","review","running"]
+["$TASK","01RUNA","review","waiting"]
+["$TASK","01RUNA","review","passed"]
+["$TASK","01RUNA","tests","passed"]
+["$TASK","01RUNA","docs","running"]
+["$TASK","01RUNA","docs","passed"]
+["$TASK","01RUNA","pr","failed"]
+["$TASK","01RUNB","review","running"]
+EOF
+)" "$rows" "validation rows"
+
+  make_case off-validation off
+  install_fake_nm_run
+  fm_write_meta "$HOME_DIR/state/$TASK.meta" "window=firstmate:fm-$TASK" "worktree=$WT_DIR" \
+    "kind=ship" "mode=no-mistakes" "project=sample" "harness=claude"
+  out=$(read_crew_state "$(nm_run_status 01RUNA running running pending pending pending)")
+  assert_contains "$out" "state: working · source: run-step" "crew state with the flag absent"
+  assert_equals "" "$(cd "$HOME_DIR/state" && find . -name '*fleet-ledger*')" "ledger files with the flag absent"
+  pass "flag on: reading a no-mistakes run records each review, tests, docs, and pr step outcome once per change and run; flag off records nothing"
+}
+
 # Scaffold a real brief for TASK and print its status command, filled the way a
 # worker fills it.
 # Optional arguments are the scaffold's state and config overrides; the
@@ -291,6 +392,8 @@ test_flag_off_writes_nothing() {
 test_flag_on_records_the_task_lifecycle
 test_flag_on_records_a_pr_merge_once
 test_flag_on_records_a_pr_registration
+test_pr_registration_records_the_ready_lines_risk_and_touches
+test_crew_state_records_validation_steps
 test_worker_status_line_is_recorded_when_written
 test_worker_status_line_is_recorded_under_a_state_override
 test_worker_status_line_is_recorded_under_a_relative_config_override
