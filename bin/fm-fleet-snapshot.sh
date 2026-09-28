@@ -1993,7 +1993,8 @@ project_charts_json() {
   LC_ALL=C find "$charts_dir" -maxdepth 1 -type f -name '*.json' -print \
     | sort \
     | while IFS= read -r chart_file; do
-      local project=$(basename "$chart_file" .json)
+      local project
+      project=$(basename "$chart_file" .json)
       jq -n --arg project "$project" --arg path "$chart_file" --slurpfile chart "$chart_file" \
         '{project:$project,path:$path,data:$chart[0]}'
     done \

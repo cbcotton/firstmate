@@ -79,7 +79,7 @@ case "$cmd" in
   pr_ready) { [ "$#" -eq 3 ] && task_ok "$2" && [ -n "$3" ]; } || usage ;;
   merged)
     task_ok "${2:-}" || usage
-    case "${3:-}" in pr) [ -n "${4:-}" ] || usage ;; local) ;; *) usage ;; esac
+    case "$#:${3:-}" in 4:pr) [ -n "$4" ] || usage ;; 3:local) ;; *) usage ;; esac
     ;;
   validation)
     { [ "$#" -eq 4 ] && task_ok "$2" && [ -n "$3" ] && [ -n "$4" ]; } || usage
