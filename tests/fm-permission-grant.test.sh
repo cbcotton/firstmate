@@ -143,6 +143,18 @@ bash|FOO=1 bash *
 bash|FOO=1 npm test
 bash|npm exec *
 bash|npm e*
+bash|npm test*
+bash|npm i*
+bash|npm r*
+bash|cargo i*
+bash|npm install *
+bash|pnpm add *
+bash|git fetch *
+bash|git checkout *
+bash|git switch *
+bash|git rebase *
+bash|git replace *
+bash|git pull *
 bash|pnpm dlx *
 bash|yarn dlx *
 bash|caffeinate -i npm test
@@ -190,7 +202,7 @@ test_ordinary_grants_and_every_deny_are_accepted() {
     expect_code 0 "$status" "allow $perm '$pat' must be accepted: $out"
   done <<'ROWS'
 bash|npm test *
-bash|npm test*
+bash|npm test
 bash|npm run lint*
 bash|git log *
 bash|git status --short

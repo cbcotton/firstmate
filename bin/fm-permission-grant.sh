@@ -115,10 +115,12 @@ read_words() {  # <path>
 
 # bash_shape_reason <lowercased pattern>: why a shell allow's shape can run
 # commands it does not name, or nothing when it cannot. A pattern with a
-# wildcard (`*` or `?`) must spell a literal program word and a literal
-# subcommand word before it; any other allow is one exact command.
+# wildcard (`*` or `?`) must spell a literal program word, a complete literal
+# subcommand word, and a space before it; for Git that subcommand must be a
+# read-only or local-commit one, and it is never an install command. Any other
+# allow is one exact command.
 bash_shape_reason() {
-  local pat=$1 prefix head sub partial runner
+  local pat=$1 prefix head sub runner
   local -a w=() pw=()
   set -f
   read -r -a w <<<"$pat"
@@ -152,22 +154,19 @@ bash_shape_reason() {
     echo "a wildcard allow must name its program and subcommand before the first wildcard; grant the exact command otherwise"; return
   fi
   case "${pw[1]}" in -*) echo "a wildcard allow must name a subcommand, not an option, before the first wildcard"; return ;; esac
-  partial=0
   if [ "${#pw[@]}" -eq 2 ]; then
-    case "$prefix" in *[[:space:]]) ;; *) partial=1 ;; esac
-  fi
-  if [ "$partial" = 1 ]; then
-    [ "${head##*/}" != git ] || { echo "a partial Git subcommand matches every Git subcommand it begins; grant the whole subcommand"; return; }
-    for runner in "npm exec" "npm x" "pnpm exec" "pnpm dlx" "yarn dlx" "yarn exec"; do
-      case "$runner" in "$head ${pw[1]}"*) echo "a partial subcommand that can match a package runner is never granted"; return ;; esac
-    done
-  fi
-  if [ "${head##*/}" = git ]; then
-    case "${pw[1]}" in
-      push | branch | tag | reflog | update-ref | filter-branch | filter-repo | remote | stash | gc | prune | worktree | clean)
-        echo "a wildcard over git ${pw[1]} reaches its deleting or rewriting forms; grant one exact command"; return ;;
+    case "$prefix" in
+      *[[:space:]]) ;;
+      *) echo "a wildcard allow must follow a complete subcommand word and a space; grant the exact command otherwise"; return ;;
     esac
   fi
+  case "${head##*/} ${pw[1]}" in
+    git\ log | git\ diff | git\ show | git\ status | git\ add | git\ commit | git\ rev-parse | git\ blame | git\ ls-files | git\ shortlog | git\ describe) ;;
+    git\ *) echo "a wildcard over git ${pw[1]} is never granted; only read-only and local-commit Git subcommands take a wildcard"; return ;;
+    npm\ install | npm\ i | npm\ add | npm\ global | pnpm\ install | pnpm\ i | pnpm\ add | pnpm\ global | yarn\ install | yarn\ i | yarn\ add | yarn\ global | \
+      cargo\ install | go\ install | gem\ install)
+      echo "a wildcard over an install command can install globally or run downloaded code; grant one exact command"; return ;;
+  esac
 }
 
 # refusal_reason <permission> <pattern>: why an allow can never be pre-granted,
