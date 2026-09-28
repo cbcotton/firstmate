@@ -56,6 +56,9 @@ One `edit` call failed on an inexact match and succeeded on retry.
 - A `"*": "deny"` catch-all on `bash` also blocks harmless reads such as `ls` and `cat`; file access then goes through the `read`, `glob` and `grep` tools, which OpenCode checks against `external_directory`.
 - A later `external_directory` deny overrides the skill-directory allows OpenCode adds on its own, so a worker that needs a skill or a file outside its project needs an explicit allow after that deny.
 - Each denial message shows the model the full rule list it was checked against.
+- A pattern is a glob in which `*` matches any text, spaces included, and a trailing ` *` is optional, so `git status *` also matches a bare `git status`.
+- A command's own redirections are part of the text a pattern is matched against (`echo x >> 'f'`), except where the command sits inside a `||` or `&&` list, as the fleet-ledger half of the brief's status command does: there the command is matched without its `>/dev/null 2>&1`, and an allow that spells that suffix never matches.
+  No glob can therefore rule out a redirection, which is why a restricted sailor needs the sandbox.
 
 ## The composed restricted profile holds against the real OpenCode
 
@@ -72,7 +75,8 @@ The server answers each model request with the next scripted tool call, so the r
 | `mv` of the task's inbox message into `handled/` | Allowed |
 | `read` of `/etc/hosts` | Denied; the tool result carried no file contents |
 | `git diff --output=<outside file> HEAD~1` | Denied; the file was not created |
-| `git log > <outside file>` | Denied; the file was not created |
+| `git commit --allow-empty -m "map old -> new"` | Allowed; a `>` inside an argument is not a redirection |
+| Bare `git status` | Allowed by `git status *` |
 
 An earlier live run with a local model under the same profile also denied `git log -1; touch inside-probe` inside the copy, although `git log*` is allowed: OpenCode checks each part of a compound command on its own.
 Each guard run took 9 to 16 seconds.
@@ -94,6 +98,7 @@ The sailor's endpoint is a scripted OpenAI-compatible server on a loopback port,
 | Write `pre-commit` into the repository's Git hooks | Denied |
 | The status append followed by `> <outside file>` | Denied; the outside file was not created |
 | `git diff --output=<outside file> HEAD~1` | Denied; the outside file was not created |
+| `git log > <outside file>` | Denied; the outside file was not created |
 | `curl https://example.com/` | Denied |
 | Firstmate's busy-state plugin recording the worker's state | Allowed |
 

@@ -115,7 +115,7 @@ test_sandboxed_sailor_launch_confines_the_real_opencode() {
 
   jq -n --arg wt "$wt" --arg meta "$home/state/$id.meta" --arg status "$home/state/$id.status" \
     --arg hook "$common/hooks/pre-commit" --arg outside "$OUTSIDE/escaped.txt" \
-    --arg outside_redirect "$OUTSIDE/redirected.txt" --arg outside_diff "$OUTSIDE/diff.txt" --arg q "'" '[
+    --arg outside_redirect "$OUTSIDE/redirected.txt" --arg outside_diff "$OUTSIDE/diff.txt" --arg outside_log "$OUTSIDE/log.txt" --arg q "'" '[
     {tool: "edit", args: {filePath: ($wt + "/README.md"), oldString: "project", newString: "sailor"}},
     {tool: "bash", args: {command: "git commit -qam \"sailor edit\"", description: "commit"}},
     {tool: "bash", args: {command: ("echo \"working [at=1]: sandboxed\" >> " + $q + $status + $q + ""), description: "status"}},
@@ -124,6 +124,7 @@ test_sandboxed_sailor_launch_confines_the_real_opencode() {
     {tool: "bash", args: {command: ("echo exit 0 > " + $q + $hook + $q + ""), description: "hook"}},
     {tool: "bash", args: {command: ("echo redirected >> " + $q + $status + $q + " > " + $q + $outside_redirect + $q), description: "status redirect"}},
     {tool: "bash", args: {command: ("git diff --output=" + $q + $outside_diff + $q + " HEAD~1"), description: "diff output"}},
+    {tool: "bash", args: {command: ("git log > " + $q + $outside_log + $q), description: "log redirect"}},
     {tool: "bash", args: {command: "curl -s -m 3 https://example.com/ >/dev/null && echo reached > net-reached.txt; echo ok > sailor-done.txt", description: "network and marker"}}
   ]' > "$case_dir/script.json"
 
@@ -168,6 +169,7 @@ test_sandboxed_sailor_launch_confines_the_real_opencode() {
   [ ! -e "$OUTSIDE/escaped.txt" ] || guard_fail "a write outside every allowed path must fail"
   [ ! -e "$OUTSIDE/redirected.txt" ] || guard_fail "a redirection appended to the status command must not write outside the copy"
   [ ! -e "$OUTSIDE/diff.txt" ] || guard_fail "git diff --output must not write outside the copy"
+  [ ! -e "$OUTSIDE/log.txt" ] || guard_fail "a redirected git log must not write outside the copy"
   ! grep -qx 'worktree=/' "$home/state/$id.meta" || guard_fail "the worker must not be able to rewrite its own task record"
   [ ! -e "$common/hooks/pre-commit" ] || guard_fail "the worker must not be able to plant a Git hook"
   [ ! -e "$wt/net-reached.txt" ] || guard_fail "a connection beyond the sailor's endpoint must fail"

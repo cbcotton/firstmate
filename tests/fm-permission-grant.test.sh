@@ -46,36 +46,36 @@ compose() {
 test_task_grant_records_the_words_and_reaches_the_profile() {
   local out status record
   make_home task
-  out=$(run_grant grant --scope task --task t1 --permission bash --pattern 'npm test*' --action allow --words-file "$WORDS" --channel chat)
+  out=$(run_grant grant --scope task --task t1 --permission bash --pattern 'npm test *' --action allow --words-file "$WORDS" --channel chat)
   status=$?
   expect_code 0 "$status" "a task grant must be accepted"$'\n'"$out"
   assert_contains "$out" "bin/fm-control.sh <task> relaunch" "the grant must say how to apply it to a running worker"
   record=$(tail -1 "$HOME_DIR/state/permission-grants.jsonl")
   assert_equals '"let the sailor run npm test for this task\n"' "$(printf '%s' "$record" | jq -c .words)" "the captain's exact words must be recorded"
   assert_equals '"1000"' "$(printf '%s' "$record" | jq -c .task_dispatched_at)" "a task grant must bind the task's dispatch stamp"
-  assert_equals '"allow"' "$(compose | jq -c '.bash["npm test*"]')" "the grant must reach the task's composed profile"
+  assert_equals '"allow"' "$(compose | jq -c '.bash["npm test *"]')" "the grant must reach the task's composed profile"
   assert_equals '"deny"' "$(compose | jq -c '.bash["*"]')" "the baseline catch-all must stay in place"
   pass "a task grant records the captain's exact words and reaches that task's profile"
 }
 
 test_task_grant_does_not_follow_a_reused_task_id() {
   make_home reuse
-  run_grant grant --scope task --task t1 --permission bash --pattern 'npm test*' --action allow --words-file "$WORDS" --channel chat >/dev/null
+  run_grant grant --scope task --task t1 --permission bash --pattern 'npm test *' --action allow --words-file "$WORDS" --channel chat >/dev/null
   printf 'harness=opencode\ndispatched_at=2000\n' > "$HOME_DIR/state/t1.meta"
-  assert_equals 'null' "$(compose | jq -c '.bash["npm test*"]')" "a later task reusing the id must not inherit the grant"
+  assert_equals 'null' "$(compose | jq -c '.bash["npm test *"]')" "a later task reusing the id must not inherit the grant"
   pass "a task grant ends with its dispatch, so a reused task id starts without it"
 }
 
 test_session_grant_ends_with_the_session() {
   local other
   make_home session
-  run_grant grant --scope session --permission bash --pattern 'make lint' --action allow --words-file "$WORDS" --channel pinnace --ref note-7 >/dev/null
-  assert_equals '"allow"' "$(compose | jq -c '.bash["make lint"]')" "a session grant must apply during its session"
+  run_grant grant --scope session --permission bash --pattern 'npm run lint' --action allow --words-file "$WORDS" --channel pinnace --ref note-7 >/dev/null
+  assert_equals '"allow"' "$(compose | jq -c '.bash["npm run lint"]')" "a session grant must apply during its session"
   sleep 600 &
   other=$!
   printf '%s\n' "$other" > "$HOME_DIR/state/.lock"
   touch -t 203001010000 "$HOME_DIR/state/.lock"
-  assert_equals 'null' "$(compose | jq -c '.bash["make lint"]')" "a session grant must not survive into the next session"
+  assert_equals 'null' "$(compose | jq -c '.bash["npm run lint"]')" "a session grant must not survive into the next session"
   kill "$other" 2>/dev/null
   pass "a session grant applies while its session holds the lock and ends with it"
 }
@@ -131,7 +131,31 @@ bash|npx create-thing
 bash|tmux send-keys -t fm hi
 bash|bin/fm-permission-grant.sh grant
 bash|claude -p hi
+bash|git *
+bash|git b*
+bash|g* status
+bash|sh -c *
+bash|bash scripts/x.sh
+bash|zsh -c x
+bash|python3 -c x
+bash|/usr/bin/python script.py
+bash|node x.js
+bash|perl -e x
+bash|ruby x.rb
+bash|env FOO=1 npm test
+bash|xargs rm
+bash|find . -delete
+bash|make build
 external_directory|$HOME/*
+external_directory|~/.*
+external_directory|~/.zshrc
+external_directory|$HOME/.bashrc
+external_directory|~/.bash_profile
+external_directory|~/.profile
+external_directory|~/.gitconfig
+external_directory|~/.local/bin/*
+external_directory|~/bin/*
+external_directory|/opt/homebrew/bin/*
 external_directory|$HOME/.ssh/*
 external_directory|/etc/*
 external_directory|$HOME_DIR/state/*
@@ -149,7 +173,8 @@ test_ordinary_grants_and_every_deny_are_accepted() {
     status=$?
     expect_code 0 "$status" "allow $perm '$pat' must be accepted: $out"
   done <<'ROWS'
-bash|npm test*
+bash|npm test *
+bash|git status --short
 bash|npm install
 bash|git push origin fm/task-x
 bash|rm build.log

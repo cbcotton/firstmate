@@ -35,9 +35,11 @@
 # is refused for the classes the captain approves only one action at a time,
 # in the moment, and that firstmate then performs itself rather than delegating:
 # a blanket or top-level "*" allow; web fetch or search; paths outside a
-# project that hold credentials, system or shell configuration, a whole home or
+# project that hold credentials, system or shell configuration, Git
+# configuration, a command directory on PATH, a whole home or
 # filesystem root, or this firstmate home; and shell patterns for privilege
-# escalation, pushing with force, deletion, or a wildcard; branch, tag, or
+# escalation, a wildcard in the command or subcommand position, a shell,
+# interpreter, or command runner, pushing with force, deletion, or a wildcard; branch, tag, or
 # history deletion; merging; recursive or out-of-copy deletion; credential or
 # keychain access; system configuration; network tools; global installs or
 # running downloaded code; fleet, permission, or sandbox control; and anything
@@ -112,7 +114,7 @@ read_words() {  # <path>
 # refusal_reason <permission> <pattern>: why an allow can never be pre-granted,
 # or nothing when it can.
 refusal_reason() {
-  local perm=$1 pat=$2 lower home_re
+  local perm=$1 pat=$2 lower home_re head sub
   lower=$(printf '%s' "$pat" | tr '[:upper:]' '[:lower:]')
   case "$lower" in
     *anthropic* | *claude*) echo "nothing that names Anthropic or Claude may be granted"; return ;;
@@ -122,10 +124,10 @@ refusal_reason() {
     webfetch | websearch) echo "web access reaches arbitrary hosts"; return ;;
     external_directory)
       home_re=$(printf '%s' "$HOME" | sed 's/[][\.^$*+?(){}|]/\\&/g')
-      if printf '%s\n' "$pat" | grep -Eq "^(\\*|/|/\\*|~|~/\\*?|$home_re/?\\*?|/Users/?\\*?|/private/?\\*?)\$"; then
+      if printf '%s\n' "$pat" | sed "s|^~|$HOME|" | grep -Eq "^(\\*|/|/\\*|$home_re/?\\*?|$home_re/[^/]*\\*.*|/Users/?\\*?|/private/?\\*?)\$"; then
         echo "a whole filesystem root or home directory is never granted"; return
       fi
-      if printf '%s\n' "$pat" | sed "s|^~|$HOME|" | grep -Eq "^($home_re/(\\.ssh|\\.aws|\\.gnupg|\\.config|\\.netrc|\\.no-mistakes|\\.claude|Library)|/etc|/private/etc|/System|/Library|/usr|/bin|/sbin)(/|\$|\\*)"; then
+      if printf '%s\n' "$pat" | sed "s|^~|$HOME|" | grep -Eq "^($home_re/(\\.ssh|\\.aws|\\.gnupg|\\.config|\\.netrc|\\.no-mistakes|\\.claude|Library|\\.zsh[^/]*|\\.bash[^/]*|\\.profile|\\.zprofile|\\.zlogin|\\.zlogout|\\.inputrc|\\.gitconfig|\\.git-credentials|\\.local/bin|bin)|/etc|/private/etc|/System|/Library|/usr|/bin|/sbin|/opt/homebrew|/opt/local)(/|\$|\\*)"; then
         echo "credential, system, or shell configuration paths are never granted"; return
       fi
       case "$pat" in
@@ -137,6 +139,16 @@ refusal_reason() {
     *) return ;;
   esac
   [ "$pat" != '*' ] || { echo "a blanket shell allow is never granted"; return; }
+  head=$(printf '%s\n' "$lower" | awk '{print $1}')
+  sub=$(printf '%s\n' "$lower" | awk '{print $2}')
+  case "$head $sub" in
+    *[*?]*) echo "a wildcard in the command or subcommand position allows every command it matches; grant the exact command"; return ;;
+  esac
+  case "${head##*/}" in
+    sh | bash | zsh | dash | ksh | fish | csh | tcsh | python | python[0-9]* | node | deno | bun | perl | ruby | php | lua | osascript | awk | gawk | \
+      env | xargs | find | make | gmake | command | exec | eval | source | . | nohup | nice | timeout | time | watch)
+      echo "a shell, interpreter, or command runner runs any command it is given"; return ;;
+  esac
   if printf '%s\n' "$lower" | grep -Eq '(^|[;&|( ])(sudo|su|doas)( |$)'; then echo "privilege escalation is never granted"; return; fi
   if printf '%s\n' "$lower" | grep -Eq 'git +push'; then
     if printf '%s\n' "$lower" | grep -Eq -- '--force|(^| )-f( |$)|--mirror|--delete|(^| )-d( |$)|(^| )\+|\*'; then

@@ -56,9 +56,10 @@ SELECTOR="$CONFIG/opencode-permission-profile"
 # read-only and local-commit Git commands, and the pipeline's own CLI are
 # allowed; everything else, including every path outside the copy, the network
 # tools, sub-agents, any shell command not listed, and a Git command that
-# redirects its output or writes it with --output, is denied. A shell glob
-# cannot rule out every redirection, so a restricted sailor also needs the
-# sailor sandbox (bin/fm-spawn.sh refuses it without config/sailor-sandbox).
+# writes its output with --output, is denied. A shell glob cannot rule out a
+# redirection, so a restricted sailor also needs the sailor sandbox, which
+# bounds where a redirection can write (bin/fm-spawn.sh refuses it without
+# config/sailor-sandbox).
 BASELINE='{
   "*": "deny",
   "read": "allow",
@@ -87,7 +88,6 @@ BASELINE='{
     "git branch --show-current": "allow",
     "no-mistakes axi *": "allow",
     "git push*": "deny",
-    "git *>*": "deny",
     "git *--output*": "deny"
   }
 }'

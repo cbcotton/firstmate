@@ -846,7 +846,7 @@ Any other value, or an unreadable file, refuses every OpenCode crewmate or scout
 An OpenCode secondmate is a firstmate primary in its own home and keeps every tool.
 
 Under `restricted`, a worker may read, search, and edit inside its own copy, make local Git commits and branches, run `no-mistakes axi`, and use its own task's brief directory, status file, and steering inbox exactly as its instructions spell them.
-Everything else is denied: every path outside the copy, `git push`, a Git command that redirects its output or writes it with `--output`, any other shell command, web fetch and search, and sub-agents.
+Everything else is denied: every path outside the copy, `git push`, a Git command that writes its output with `--output`, any other shell command, web fetch and search, and sub-agents.
 OpenCode checks each part of a compound shell command separately, so an allowed first command cannot carry a denied second one.
 A shell pattern cannot rule out a redirection inside an allowed command, such as the status append, so a home selecting `restricted` refuses every [named sailor](#crew-dispatch-profiles-configcrew-dispatchjson) spawn unless the [sailor sandbox](#sailor-sandbox-configsailor-sandbox) is on; this holds in every home, a Privateer home included.
 A denied worker is told, in its launch instructions, to report what it needs as a keyed decision rather than look for another route, so widening a worker's permissions stays the captain's call; [permission grants](#permission-grants-statepermission-grantsjsonl) record that call.
@@ -871,7 +871,7 @@ Every grant and revocation is an append-only record carrying the captain's exact
 Grants fold into the restricted profile oldest first, after the baseline and before the worker's own protocol rules, so the captain's latest word wins and no grant can break a worker's status or inbox commands.
 
 A deny is always accepted.
-An allow is refused, at every scope, for what the captain approves only one action at a time and firstmate then performs itself rather than delegating: blanket allows, web access, credential, system, or whole-home paths, this firstmate home, privilege escalation, a push that can force, delete, or match by wildcard, branch, tag, or history deletion, merging, recursive or out-of-copy deletion, credential or keychain access, system configuration, network tools, global installs or downloaded code, fleet, permission, or sandbox control, and anything that names Anthropic or Claude.
+An allow is refused, at every scope, for what the captain approves only one action at a time and firstmate then performs itself rather than delegating: blanket allows, web access, credential, system, shell or Git configuration, PATH command directories, or whole-home paths, this firstmate home, privilege escalation, a wildcard in a shell command's command or subcommand position, shells, interpreters, and command runners such as `sh`, `python3`, `node`, `env`, `xargs`, `find`, or `make`, a push that can force, delete, or match by wildcard, branch, tag, or history deletion, merging, recursive or out-of-copy deletion, credential or keychain access, system configuration, network tools, global installs or downloaded code, fleet, permission, or sandbox control, and anything that names Anthropic or Claude.
 `bin/fm-permission-grant.sh` owns the record, the scope bindings, and the refusal list; `list` shows the grants in force and `active --task <id>` prints what a launch would fold in.
 
 ## Sailor sandbox (config/sailor-sandbox)

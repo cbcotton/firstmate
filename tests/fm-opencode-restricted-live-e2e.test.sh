@@ -82,7 +82,7 @@ PY
 }
 
 test_real_opencode_honors_the_restricted_profile() {
-  local case_dir home wt remote status_q inbox_q ledger_q config_q flag_q port perm config rc hosts_result
+  local case_dir home wt remote status_q inbox_q ledger_q config_q flag_q port perm config rc hosts_result status_result
   case_dir="$TMP_ROOT/restricted"
   home="$case_dir/home"
   wt="$case_dir/wt"
@@ -109,7 +109,7 @@ test_real_opencode_honors_the_restricted_profile() {
   flag_q="'$home/config/fleet-ledger'"
   jq -n --arg wt "$wt" --arg status "$status_q" --arg inbox "$inbox_q" \
     --arg ledger "$ledger_q" --arg config "$config_q" --arg flag "$flag_q" \
-    --arg outside_diff "'$case_dir/diff-out.txt'" --arg outside_log "'$case_dir/log-out.txt'" '[
+    --arg outside_diff "'$case_dir/diff-out.txt'" '[
     {tool: "edit", args: {filePath: ($wt + "/a.txt"), oldString: "foo", newString: "bar"}},
     {tool: "bash", args: {command: "git commit -am \"say bar\"", description: "commit"}},
     {tool: "bash", args: {command: "git push origin main", description: "push"}},
@@ -118,7 +118,8 @@ test_real_opencode_honors_the_restricted_profile() {
     {tool: "bash", args: {command: ("mv " + $inbox + "/001.msg " + $inbox + "/handled/"), description: "acknowledge"}},
     {tool: "read", args: {filePath: "/etc/hosts"}},
     {tool: "bash", args: {command: ("git diff --output=" + $outside_diff + " HEAD~1"), description: "diff output"}},
-    {tool: "bash", args: {command: ("git log > " + $outside_log), description: "log redirect"}}
+    {tool: "bash", args: {command: "git commit --allow-empty -m \"map old -> new\"", description: "arrow commit"}},
+    {tool: "bash", args: {command: "git status", description: "bare status"}}
   ]' > "$case_dir/script.json"
 
   write_scripted_model "$case_dir/model.py"
@@ -145,7 +146,7 @@ test_real_opencode_honors_the_restricted_profile() {
 
   # Allowed: an edit and a local commit inside the copy.
   assert_equals bar "$(cat "$wt/a.txt" 2>/dev/null)" "opencode $OPENCODE_VERSION: an edit inside the copy must be allowed"
-  assert_equals "say bar" "$(git -C "$wt" log -1 --format=%s)" "opencode $OPENCODE_VERSION: a local commit must be allowed"
+  assert_equals "say bar" "$(git -C "$wt" log -1 --skip=1 --format=%s)" "opencode $OPENCODE_VERSION: a local commit must be allowed"
   # Denied: the push, and the second half of a compound whose first half is allowed.
   assert_equals "$(git -C "$remote" rev-list --count main)" 1 "opencode $OPENCODE_VERSION: the push must be denied"
   [ -e "$wt/a.txt" ] || guard_fail "the rm inside an allowed compound command must be denied"
@@ -160,10 +161,16 @@ test_real_opencode_honors_the_restricted_profile() {
   case "$hosts_result" in
     *localhost*) guard_fail "reading outside the copy must be denied, but the model received /etc/hosts" ;;
   esac
-  # Denied: a Git command writing its output with --output or a redirection.
+  # Denied: a Git command writing its output with --output.
   [ ! -e "$case_dir/diff-out.txt" ] || guard_fail "git diff --output must be denied"
-  [ ! -e "$case_dir/log-out.txt" ] || guard_fail "a redirected git log must be denied"
-  pass "opencode $OPENCODE_VERSION honors the restricted profile: edits, commits and the worker protocol run; a push, a compound's denied half, an outside read, and a Git command writing its output elsewhere do not"
+  # Allowed: a commit message carrying '>' and a bare git status.
+  assert_equals "map old -> new" "$(git -C "$wt" log -1 --format=%s)" "opencode $OPENCODE_VERSION: a commit message containing '>' must be allowed"
+  status_result=$(jq -r 'select(.results == 10) | .last' "$case_dir/model.log" | tail -1)
+  [ -n "$status_result" ] || guard_fail "the bare git status step never returned a result"
+  case "$status_result" in
+    *"prevents you from using this specific tool call"*) guard_fail "a bare git status must be allowed, but was denied" ;;
+  esac
+  pass "opencode $OPENCODE_VERSION honors the restricted profile: edits, commits, a bare git status and the worker protocol run; a push, a compound's denied half, an outside read, and git diff --output do not"
 }
 
 test_real_opencode_honors_the_restricted_profile
