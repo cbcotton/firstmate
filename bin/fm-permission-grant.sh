@@ -115,12 +115,11 @@ read_words() {  # <path>
 
 # bash_shape_reason <lowercased pattern>: why a shell allow's shape can run
 # commands it does not name, or nothing when it cannot. A pattern with a
-# wildcard (`*` or `?`) must spell a literal program word, a complete literal
-# subcommand word, and a space before it; for Git that subcommand must be a
-# read-only or local-commit one, and it is never an install command. Any other
-# allow is one exact command.
+# wildcard (`*` or `?`) is accepted only when it spells `git`, one of its
+# read-only or local-commit subcommands, and a space before the wildcard; any
+# other allow is one exact command.
 bash_shape_reason() {
-  local pat=$1 prefix head sub runner
+  local pat=$1 prefix head sub runner first
   local -a w=() pw=()
   set -f
   read -r -a w <<<"$pat"
@@ -137,7 +136,7 @@ bash_shape_reason() {
       echo "a shell, interpreter, or command runner runs any command it is given"; return ;;
   esac
   for runner in "npm exec" "npm x" "pnpm exec" "pnpm dlx" "yarn dlx" "yarn exec"; do
-    [ "$head $sub" != "$runner" ] || { echo "a package runner runs any command it is given"; return; }
+    [ "${head##*/} $sub" != "$runner" ] || { echo "a package runner runs any command it is given"; return; }
   done
   if [ "${head##*/}" = git ]; then
     case "$sub" in
@@ -150,22 +149,14 @@ bash_shape_reason() {
   set -f
   read -r -a pw <<<"$prefix"
   set +f
-  if [ "${#pw[@]}" -lt 2 ]; then
-    echo "a wildcard allow must name its program and subcommand before the first wildcard; grant the exact command otherwise"; return
-  fi
-  case "${pw[1]}" in -*) echo "a wildcard allow must name a subcommand, not an option, before the first wildcard"; return ;; esac
-  if [ "${#pw[@]}" -eq 2 ]; then
-    case "$prefix" in
-      *[[:space:]]) ;;
-      *) echo "a wildcard allow must follow a complete subcommand word and a space; grant the exact command otherwise"; return ;;
-    esac
-  fi
-  case "${head##*/} ${pw[1]}" in
+  case "$prefix" in
+    *[[:space:]]) ;;
+    *) pw=() ;;
+  esac
+  first=${pw[0]:-}
+  case "${first##*/} ${pw[1]:-}" in
     git\ log | git\ diff | git\ show | git\ status | git\ add | git\ commit | git\ rev-parse | git\ blame | git\ ls-files | git\ shortlog | git\ describe) ;;
-    git\ *) echo "a wildcard over git ${pw[1]} is never granted; only read-only and local-commit Git subcommands take a wildcard"; return ;;
-    npm\ install | npm\ i | npm\ add | npm\ global | pnpm\ install | pnpm\ i | pnpm\ add | pnpm\ global | yarn\ install | yarn\ i | yarn\ add | yarn\ global | \
-      cargo\ install | go\ install | gem\ install)
-      echo "a wildcard over an install command can install globally or run downloaded code; grant one exact command"; return ;;
+    *) echo "a wildcard allow is granted only over git log, diff, show, status, add, commit, rev-parse, blame, ls-files, shortlog, or describe; grant one exact command otherwise"; return ;;
   esac
 }
 
@@ -213,7 +204,7 @@ refusal_reason() {
   if printf '%s\n' "$lower" | grep -Eq '(^|[;&| ])(security|ssh|scp|sftp|gpg|op)( |$)|gh +auth|git +credential|\.ssh|\.aws|\.netrc|keychain'; then echo "credential or keychain access is never granted"; return; fi
   if printf '%s\n' "$lower" | grep -Eq '(^|[;&| ])(launchctl|pfctl|networksetup|scutil|systemsetup|csrutil|nvram|crontab|chown)( |$)|defaults +write'; then echo "system configuration is never granted"; return; fi
   if printf '%s\n' "$lower" | grep -Eq '(^|[;&| ])(curl|wget|nc|ncat|telnet|ftp|rsync|http|xh)( |$)'; then echo "network tools reach arbitrary hosts"; return; fi
-  if printf '%s\n' "$lower" | grep -Eq '(npm|pnpm) +(install|i|add) +(.* )?(-g|--global)|yarn +global|(^|[;&| ])(brew|pipx|npx|bunx|uvx)( |$)|pnpm +dlx|(cargo|go|gem) +install'; then echo "global installs and downloaded code are never granted"; return; fi
+  if printf '%s\n' "$lower" | grep -Eq '(npm|pnpm) +(install|i|in|ins|inst|insta|instal|isnt|isnta|isntal|isntall|add) +(.* )?(-g|--global)|yarn +global|(^|[;&| ])(brew|pipx|npx|bunx|uvx)( |$)|pnpm +dlx|(cargo|go|gem) +install'; then echo "global installs and downloaded code are never granted"; return; fi
   if printf '%s\n' "$lower" | grep -Eq 'tmux|herdr|fm-send|fm-spawn|fm-control|fm-teardown|fm-permission-grant|opencode-permission|sailor-sandbox|sandbox-exec|opencode_config|opencode\.json|\.opencode/'; then echo "fleet, permission, or sandbox control is never granted"; return; fi
   case "$pat" in
     *"$FM_HOME"*) echo "a firstmate home's own files are never granted"; return ;;

@@ -46,23 +46,23 @@ compose() {
 test_task_grant_records_the_words_and_reaches_the_profile() {
   local out status record
   make_home task
-  out=$(run_grant grant --scope task --task t1 --permission bash --pattern 'npm test *' --action allow --words-file "$WORDS" --channel chat)
+  out=$(run_grant grant --scope task --task t1 --permission bash --pattern 'npm test' --action allow --words-file "$WORDS" --channel chat)
   status=$?
   expect_code 0 "$status" "a task grant must be accepted"$'\n'"$out"
   assert_contains "$out" "bin/fm-control.sh <task> relaunch" "the grant must say how to apply it to a running worker"
   record=$(tail -1 "$HOME_DIR/state/permission-grants.jsonl")
   assert_equals '"let the sailor run npm test for this task\n"' "$(printf '%s' "$record" | jq -c .words)" "the captain's exact words must be recorded"
   assert_equals '"1000"' "$(printf '%s' "$record" | jq -c .task_dispatched_at)" "a task grant must bind the task's dispatch stamp"
-  assert_equals '"allow"' "$(compose | jq -c '.bash["npm test *"]')" "the grant must reach the task's composed profile"
+  assert_equals '"allow"' "$(compose | jq -c '.bash["npm test"]')" "the grant must reach the task's composed profile"
   assert_equals '"deny"' "$(compose | jq -c '.bash["*"]')" "the baseline catch-all must stay in place"
   pass "a task grant records the captain's exact words and reaches that task's profile"
 }
 
 test_task_grant_does_not_follow_a_reused_task_id() {
   make_home reuse
-  run_grant grant --scope task --task t1 --permission bash --pattern 'npm test *' --action allow --words-file "$WORDS" --channel chat >/dev/null
+  run_grant grant --scope task --task t1 --permission bash --pattern 'npm test' --action allow --words-file "$WORDS" --channel chat >/dev/null
   printf 'harness=opencode\ndispatched_at=2000\n' > "$HOME_DIR/state/t1.meta"
-  assert_equals 'null' "$(compose | jq -c '.bash["npm test *"]')" "a later task reusing the id must not inherit the grant"
+  assert_equals 'null' "$(compose | jq -c '.bash["npm test"]')" "a later task reusing the id must not inherit the grant"
   pass "a task grant ends with its dispatch, so a reused task id starts without it"
 }
 
@@ -155,6 +155,13 @@ bash|git switch *
 bash|git rebase *
 bash|git replace *
 bash|git pull *
+bash|uv run *
+bash|bundle exec *
+bash|/opt/homebrew/bin/npm exec *
+bash|npm test *
+bash|npm in *
+bash|npm in -g foo
+bash|npm run lint*
 bash|pnpm dlx *
 bash|yarn dlx *
 bash|caffeinate -i npm test
@@ -201,10 +208,10 @@ test_ordinary_grants_and_every_deny_are_accepted() {
     status=$?
     expect_code 0 "$status" "allow $perm '$pat' must be accepted: $out"
   done <<'ROWS'
-bash|npm test *
 bash|npm test
-bash|npm run lint*
+bash|npm install
 bash|git log *
+bash|/usr/bin/git diff *
 bash|git status --short
 bash|npm install
 bash|git push origin fm/task-x
