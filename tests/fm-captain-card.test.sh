@@ -44,6 +44,17 @@ else
 fi
 
 # Test 3: Snapshot includes decision cards for held tasks with pending decisions
+mkdir -p "$FM_HOME/projects/snap-card"
+fm_write_meta "$FM_HOME/state/snap-card.meta" \
+  "window=firstmate:fm-snap-card" \
+  "worktree=$FM_HOME/projects/snap-card" \
+  "project=alpha" \
+  "harness=claude" \
+  "kind=ship" \
+  "mode=ship"
+gen=$("$ROOT/bin/fm-busy-event.sh" arm "$FM_HOME/state" snap-card)
+"$ROOT/bin/fm-busy-event.sh" apply "$FM_HOME/state" snap-card idle --gen "$gen" \
+  --source claude-hook --event stop
 printf 'needs-decision [at=1727500000] [key=snap-card]: how should we proceed?\n' > "$FM_HOME/state/snap-card.status"
 bash "$CAPTAIN_HOLD" card snap-card set '{"options":["approve","reject"],"recommend_value":"approve"}'
 output=$(bash "$SNAPSHOT" --json 2>/dev/null)

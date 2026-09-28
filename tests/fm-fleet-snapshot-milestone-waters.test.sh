@@ -29,7 +29,7 @@ make_home() {  # <name>
 
 # Test 1: Backlog row with milestone tag is parsed correctly
 home=$(make_home "home-milestone")
-printf '%s\n' "- [ ] ship-task-1 - Implement feature X (milestone: v2.0) (repo: acme/app)" > "$home/data/backlog.md"
+printf '%s\n' "## Queued" "- [ ] ship-task-1 - Implement feature X (milestone: v2.0) (repo: acme/app)" > "$home/data/backlog.md"
 output=$(FM_HOME="$home" bash "$SNAPSHOT" --json 2>/dev/null)
 record=$(printf '%s\n' "$output" | jq -r '.backlog.records[] | select(.id == "ship-task-1")' 2>/dev/null)
 milestone=$(printf '%s\n' "$record" | jq -r '.milestone // "MISSING"' 2>/dev/null)
@@ -42,7 +42,7 @@ fi
 
 # Test 2: Backlog row with waters tag is parsed correctly
 home=$(make_home "home-waters")
-printf '%s\n' "- [ ] ship-task-2 - Implement feature Y (waters: deep-sea) (repo: acme/app)" > "$home/data/backlog.md"
+printf '%s\n' "## Queued" "- [ ] ship-task-2 - Implement feature Y (waters: deep-sea) (repo: acme/app)" > "$home/data/backlog.md"
 output=$(FM_HOME="$home" bash "$SNAPSHOT" --json 2>/dev/null)
 record=$(printf '%s\n' "$output" | jq -r '.backlog.records[] | select(.id == "ship-task-2")' 2>/dev/null)
 waters=$(printf '%s\n' "$record" | jq -r '.waters // "MISSING"' 2>/dev/null)
@@ -55,7 +55,7 @@ fi
 
 # Test 3: Backlog row with both milestone and waters tags
 home=$(make_home "home-both")
-printf '%s\n' "- [ ] ship-task-3 - Complex feature (milestone: v3.0) (waters: deep-sea) (priority: high) (repo: acme/app)" > "$home/data/backlog.md"
+printf '%s\n' "## Queued" "- [ ] ship-task-3 - Complex feature (milestone: v3.0) (waters: deep-sea) (priority: high) (repo: acme/app)" > "$home/data/backlog.md"
 output=$(FM_HOME="$home" bash "$SNAPSHOT" --json 2>/dev/null)
 record=$(printf '%s\n' "$output" | jq -r '.backlog.records[] | select(.id == "ship-task-3")' 2>/dev/null)
 milestone=$(printf '%s\n' "$record" | jq -r '.milestone // "MISSING"' 2>/dev/null)
@@ -70,7 +70,7 @@ fi
 
 # Test 4: Backlog row without tags (existing behavior unchanged)
 home=$(make_home "home-none")
-printf '%s\n' "- [ ] ship-task-4 - Simple task" > "$home/data/backlog.md"
+printf '%s\n' "## Queued" "- [ ] ship-task-4 - Simple task" > "$home/data/backlog.md"
 output=$(FM_HOME="$home" bash "$SNAPSHOT" --json 2>/dev/null)
 record=$(printf '%s\n' "$output" | jq -r '.backlog.records[] | select(.id == "ship-task-4")' 2>/dev/null)
 milestone=$(printf '%s\n' "$record" | jq -r '.milestone // "null"' 2>/dev/null)
@@ -87,7 +87,7 @@ mkdir -p "$home/data/charts"
 cat > "$home/data/charts/acme-app.json" <<'CHART'
 {"ports":[{"name":"v1.0","order":1,"target_date":"2025-10-01"},{"name":"v2.0","order":2,"target_date":"2025-11-15"}],"waters":["coastal","deep-sea"]}
 CHART
-printf '%s\n' "- [ ] ship-task-5 - Charted work (milestone: v1.0) (repo: acme-app)" > "$home/data/backlog.md"
+printf '%s\n' "## Queued" "- [ ] ship-task-5 - Charted work (milestone: v1.0) (repo: acme-app)" > "$home/data/backlog.md"
 output=$(FM_HOME="$home" bash "$SNAPSHOT" --json 2>/dev/null)
 has_chart=$(printf '%s\n' "$output" | jq -e '.charts' >/dev/null 2>&1 && echo "yes" || echo "no")
 if [ "$has_chart" = "yes" ]; then

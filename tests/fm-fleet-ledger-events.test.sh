@@ -39,7 +39,7 @@ fi
 bash "$LEDGER" pr_ready_risk risk-task "https://github.com/acme/app/pull/42" "medium" "auth,middleware"
 sleep 0.05
 bash "$LEDGER" capture
-line=$(grep '"pr_ready"' "$FM_HOME/state/fleet-ledger.jsonl" | grep 'risk-task' | head -1)
+line=$(grep '"task.pr_ready"' "$FM_HOME/state/fleet-ledger.jsonl" | grep 'risk-task' | head -1)
 risk=$(echo "$line" | jq -r '.risk // "MISSING"' 2>/dev/null)
 touches=$(echo "$line" | jq -r '.touches // "MISSING"' 2>/dev/null)
 if [ "$risk" = "medium" ] && [ "$touches" = "auth,middleware" ]; then
