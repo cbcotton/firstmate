@@ -65,7 +65,7 @@ LOCK="$STATE/.fleet-ledger.lock"
 TEXT_MAX_CHARS=2000
 
 usage() {
-  echo "usage: fm-fleet-ledger.sh dispatched <task> <kind> <project> <harness> <model> [<sailor>] | pr_ready <task> <url> | merged <task> pr <url> | merged <task> local | cleaned_up <task> | capture | appended <config> <state>/<task>.status" >&2
+  echo "usage: fm-fleet-ledger.sh dispatched <task> <kind> <project> <harness> <model> [<sailor>] | pr_ready <task> <url> | merged <task> pr <url> | merged <task> local | cleaned_up <task> | capture | appended <config> <state>/<task>.status | validation <task> <step> <outcome> | pr_ready_risk <task> <url> <risk> [touches] | decided <task> <answer>" >&2
   exit 2
 }
 
@@ -79,7 +79,17 @@ case "$cmd" in
   pr_ready) { [ "$#" -eq 3 ] && task_ok "$2" && [ -n "$3" ]; } || usage ;;
   merged)
     task_ok "${2:-}" || usage
-    case "$#:${3:-}" in 4:pr) [ -n "$4" ] || usage ;; 3:local) ;; *) usage ;; esac
+    case "#$:${3:-}" in 4:pr) [ -n "$4" ] || usage ;; 3:local) ;; *) usage ;; esac
+    ;;
+  validation)
+    { [ "$#" -eq 4 ] && task_ok "$2" && [ -n "$3" ] && [ -n "$4" ]; } || usage
+    ;;
+  pr_ready_risk)
+    task_ok "${2:-}" || usage
+    case "$#" in 4|5) [ -n "${3:-}" ] && [ -n "${4:-}" ] ;; *) usage ;; esac
+    ;;
+  decided)
+    { [ "$#" -eq 3 ] && task_ok "$2" && [ -n "$3" ]; } || usage
     ;;
   cleaned_up) { [ "$#" -eq 2 ] && task_ok "$2"; } || usage ;;
   capture) [ "$#" -eq 1 ] || usage ;;
@@ -223,6 +233,22 @@ case "$cmd" in
     else
       append task.merged "$2" '{via: "local"}' || rc=1
     fi
+    ;;
+  validation)
+    capture_task "$2" || rc=1
+    append task.validation "$2" '{step: $step, outcome: $outcome}' --arg step "$3" --arg outcome "$4" || rc=1
+    ;;
+  pr_ready_risk)
+    capture_task "$2" || rc=1
+    if [ "$#" -eq 5 ]; then
+      append task.pr_ready "$2" '{pr: $pr, risk: $risk, touches: $touches}' --arg pr "$3" --arg risk "$4" --arg touches "$5" || rc=1
+    else
+      append task.pr_ready "$2" '{pr: $pr, risk: $risk, touches: null}' --arg pr "$3" --arg risk "$4" || rc=1
+    fi
+    ;;
+  decided)
+    capture_task "$2" || rc=1
+    append task.decided "$2" '{answer: $answer}' --arg answer "$3" || rc=1
     ;;
   cleaned_up)
     capture_task "$2" || rc=1
