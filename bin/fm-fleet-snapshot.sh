@@ -1994,8 +1994,8 @@ project_charts_json() {
     | sort \
     | while IFS= read -r chart_file; do
       local project=$(basename "$chart_file" .json)
-      jq -n --arg project "$project" --slurpfile chart "$chart_file" \
-        '{project:$project,path:$chart_file,data:$chart[0]}'
+      jq -n --arg project "$project" --arg path "$chart_file" --slurpfile chart "$chart_file" \
+        '{project:$project,path:$path,data:$chart[0]}'
     done \
     | jq -s 'sort_by(.project)'
 }

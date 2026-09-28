@@ -1923,6 +1923,40 @@ command_open() {  # <task-id> [--identity] [--distinguish-absent]
   exit 2
 }
 
+command_card() {
+  if [ $# -lt 2 ]; then
+    printf 'usage: fm-captain-hold.sh card <task-id> {show|set|clear} [options JSON]\n' >&2
+    exit 2
+  fi
+  local id=$1 action=$2
+  shift 2
+  case "$id" in ''|.*|*[!A-Za-z0-9._-]*) printf 'fm-captain-hold: bad task id %s\n' "$id" >&2; exit 2 ;; esac
+  local card_file="$STATE/$id.decision-card.json"
+  case "$action" in
+    show)
+      if [ -f "$card_file" ]; then
+        cat "$card_file"
+      else
+        printf 'null\n'
+      fi
+      ;;
+    set)
+      if [ $# -lt 1 ]; then
+        printf 'usage: fm-captain-hold.sh card <task-id> set <options-json>\n' >&2
+        exit 2
+      fi
+      printf '%s\n' "$1" > "$card_file"
+      ;;
+    clear)
+      rm -f "$card_file"
+      ;;
+    *)
+      printf 'fm-captain-hold: unknown card action %s\n' "$action" >&2
+      exit 2
+      ;;
+  esac
+}
+
 case "${1:-}" in
   hold) shift; command_hold "$@" ;;
   answer) shift; command_answer "$@" ;;
@@ -1936,36 +1970,7 @@ case "${1:-}" in
   open) shift; command_open "$@" ;;
   diverged) shift; command_diverged "$@" ;;
   reconcile) shift; command_reconcile "$@" ;;
-  card)
-    shift
-    if [ $# -lt 3 ]; then
-      printf 'usage: fm-captain-hold.sh card <task-id> {show|set|clear} [options JSON]\n' >&2
-      exit 2
-    fi
-    local id=$1 action=$2
-    shift 2
-    case "$action" in
-      show)
-        local card_file="$STATE/$id.decision-card.json"
-        if [ -f "$card_file" ]; then
-          cat "$card_file"
-          exit 0
-        fi
-        printf 'null\n'
-        ;;
-      set)
-        if [ $# -lt 1 ]; then
-          printf 'usage: fm-captain-hold.sh card <task-id> set <options-json>\n' >&2
-          exit 2
-        fi
-        local card_file="$STATE/$id.decision-card.json"
-        printf '%s\n' "$1" > "$card_file"
-        ;;
-      clear)
-        rm -f "$STATE/$id.decision-card.json"
-        ;;
-    esac
-    ;;
+  card) shift; command_card "$@" ;;
   -h|--help) usage ;;
   *) usage >&2; exit 2 ;;
 esac
