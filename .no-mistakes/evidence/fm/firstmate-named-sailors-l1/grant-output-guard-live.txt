@@ -1,0 +1,16 @@
+g1790582991-94443-2079: allow bash "git log *" for standing; it applies at each OpenCode worker's next launch (bin/fm-control.sh <task> relaunch to apply now)
+g1790582991-94481-19343: allow bash "git diff *" for standing; it applies at each OpenCode worker's next launch (bin/fm-control.sh <task> relaunch to apply now)
+g1790582991-94519-3839: allow bash "git show *" for standing; it applies at each OpenCode worker's next launch (bin/fm-control.sh <task> relaunch to apply now)
+g1790582991-94557-21102: allow bash "git shortlog *" for standing; it applies at each OpenCode worker's next launch (bin/fm-control.sh <task> relaunch to apply now)
+g1790582992-94595-5598: allow bash "touch granted.txt" for standing; it applies at each OpenCode worker's next launch (bin/fm-control.sh <task> relaunch to apply now)
+composed bash tail: ["git status *=allow","git add *=allow","git commit *=allow","git switch -c *=allow","git checkout -b *=allow","git rev-parse *=allow","git branch --show-current=allow","git push*=deny","git log *=allow","git diff *=allow","git show *=allow","git shortlog *=allow","git *--output*=deny"]
+opencode 1.18.32 run exit=0
+PASS: git log --output denied (no file written) despite 'git log *' grant
+PASS: git diff --output denied (no file written) despite 'git diff *' grant
+PASS: git show --output denied (no file written) despite 'git show *' grant
+PASS: git shortlog --output denied (no file written) despite 'git shortlog *' grant
+PASS: granted plain git log ran: "GRANTED-LOG-two\n"
+PASS: granted exact 'touch granted.txt' ran
+PASS: ungranted 'touch notgranted.txt' denied
+overall=PASS
+/Users/cotton/.no-mistakes/evidence/01M3JAS67K1WZ33VR2F8R270MF/grant-output-guard-live.sh: line 38: 94652 Terminated: 15          python3 $T/model.py $T/port $T/script.json $T/model.log

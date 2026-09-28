@@ -1,0 +1,3 @@
+ok - opencode 1.18.32 honors the restricted profile: edits, commits, a bare git status and the worker protocol run; a push, a compound's denied half, an outside read, and git diff --output do not
+# all fm-opencode-restricted-live-e2e tests passed
+exit=0

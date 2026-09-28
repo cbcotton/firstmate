@@ -1,0 +1,7 @@
+$ fm-fleet-ledger.sh dispatched fix-a ship demo opencode lmstudio-community/Qwen3.5-9B-MLX-4bit tiller
+exit=0
+$ fm-fleet-ledger.sh dispatched fix-b ship demo claude claude-opus-5-5
+exit=0
+--- /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.bVPoYG/state/fleet-ledger.jsonl (task.dispatched events)
+{"v":1,"ts":1790583547,"event":"task.dispatched","task":"fix-a","kind":"ship","project":"demo","harness":"opencode","model":"lmstudio-community/Qwen3.5-9B-MLX-4bit","sailor":"tiller"}
+{"v":1,"ts":1790583547,"event":"task.dispatched","task":"fix-b","kind":"ship","project":"demo","harness":"claude","model":"claude-opus-5-5","sailor":null}

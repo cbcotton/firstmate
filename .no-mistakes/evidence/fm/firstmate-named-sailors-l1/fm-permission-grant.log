@@ -1,0 +1,10 @@
+ok - a task grant records the captain's exact words and reaches that task's profile
+ok - a task grant ends with its dispatch, so a reused task id starts without it
+ok - a session grant applies while its session holds the lock and ends with it
+ok - a later narrowing wins over an earlier widening, and a revoked grant no longer applies
+ok - the worker's own protocol commands stay allowed after every grant
+ok - a granted Git wildcard allows its subcommand but never lifts the --output deny
+ok - every never-pre-grantable class (86 cases) is refused and leaves no record
+ok - ordinary project commands, one exact push, and every deny are accepted
+ok - a grant needs the captain's words, a known channel, and a scope it can bind to
+# all fm-permission-grant tests passed

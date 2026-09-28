@@ -1,0 +1,22 @@
+$ fm-sailor.sh validate
+exit=0
+$ fm-sailor.sh list
+tiller status=live endpoint=http://127.0.0.1:11234/v1 max_concurrent=1 models=lmstudio-community/Qwen3.5-9B-MLX-4bit
+stoker status=placeholder endpoint=http://127.0.0.1:11234/v1 max_concurrent=1 models=lmstudio-community/Qwen3.5-9B-MLX-4bit
+flint status=placeholder endpoint=http://127.0.0.1:1/v1 max_concurrent=1 models=qwen-coder
+exit=0
+$ fm-sailor.sh check tiller lmstudio-community/Qwen3.5-9B-MLX-4bit
+ok: sailor tiller serves lmstudio-community/Qwen3.5-9B-MLX-4bit at http://127.0.0.1:11234/v1 (0 of 1 tasks busy)
+exit=0
+$ fm-sailor.sh check stoker lmstudio-community/Qwen3.5-9B-MLX-4bit   # placeholder at a LIVE address
+refused: sailor stoker is a placeholder; it is dispatched only after the captain marks it live
+exit=1
+$ fm-sailor.sh check tiller not-a-listed-model
+refused: model not-a-listed-model is not listed for sailor tiller
+exit=1
+$ fm-sailor.sh provider-json tiller lmstudio-community/Qwen3.5-9B-MLX-4bit
+{"tiller":{"npm":"@ai-sdk/openai-compatible","name":"Tiller","options":{"baseURL":"http://127.0.0.1:11234/v1"},"models":{"lmstudio-community/Qwen3.5-9B-MLX-4bit":{"name":"lmstudio-community/Qwen3.5-9B-MLX-4bit"}}}}
+exit=0
+$ fm-sailor.sh check flint qwen-coder   # marked live but nothing answers
+refused: sailor flint is not answering at http://127.0.0.1:1/v1
+exit=1

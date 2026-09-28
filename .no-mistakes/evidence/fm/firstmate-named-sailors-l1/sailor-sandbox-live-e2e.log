@@ -1,0 +1,3 @@
+ok - opencode 1.18.32 in a sandboxed sailor launch edits, commits, reports and records its busy state, but cannot write outside (by redirection or git diff --output included), rewrite its record, plant a hook, or reach the network
+# all fm-sailor-sandbox-live-e2e tests passed
+exit=0

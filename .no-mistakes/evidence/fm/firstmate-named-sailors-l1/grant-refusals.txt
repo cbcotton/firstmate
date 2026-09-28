@@ -1,0 +1,42 @@
+$ fm-permission-grant.sh grant --scope standing --permission bash --pattern 'git log *' --action allow
+g1790582953-91071-25759: allow bash "git log *" for standing; it applies at each OpenCode worker's next launch (bin/fm-control.sh <task> relaunch to apply now)
+exit=0
+$ fm-permission-grant.sh grant --scope standing --permission bash --pattern 'git diff *' --action allow
+g1790582953-91110-27093: allow bash "git diff *" for standing; it applies at each OpenCode worker's next launch (bin/fm-control.sh <task> relaunch to apply now)
+exit=0
+$ fm-permission-grant.sh grant --scope standing --permission bash --pattern './git log *' --action allow
+refused: a wildcard allow is granted only over git log, diff, show, status, add, commit, rev-parse, blame, ls-files, shortlog, or describe; grant one exact command otherwise; the captain approves that one action in the moment and firstmate performs it
+exit=1
+$ fm-permission-grant.sh grant --scope standing --permission bash --pattern 'tools/git diff *' --action allow
+refused: a wildcard allow is granted only over git log, diff, show, status, add, commit, rev-parse, blame, ls-files, shortlog, or describe; grant one exact command otherwise; the captain approves that one action in the moment and firstmate performs it
+exit=1
+$ fm-permission-grant.sh grant --scope standing --permission bash --pattern '/usr/bin/git diff *' --action allow
+refused: a wildcard allow is granted only over git log, diff, show, status, add, commit, rev-parse, blame, ls-files, shortlog, or describe; grant one exact command otherwise; the captain approves that one action in the moment and firstmate performs it
+exit=1
+$ fm-permission-grant.sh grant --scope standing --permission bash --pattern 'git *' --action allow
+refused: a wildcard allow is granted only over git log, diff, show, status, add, commit, rev-parse, blame, ls-files, shortlog, or describe; grant one exact command otherwise; the captain approves that one action in the moment and firstmate performs it
+exit=1
+$ fm-permission-grant.sh grant --scope standing --permission bash --pattern 'git push --force *' --action allow
+refused: a wildcard allow is granted only over git log, diff, show, status, add, commit, rev-parse, blame, ls-files, shortlog, or describe; grant one exact command otherwise; the captain approves that one action in the moment and firstmate performs it
+exit=1
+$ fm-permission-grant.sh grant --scope standing --permission bash --pattern 'git fetch *' --action allow
+refused: a wildcard allow is granted only over git log, diff, show, status, add, commit, rev-parse, blame, ls-files, shortlog, or describe; grant one exact command otherwise; the captain approves that one action in the moment and firstmate performs it
+exit=1
+$ fm-permission-grant.sh grant --scope standing --permission bash --pattern 'git -c *' --action allow
+refused: a Git global option can change what any Git command runs; the captain approves that one action in the moment and firstmate performs it
+exit=1
+$ fm-permission-grant.sh grant --scope standing --permission bash --pattern 'uv run *' --action allow
+refused: a wildcard allow is granted only over git log, diff, show, status, add, commit, rev-parse, blame, ls-files, shortlog, or describe; grant one exact command otherwise; the captain approves that one action in the moment and firstmate performs it
+exit=1
+$ fm-permission-grant.sh grant --scope standing --permission bash --pattern 'npm i*' --action allow
+refused: a wildcard allow is granted only over git log, diff, show, status, add, commit, rev-parse, blame, ls-files, shortlog, or describe; grant one exact command otherwise; the captain approves that one action in the moment and firstmate performs it
+exit=1
+$ fm-permission-grant.sh grant --scope standing --permission bash --pattern 'bash *' --action allow
+refused: a shell, interpreter, or command runner runs any command it is given; the captain approves that one action in the moment and firstmate performs it
+exit=1
+$ fm-permission-grant.sh grant --scope standing --permission bash --pattern 'git branch -D main' --action allow
+refused: branch, tag, or history deletion is never granted; the captain approves that one action in the moment and firstmate performs it
+exit=1
+$ fm-permission-grant.sh list
+g1790582953-91071-25759 standing allow bash "git log *" via chat: Allow git log with anything, for this session 
+g1790582953-91110-27093 standing allow bash "git diff *" via chat: Allow git log with anything, for this session 

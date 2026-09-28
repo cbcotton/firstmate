@@ -1,0 +1,7 @@
+ok - an absent or allow selector keeps today's allow-everything permission and adds no worker note
+ok - an unknown or unreadable selector refuses rather than choosing a posture
+ok - the restricted profile denies by default with every allow after its catch-all
+ok - the restricted profile opens exactly this task's status file, inbox, and brief directory
+ok - a restricted worker is told to report a denied tool call instead of routing around it
+ok - compose refuses a task id that is not a plain slug
+# all fm-opencode-permissions tests passed
