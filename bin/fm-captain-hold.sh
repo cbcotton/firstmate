@@ -35,6 +35,7 @@
 #   fm-captain-hold.sh reconcile list
 #   fm-captain-hold.sh reconcile close <task-id> --evidence-file <path>
 #   fm-captain-hold.sh reconcile note <task-id> --note-file <path>
+#   fm-captain-hold.sh card <task-id> {show | set <options-json> | clear}
 #
 # `hold` places an existing task under an active captain hold, or creates the
 # task first when no work item exists to hold (--title required to create; the
@@ -184,6 +185,11 @@
 #
 # `diverged` is the read-only guard over the seam between the two records of
 # one captain call. See "record divergence" beside command_diverged below.
+#
+# `card` stores, prints, or removes a task's decision card at
+# state/<task-id>.decision-card.json. `set` writes its argument verbatim, and
+# `show` prints `null` when no card exists. bin/fm-fleet-snapshot.sh serves the
+# card as hints.decision_card while the task has an open needs-decision.
 #
 # Resolution records: the block written into the body names this script, the
 # decision digest, and a `Resolution mode:` of answered, released, repaired, or
@@ -1923,6 +1929,40 @@ command_open() {  # <task-id> [--identity] [--distinguish-absent]
   exit 2
 }
 
+command_card() {
+  if [ $# -lt 2 ]; then
+    printf 'usage: fm-captain-hold.sh card <task-id> {show|set|clear} [options JSON]\n' >&2
+    exit 2
+  fi
+  local id=$1 action=$2
+  shift 2
+  case "$id" in ''|.*|*[!A-Za-z0-9._-]*) printf 'fm-captain-hold: bad task id %s\n' "$id" >&2; exit 2 ;; esac
+  local card_file="$STATE/$id.decision-card.json"
+  case "$action" in
+    show)
+      if [ -f "$card_file" ]; then
+        cat "$card_file"
+      else
+        printf 'null\n'
+      fi
+      ;;
+    set)
+      if [ $# -lt 1 ]; then
+        printf 'usage: fm-captain-hold.sh card <task-id> set <options-json>\n' >&2
+        exit 2
+      fi
+      printf '%s\n' "$1" > "$card_file"
+      ;;
+    clear)
+      rm -f "$card_file"
+      ;;
+    *)
+      printf 'fm-captain-hold: unknown card action %s\n' "$action" >&2
+      exit 2
+      ;;
+  esac
+}
+
 case "${1:-}" in
   hold) shift; command_hold "$@" ;;
   answer) shift; command_answer "$@" ;;
@@ -1936,6 +1976,7 @@ case "${1:-}" in
   open) shift; command_open "$@" ;;
   diverged) shift; command_diverged "$@" ;;
   reconcile) shift; command_reconcile "$@" ;;
+  card) shift; command_card "$@" ;;
   -h|--help) usage ;;
   *) usage >&2; exit 2 ;;
 esac

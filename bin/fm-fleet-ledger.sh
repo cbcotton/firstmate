@@ -18,6 +18,7 @@
 #   bin/fm-merge-outcome-lib.sh  merged ... pr (a recorded PR merge)
 #   bin/fm-merge-local.sh        merged ... local (a local-only landing)
 #   bin/fm-teardown.sh           cleaned_up
+#   (none yet)                   validation, pr_ready_risk, decided
 #
 # Usage:
 #   fm-fleet-ledger.sh dispatched <task> <kind> <project> <harness> <model> [<sailor>]
@@ -27,6 +28,9 @@
 #   fm-fleet-ledger.sh cleaned_up <task>
 #   fm-fleet-ledger.sh capture
 #   fm-fleet-ledger.sh appended <config> <state>/<task>.status
+#   fm-fleet-ledger.sh validation <task> <step> <outcome>
+#   fm-fleet-ledger.sh pr_ready_risk <task> <url> <risk> [<touches>]
+#   fm-fleet-ledger.sh decided <task> <answer>
 #
 # capture appends one task.status record for every complete (newline-ended)
 # line added to a state/<task>.status log since that task's byte offset in
@@ -40,8 +44,8 @@
 # recording it again. Its arguments name the home, because a worker has no
 # firstmate environment: the flag lives in <config> and the state directory is
 # the status file's directory.
-# pr_ready, merged, and cleaned_up first capture their own task, so its status
-# records precede them. cleaned_up then deletes the task's offset, because teardown
+# pr_ready, pr_ready_risk, merged, validation, decided, and cleaned_up first
+# capture their own task, so its status records precede them. cleaned_up then deletes the task's offset, because teardown
 # retires that status log right after. dispatched deletes any leftover offset
 # so a reused task id starts at byte 0 of its fresh log.
 # Every write holds state/.fleet-ledger.lock.
@@ -65,7 +69,7 @@ LOCK="$STATE/.fleet-ledger.lock"
 TEXT_MAX_CHARS=2000
 
 usage() {
-  echo "usage: fm-fleet-ledger.sh dispatched <task> <kind> <project> <harness> <model> [<sailor>] | pr_ready <task> <url> | merged <task> pr <url> | merged <task> local | cleaned_up <task> | capture | appended <config> <state>/<task>.status" >&2
+  echo "usage: fm-fleet-ledger.sh dispatched <task> <kind> <project> <harness> <model> [<sailor>] | pr_ready <task> <url> | merged <task> pr <url> | merged <task> local | cleaned_up <task> | capture | appended <config> <state>/<task>.status | validation <task> <step> <outcome> | pr_ready_risk <task> <url> <risk> [touches] | decided <task> <answer>" >&2
   exit 2
 }
 
@@ -80,6 +84,16 @@ case "$cmd" in
   merged)
     task_ok "${2:-}" || usage
     case "$#:${3:-}" in 4:pr) [ -n "$4" ] || usage ;; 3:local) ;; *) usage ;; esac
+    ;;
+  validation)
+    { [ "$#" -eq 4 ] && task_ok "$2" && [ -n "$3" ] && [ -n "$4" ]; } || usage
+    ;;
+  pr_ready_risk)
+    task_ok "${2:-}" || usage
+    case "$#" in 4|5) [ -n "${3:-}" ] && [ -n "${4:-}" ] ;; *) usage ;; esac
+    ;;
+  decided)
+    { [ "$#" -eq 3 ] && task_ok "$2" && [ -n "$3" ]; } || usage
     ;;
   cleaned_up) { [ "$#" -eq 2 ] && task_ok "$2"; } || usage ;;
   capture) [ "$#" -eq 1 ] || usage ;;
@@ -223,6 +237,22 @@ case "$cmd" in
     else
       append task.merged "$2" '{via: "local"}' || rc=1
     fi
+    ;;
+  validation)
+    capture_task "$2" || rc=1
+    append task.validation "$2" '{step: $step, outcome: $outcome}' --arg step "$3" --arg outcome "$4" || rc=1
+    ;;
+  pr_ready_risk)
+    capture_task "$2" || rc=1
+    if [ "$#" -eq 5 ]; then
+      append task.pr_ready "$2" '{pr: $pr, risk: $risk, touches: $touches}' --arg pr "$3" --arg risk "$4" --arg touches "$5" || rc=1
+    else
+      append task.pr_ready "$2" '{pr: $pr, risk: $risk, touches: null}' --arg pr "$3" --arg risk "$4" || rc=1
+    fi
+    ;;
+  decided)
+    capture_task "$2" || rc=1
+    append task.decided "$2" '{answer: $answer}' --arg answer "$3" || rc=1
     ;;
   cleaned_up)
     capture_task "$2" || rc=1

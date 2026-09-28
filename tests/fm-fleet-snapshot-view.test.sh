@@ -1152,6 +1152,22 @@ EOF
   pass "home-summary excludes kind=secondmate from unowned_current and terminal_in_flight"
 }
 
+test_milestone_waters_tags_leave_title() {
+  local home out
+  home=$(make_home milestone-waters-title)
+  cat > "$home/data/backlog.md" <<'EOF'
+## Queued
+- [ ] chart-task - Build feature X (milestone: v2.0) (waters: deep-sea) (priority: high) (repo: acme/app)
+EOF
+  out=$(FM_HOME="$home" "$SNAPSHOT" --json)
+  printf '%s' "$out" | jq -e '
+    .backlog.records[] | select(.id == "chart-task")
+      | .title == "Build feature X" and .milestone == "v2.0" and .waters == "deep-sea"
+        and .repo == "acme/app" and .priority == "high"
+  ' >/dev/null || fail "milestone/waters tags must parse and be stripped from the title: $out"
+  pass "milestone and waters tags parse and are stripped from the title"
+}
+
 test_empty_fleet_json
 test_fixture_snapshot_json
 test_home_summary_excludes_secondmate_from_child_inventory
@@ -1170,3 +1186,4 @@ test_scout_reports_include_teardown_reports
 test_backlog_tasks_axi_forms_and_overrides
 test_view_renders_snapshot
 test_view_renders_dead_secondmate_agent_status
+test_milestone_waters_tags_leave_title

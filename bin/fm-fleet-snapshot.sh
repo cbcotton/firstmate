@@ -22,7 +22,8 @@
 #     hold_reason, and hold_until when tasks-axi emits it. They also carry
 #     normalized current_role, requires_child_metadata, blocked_by_ids,
 #     unresolved_blocker_ids, captain_actionable, hold_set, hold_age_days,
-#     and hold_bucket fields.
+#     and hold_bucket fields, plus milestone and waters from the row's
+#     `(milestone: ...)` and `(waters: ...)` tags (null when absent).
 #     Repeated blocker tokens remain ordered; a blocker resolves only when its
 #     structured record is Done, and missing ids stay open.
 #     There is no separate decision type: any captain-held task is the same
@@ -63,12 +64,16 @@
 #     hints.open_decisions is the keyed open-decision set returned by
 #     fm-classify-lib.sh's authoritative status_open_decisions fold and reconciled
 #     against current_state; hints.pending_decision and hints.blocked_event are
-#     booleans derived from that set.
+#     booleans derived from that set. hints.decision_card is the JSON stored by
+#     `fm-captain-hold.sh card <id> set` while pending_decision is true, else
+#     null.
 #     endpoint.exists is the cheap local backend endpoint-presence read.
 #     endpoint.agent_alive is populated for local secondmates only, where it is
 #     useful return-channel supervision data; remote secondmates use "unknown"
 #     without a probe, and other tasks use "not_checked".
 #   scout_reports[]: present data/<id>/report.md pointers.
+#   charts[]: {project,path,data} for each data/charts/<project>.json, sorted by
+#     project; data is the file's parsed JSON. Empty when the directory is absent.
 #   main_inventory: {valid,reason,orphan_in_flight[],unstructured_current_count} -
 #     main-home current-inventory checks shared with secondmate_home_summary_json
 #     (orphan structured in-flight ids with no state/<id>.meta, and unstructured
@@ -435,7 +440,7 @@ backlog_json() {  # [<backlog-path>] - defaults to this home's $BACKLOG
     def links($rest): [$rest | scan(url_pattern)];
     def strip_trailing_metadata:
       reduce range(0; 20) as $_ (.;
-        sub("[[:space:]]*\\([[:space:]]*(?:(?:repo|kind|priority|hold|hold-kind|hold-until):[[:space:]]*[^)]*|(?:since|merged|reported|done)[[:space:]]+[^)]*)[[:space:]]*\\)[[:space:]]*$"; ""));
+        sub("[[:space:]]*\\([[:space:]]*(?:(?:repo|kind|priority|hold|hold-kind|hold-until|milestone|waters):[[:space:]]*[^)]*|(?:since|merged|reported|done)[[:space:]]+[^)]*)[[:space:]]*\\)[[:space:]]*$"; ""));
     def strip_title_artifacts:
       sub("[[:space:]]+-[[:space:]]+data/[^[:space:])]+/report\\.md$"; "")
       | sub("[[:space:]]+data/[^[:space:])]+/report\\.md$"; "")
@@ -493,6 +498,8 @@ backlog_json() {  # [<backlog-path>] - defaults to this home's $BACKLOG
              repo:metadata($rest; "repo"),
              kind:kind_of($rest),
              priority:metadata($rest; "priority"),
+             milestone:metadata($rest; "milestone"),
+             waters:metadata($rest; "waters"),
              hold_reason:hold_metadata($rest),
              hold_kind:metadata($rest; "hold-kind"),
              hold_until:metadata($rest; "hold-until"),
@@ -827,6 +834,12 @@ task_json_lines() {
     pending_decision=$(printf '%s' "$open_decisions_json" | jq 'if any(.[]; .verb == "needs-decision") then 1 else 0 end')
     blocked_event=$(printf '%s' "$open_decisions_json" | jq 'if any(.[]; .verb == "blocked") then 1 else 0 end')
 
+    # Read the decision card if present for this task
+    decision_card_json='null'
+    if [ "$pending_decision" = 1 ] && [ -f "$STATE/$id.decision-card.json" ]; then
+      decision_card_json=$(cat "$STATE/$id.decision-card.json" 2>/dev/null || echo 'null')
+    fi
+
     endpoint_exists=null
     agent_alive=not_checked
     endpoint_file="$SNAPSHOT_TASK_DIR/$id.endpoint"
@@ -882,10 +895,11 @@ task_json_lines() {
       --argjson home_path "$home_json" \
       --argjson endpoint_exists "$endpoint_exists" \
       --argjson open_decisions "$open_decisions_json" \
-      --argjson pending_decision "$(bool_json "$pending_decision")" \
-      --argjson blocked_event "$(bool_json "$blocked_event")" \
-      --argjson report_present "$(bool_json "$report_present")" \
-      '{
+       --argjson pending_decision "$(bool_json "$pending_decision")" \
+       --argjson blocked_event "$(bool_json "$blocked_event")" \
+       --argjson report_present "$(bool_json "$report_present")" \
+       --argjson decision_card "$decision_card_json" \
+       '{
         id:$id,
         kind:$kind,
         harness:($harness // ""),
@@ -916,7 +930,8 @@ task_json_lines() {
           blocked_event:$blocked_event,
           open_decisions:$open_decisions,
           scout_report_present:$report_present,
-          last_event_text:$last_event_raw
+          last_event_text:$last_event_raw,
+          decision_card:$decision_card
         },
         actions:(
           if $kind == "secondmate" then
@@ -1973,6 +1988,24 @@ scout_report_lines() {
 }
 
 BACKLOG_JSON=$(backlog_json) || { echo "fm-fleet-snapshot: backlog read failed" >&2; exit 1; }
+
+project_charts_json() {
+  local charts_dir="$DATA/charts"
+  if [ ! -d "$charts_dir" ]; then
+    jq -n '[]'
+    return 0
+  fi
+  LC_ALL=C find "$charts_dir" -maxdepth 1 -type f -name '*.json' -print \
+    | sort \
+    | while IFS= read -r chart_file; do
+      local project
+      project=$(basename "$chart_file" .json)
+      jq -n --arg project "$project" --arg path "$chart_file" --slurpfile chart "$chart_file" \
+        '{project:$project,path:$path,data:$chart[0]}'
+    done \
+    | jq -s 'sort_by(.project)'
+}
+
 contribution_tasks_json() {
   local meta id merge_authority
   for meta in "$STATE"/*.meta; do
@@ -2005,10 +2038,13 @@ MAIN_INVENTORY_JSON_FILE="$JSON_TRANSPORT_DIR/main-inventory.json"
 SCOUT_REPORTS_JSON_FILE="$JSON_TRANSPORT_DIR/scout-reports.json"
 SECONDMATE_CURRENT_JSON_FILE="$JSON_TRANSPORT_DIR/secondmate-current.json"
 SECONDMATE_LANDED_JSON_FILE="$JSON_TRANSPORT_DIR/secondmate-landed.json"
+CHARTS_JSON_FILE="$JSON_TRANSPORT_DIR/charts.json"
 printf '%s\n' "$BACKLOG_JSON" > "$BACKLOG_JSON_FILE" \
   || { echo "fm-fleet-snapshot: temporary backlog file write failed" >&2; exit 1; }
 printf '%s\n' "$TASKS_JSON" > "$TASKS_JSON_FILE" \
   || { echo "fm-fleet-snapshot: temporary task file write failed" >&2; exit 1; }
+project_charts_json > "$CHARTS_JSON_FILE" \
+  || { echo "fm-fleet-snapshot: project charts read failed" >&2; exit 1; }
 
 CONTRIBUTIONS_JSON_FILE="$JSON_TRANSPORT_DIR/contributions.json"
 CONTRIBUTION_TASKS_JSON=$(contribution_tasks_json) \
@@ -2051,12 +2087,14 @@ jq -n \
   --slurpfile scout_reports "$SCOUT_REPORTS_JSON_FILE" \
   --slurpfile secondmate_current "$SECONDMATE_CURRENT_JSON_FILE" \
   --slurpfile secondmate_landed "$SECONDMATE_LANDED_JSON_FILE" \
+  --slurpfile charts "$JSON_TRANSPORT_DIR/charts.json" \
   '($backlog[0]) as $backlog
    | ($tasks[0]) as $tasks
    | ($main_inventory[0]) as $main_inventory
    | ($scout_reports[0]) as $scout_reports
    | ($secondmate_current[0]) as $secondmate_current
    | ($secondmate_landed[0]) as $secondmate_landed
+   | ($charts[0]) as $charts
    | def backlog_by_id($id): ($backlog.records[]? | select(.structured == true and .id == $id) | .) // null;
    def task_by_id($id): ($tasks[]? | select(.id == $id) | .) // null;
    def report_kind($id): (task_by_id($id).kind // backlog_by_id($id).kind // "scout");
@@ -2070,6 +2108,7 @@ jq -n \
      main_inventory:$main_inventory,
      contributions:$contributions[0],
      scout_reports:($scout_reports | map(. + {kind:report_kind(.id)})),
+     charts:$charts,
      secondmate_current:$secondmate_current,
      secondmate_landed:$secondmate_landed,
      secondmate_guidance:{
