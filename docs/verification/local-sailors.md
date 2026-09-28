@@ -110,4 +110,24 @@ After the wait every step ran in about 6 seconds.
 
 Not yet verified live: a no-mistakes pipeline run started from inside the sandbox, which relies on the no-mistakes socket and gate repository allowances.
 
+## A Privateer session reaches nothing but its sailor
+
+Verified 2026-09-28 on macOS 26.6 with OpenCode 1.18.32 and tmux 3.7c by `FM_PRIVATEER_EGRESS_LIVE=1 tests/fm-privateer-egress-live-e2e.test.sh`, the egress audit that `../configuration.md` ("Privateer quarantine") names.
+The audit ran `bin/fm-privateer.sh start --audit-proxy` for real: a fixture clone of the checkout as the code root, a throwaway Privateer home whose only sailor was a logging proxy on a loopback port that also served a scripted model, `ANTHROPIC_API_KEY` set to a decoy in the launcher's own environment, the real OpenCode primary with the real firstmate plugins inside the real Seatbelt sandbox in a dedicated tmux server, and `stop` afterwards.
+The proxy recorded every request and refused every tunnel.
+
+| Observation | Result |
+| --- | --- |
+| Model requests that reached the sailor | 1, answered 84 seconds after start, to the prompt the audit typed into the pane; the startup nudge alone had produced none by then, because the sandboxed OpenCode spends its first minute on the blocked plugin install noted above |
+| Recorded attempts naming Anthropic or Claude | 0 |
+| `CONNECT models.opencode.ai:443` | 1, refused by the proxy; the session continued |
+| `CONNECT registry.npmjs.org:443` | 2, refused by the proxy; the session continued |
+| `stop` with no task record | Stopped the watcher and the server |
+
+Facts the quarantine design depends on:
+
+- OpenCode honors `HTTP_PROXY` and `HTTPS_PROXY`: its own catalog fetch and plugin-package install arrived at the audit proxy as tunnels, so an audit proxy sees a well-behaved client's outbound traffic, and the sandbox (proven above) is what refuses anything that goes around it.
+- The launcher's allowlist is what keeps a credential out: the live run set a decoy `ANTHROPIC_API_KEY` in the launcher's environment and recorded no attempt to use it, and `tests/fm-privateer.test.sh` pins the exact environment a stub first mate receives, with no `ANTHROPIC_*`, `CLAUDE_*`, or `CLAUDECODE` name in it.
+- The two refused tunnels are OpenCode's own startup traffic, not firstmate's; both were denied and the primary still answered its first turn.
+
 Refresh this record by repeating the runs above after an OpenCode or model-server upgrade.

@@ -10,6 +10,7 @@ Start with the directory layout, then use the setting reference for the behavior
 | Firstmate's code, private files, or project location | [FM_HOME](#fm_home) and [operational home layout](#operational-home-layout-and-state) |
 | Task windows and worker tools | [Runtime backend](#runtime-backend-configbackend--fm_backend) and [harness support](#harness-support) |
 | Worker permissions, accounts, or environment | [Claude permission mode](#claude-permission-mode-configclaude-permission-mode), [OpenCode permission profile](#opencode-permission-profile-configopencode-permission-profile), [worker account pin](#worker-account-pin-configclaude-account-configpi-account), and [worker launch environment](#worker-launch-environment-configlaunch-env-allowlist) |
+| A home that never reaches Anthropic | [Privateer quarantine](#privateer-quarantine-configprivateer) |
 | Backlog, preferences, and memory | [Backlog backend](#backlog-backend-taskstoml--configbacklog-backend), [captain preferences](#captain-preferences-datacaptainmd--datacaptain-sharedmd), and [startup memory budget](#startup-memory-budget-configstartup-memory-budget) |
 | Supervision and presentation | [Pi supervision branch](#pi-supervision-branch), [supervision host](#supervision-host-configsupervision-host), and [Calm preference](#calm-preference-configcalm) |
 | Persistent secondmates | [Secondmate routes](#secondmate-routes-datasecondmatesmd) |
@@ -896,6 +897,57 @@ The sandboxed OpenCode spends about 75 seconds at startup failing to reach the p
 `bin/fm-sandbox-exec.sh` owns the profile, `bin/fm-spawn.sh` owns the paths and endpoints a sailor launch passes, and `tests/fm-sailor-sandbox-live-e2e.test.sh` re-proves the confinement against the installed OpenCode without model tokens.
 A no-mistakes run from inside the sandbox is not yet verified live; [`verification/local-sailors.md`](verification/local-sailors.md) records what is.
 
+## Privateer quarantine (config/privateer)
+
+Privateer is a firstmate home that never reaches Anthropic: its first mate runs on OpenCode, its workers are [named sailors](#crew-dispatch-profiles-configcrew-dispatchjson), and nothing in its process tree carries a Claude harness, credential, or endpoint.
+It is a separate home with its own `FM_HOME`, state, backlog, projects, and session lock, never a switch on a Claude-orchestrated home, so both can run at once and the Claude home is unchanged.
+The local, gitignored `config/privateer` turns the quarantine on.
+Its one optional line, `<sailor>/<model>`, names the sailor and model the first mate itself runs on, both from the home's sailor map.
+
+### What the quarantine refuses
+
+`bin/fm-privateer.sh check` is the single owner of the rules, and its header lists them exactly.
+With the flag present, bootstrap reports each violation as `PRIVATEER: <violation>`, and `bin/fm-spawn.sh` refuses every spawn until the home satisfies them all:
+
+- `config/crew-harness` must hold `opencode`, and `config/secondmate-harness`, when present, must name it too.
+- `config/supervision-host`, `config/claude-account`, and `config/pi-account` must not exist.
+- `config/sailor-sandbox` must exist, so every sailor runs inside the [sailor sandbox](#sailor-sandbox-configsailor-sandbox).
+- `.env` must set no Relay pairing token, no typed-resolution key, and no `ANTHROPIC_*`, `CLAUDE_*`, or `CLAUDECODE` line, and `config/launch-env-allowlist` must list none of those names.
+- `config/crew-dispatch.json` must exist, declare no `sailor_fallback`, give every profile the `opencode` harness and a sailor, and give every sailor a private endpoint: localhost, a loopback, RFC 1918, or tailnet (100.64/10) address, an IPv6 loopback or unique-local address, or a name ending in `.local` or `.ts.net`.
+
+A spawn in a Privateer home is also refused for a secondmate, a raw launch command, any harness but `opencode`, a missing `--sailor`, or a ship mode other than `local-only`.
+With no `sailor_fallback`, work waits in the queue while every sailor is down; a struggling sailor is retried on another local sailor or goes to the captain, never to a hosted model.
+Version 1 ships local-only because the shared no-mistakes daemon's agent resolves to Claude; a Privateer-only pipeline instance is later work, and the shared daemon is never switched.
+
+### How a Privateer session runs
+
+Start the first mate with `FM_HOME=<home> bin/fm-privateer.sh start`, attach a terminal with `attach`, and end it with `stop`, which refuses while any task record exists so a worker's copy is never orphaned.
+The launcher starts a dedicated tmux server for the home and runs the OpenCode primary in the checkout from an empty environment plus a fixed allowlist of home, path, user, shell, terminal, locale, and temp variables, `FM_HOME`, OpenCode's directories, and OpenCode's inline configuration.
+No `ANTHROPIC_*`, `CLAUDE_*`, or `CLAUDECODE` variable can enter the tree, and the server copies no variable from a client that attaches later.
+Every Privateer worker launch clears the environment the same way at its command boundary, exactly as [worker launch environment](#worker-launch-environment-configlaunch-env-allowlist) does, whether or not that file exists.
+
+OpenCode is isolated: the first mate and every worker read and write OpenCode's config, data, state, and cache under `state/privateer/opencode/` in the home, so the captain's own OpenCode logins, global configuration, and sessions are invisible to them.
+Auto-update is off, session sharing is disabled, and the first mate's configuration pins its model to its sailor as the only provider.
+
+The first mate runs inside the same macOS sandbox as a sailor.
+It can write only to the home, the checkout's `.opencode/` scratch, the worktree pool, and firstmate's per-task temp roots, and it can connect only to each live sailor's endpoint, the forge origins of the checkout and of every clone under `projects/`, the DNS resolver, and its own tmux socket.
+A Seatbelt rule names only localhost or any host, so a forge reached over port 443 leaves every host on that port reachable; the refusals above and the environment allowlist are what keep Anthropic out of that path, and the egress audit below is what proves it.
+Version 1 has honest limits: `sandbox-exec` is required, so Privateer runs on macOS only; a first mate whose checkout is not inside its home cannot update that checkout from inside its session; and Git over SSH needs a key file, because no agent socket enters the environment.
+
+### Egress audit
+
+`FM_PRIVATEER_EGRESS_LIVE=1 tests/fm-privateer-egress-live-e2e.test.sh` starts a short Privateer session through the launcher, with a fixture clone as the checkout and a throwaway home, behind a logging proxy on a loopback port that also serves a scripted model.
+`start --audit-proxy <url>` names that proxy in the session's `HTTP_PROXY` and `HTTPS_PROXY` and allows it in the sandbox, so every outbound request or tunnel the primary attempts is recorded there.
+The proxy refuses every tunnel; the audit fails on any recorded attempt naming Anthropic or Claude, and on a session that made no model request at all.
+[`verification/local-sailors.md`](verification/local-sailors.md) records the dated result; rerun the audit after an OpenCode upgrade.
+
+### Setting up a home
+
+Create the home with `config/privateer` naming the first mate's sailor and model, `config/crew-harness` holding `opencode`, `config/sailor-sandbox`, and a `config/crew-dispatch.json` naming only local sailors and no `sailor_fallback`; `config/opencode-permission-profile` set to `restricted` is the agreed posture for its sailors.
+Run the launcher from a checkout cloned inside the home, or point `FM_HOME` at the home from another checkout; a checkout inside the home is simpler, because its first mate may then update it and OpenCode's scratch stays inside the home.
+A project the home shares with a Claude-orchestrated home takes its own ship-branch prefix in this home's `data/projects.md`.
+The flag is not inherited, because a Privateer home spawns no secondmate.
+
 ## Worker account pin (config/claude-account, config/pi-account)
 
 A home that mixes accounts for one runner, such as a work login and a personal one, can pin the account its own Claude and Pi workers launch on.
@@ -1161,7 +1213,7 @@ A sailor is a named machine serving local models through an OpenAI-compatible en
   The capacity count is per home, so homes that share one machine each count only their own tasks.
 - When every sailor candidate a matched rule or default offers is refused, firstmate uses `sailor_fallback` (one profile object or a non-empty array, never itself a sailor), for example Opus 5.5 in a home orchestrated through Claude Code.
 - Without `sailor_fallback`, sailor work waits in the queue until a sailor answers.
-  A home that must never reach Anthropic, such as a Privateer home, declares no `sailor_fallback` and no Claude profile at all.
+  A home that must never reach Anthropic, such as a Privateer home, declares no `sailor_fallback` and no Claude profile at all ([Privateer quarantine](#privateer-quarantine-configprivateer)).
 - With typed dispatch resolution on, each sailor profile must also declare a `provider`, as every OpenCode profile must; quota-axi measures no local machine, so the resolver hands sailor rules back to firstmate's own intake.
 - [Sailor sandbox](#sailor-sandbox-configsailor-sandbox) optionally confines every sailor launch on macOS.
 
