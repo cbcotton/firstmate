@@ -972,6 +972,15 @@ apply_pending_retained_artifact() {  # <task-id>
   esac
 }
 
+# Opt-in fleet activity ledger (docs/fleet-ledger.md); off costs one file test.
+# Called right after a new resolution record for the captain's answer is
+# written, so an exact retry, which finds that record already there, adds none.
+record_decided_in_ledger() {  # <task-id>
+  [ ! -e "${FM_CONFIG_OVERRIDE:-$FM_HOME/config}/fleet-ledger" ] \
+    || FM_HOME=$FM_HOME FM_STATE_OVERRIDE=$STATE "$SCRIPT_DIR/fm-fleet-ledger.sh" decided "$1" "$DECISION_TEXT" \
+    || true
+}
+
 close_answered() {  # <task-id> <release-0-or-1>
   if [ "$2" = 1 ]; then
     tasks_axi unhold "$1" >/dev/null
@@ -1055,6 +1064,7 @@ command_answer() {
     [ "$hold_kind" = captain ] \
       || fail "task $id was never held for the captain; nothing to record an answer on"
     write_resolution_record "$id" repaired "$body"
+    record_decided_in_ledger "$id"
     remove_interrupted_answer_stamp "$id"
     task_show "$id" || fail "task $id disappeared while recording the answer"
     show=$TASK_SHOW_OUTPUT
@@ -1090,6 +1100,7 @@ command_answer() {
       return 0
     fi
     write_resolution_record "$id" "$outcome" "$body"
+    record_decided_in_ledger "$id"
     if ! close_answered "$id" "$release"; then
       fail "could not close answered captain-held task $id"
     fi
