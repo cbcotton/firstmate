@@ -9,7 +9,7 @@ Start with the directory layout, then use the setting reference for the behavior
 | --- | --- |
 | Firstmate's code, private files, or project location | [FM_HOME](#fm_home) and [operational home layout](#operational-home-layout-and-state) |
 | Task windows and worker tools | [Runtime backend](#runtime-backend-configbackend--fm_backend) and [harness support](#harness-support) |
-| Worker permissions, accounts, or environment | [Claude permission mode](#claude-permission-mode-configclaude-permission-mode), [worker account pin](#worker-account-pin-configclaude-account-configpi-account), and [worker launch environment](#worker-launch-environment-configlaunch-env-allowlist) |
+| Worker permissions, accounts, or environment | [Claude permission mode](#claude-permission-mode-configclaude-permission-mode), [OpenCode permission profile](#opencode-permission-profile-configopencode-permission-profile), [worker account pin](#worker-account-pin-configclaude-account-configpi-account), and [worker launch environment](#worker-launch-environment-configlaunch-env-allowlist) |
 | Backlog, preferences, and memory | [Backlog backend](#backlog-backend-taskstoml--configbacklog-backend), [captain preferences](#captain-preferences-datacaptainmd--datacaptain-sharedmd), and [startup memory budget](#startup-memory-budget-configstartup-memory-budget) |
 | Supervision and presentation | [Pi supervision branch](#pi-supervision-branch), [supervision host](#supervision-host-configsupervision-host), and [Calm preference](#calm-preference-configcalm) |
 | Persistent secondmates | [Secondmate routes](#secondmate-routes-datasecondmatesmd) |
@@ -831,6 +831,71 @@ The file is a captain-wide safety preference, so it is inherited into secondmate
 
 The [Claude adapter reference](../.agents/skills/harness-adapters/references/harness/claude.md) records the verified shape of both launches and which once-per-machine dialog each one can meet.
 
+## OpenCode permission profile (config/opencode-permission-profile)
+
+The optional local, gitignored `config/opencode-permission-profile` selects the permission block every OpenCode crewmate and scout launch carries, including control-plane relaunches.
+OpenCode has no safety classifier, so this profile is the only thing between an OpenCode worker's model and the tools it asks for.
+
+| Token | Launch permission |
+| --- | --- |
+| `allow` | Every tool allowed, the launch's historical `{"*":"allow"}` |
+| `restricted` | A default-deny profile composed for the task |
+
+An absent file means `allow`, so an unconfigured home launches byte-for-byte as before.
+Any other value, or an unreadable file, refuses every OpenCode crewmate or scout spawn from that home before any endpoint, worktree, or task record exists, and the diagnostic names the accepted values.
+An OpenCode secondmate is a firstmate primary in its own home and keeps every tool.
+
+Under `restricted`, a worker may read, search, and edit inside its own copy, make local Git commits and branches, run `no-mistakes axi`, and use its own task's brief directory, status file, and steering inbox exactly as its instructions spell them.
+Everything else is denied: every path outside the copy, `git push`, a Git command that writes its output with `--output`, any other shell command, web fetch and search, and sub-agents.
+OpenCode checks each part of a compound shell command separately, so an allowed first command cannot carry a denied second one.
+A shell pattern cannot rule out a redirection inside an allowed command, such as the status append, so a home selecting `restricted` refuses every [named sailor](#crew-dispatch-profiles-configcrew-dispatchjson) spawn unless the [sailor sandbox](#sailor-sandbox-configsailor-sandbox) is on; this holds in every home, a Privateer home included.
+A denied worker is told, in its launch instructions, to report what it needs as a keyed decision rather than look for another route, so widening a worker's permissions stays the captain's call; [permission grants](#permission-grants-statepermission-grantsjsonl) record that call.
+
+`bin/fm-opencode-permissions.sh` owns the baseline, the composition order, and the worker note; its `compose <task-id>` prints the exact profile a launch would carry.
+[`verification/local-sailors.md`](verification/local-sailors.md) records the live evidence, and `tests/fm-opencode-restricted-live-e2e.test.sh` re-proves it against the installed OpenCode with a scripted model and no model tokens.
+The file is read on every spawn and relaunch and is inherited into secondmate homes, where it governs their own OpenCode crewmates.
+
+## Permission grants (state/permission-grants.jsonl)
+
+The captain can widen or narrow a restricted OpenCode worker's permissions during a session, from chat or from the phone.
+A worker that hits a denial asks through a `perm-` decision, or the captain says it unprompted; firstmate records the captain's answer with `bin/fm-permission-grant.sh grant` and applies it by relaunching the worker with `bin/fm-control.sh <task> relaunch`, which keeps the task, its copy, and its sailor.
+
+| Scope | Lasts |
+| --- | --- |
+| `task` | That task only, until its cleanup; a later task reusing the id starts without it |
+| `session` | Every OpenCode worker, until this home's first mate session ends |
+| `standing` | Every OpenCode worker, until revoked |
+
+Each grant allows or denies one OpenCode permission and pattern, and `revoke` withdraws one.
+Every grant and revocation is an append-only record carrying the captain's exact words, the channel they came through (`chat` or `pinnace`), and an optional note or message reference.
+Grants fold into the restricted profile oldest first, after the baseline and before the worker's own protocol rules, so the captain's latest word wins and no grant can break a worker's status or inbox commands; the deny on a Git command writing its output with `--output` is composed after every grant, so no grant lifts it.
+
+A deny is always accepted.
+An allow is refused, at every scope, for what the captain approves only one action at a time and firstmate then performs itself rather than delegating: blanket allows, web access, credential, system, shell or Git configuration, PATH command directories, or whole-home paths, this firstmate home, privilege escalation, a leading environment assignment, shells, interpreters, and command and package runners such as `sh`, `python3`, `node`, `env`, `xargs`, `find`, `make`, `npx`, or `npm exec`, Git global options and `git config`, and any wildcard shell allow except one over plain `git` (no path) `log`, `diff`, `show`, `status`, `add`, `commit`, `rev-parse`, `blame`, `ls-files`, `shortlog`, or `describe` (every other shell allow names one exact command, so runners, package managers, and interpreters are granted only as exact commands), a push that can force, delete, or match by wildcard, branch, tag, or history deletion, merging, recursive or out-of-copy deletion, credential or keychain access, system configuration, network tools, global installs or downloaded code, fleet, permission, or sandbox control, and anything that names Anthropic or Claude.
+`bin/fm-permission-grant.sh` owns the record, the scope bindings, and the refusal list; `list` shows the grants in force and `active --task <id>` prints what a launch would fold in.
+
+## Sailor sandbox (config/sailor-sandbox)
+
+The optional local, gitignored presence flag `config/sailor-sandbox` runs every [named sailor](#crew-dispatch-profiles-configcrew-dispatchjson) launch inside a macOS Seatbelt sandbox, as a floor under the [OpenCode permission profile](#opencode-permission-profile-configopencode-permission-profile): the profile decides which tools a sailor may call, and the sandbox bounds what any of those calls can reach.
+Create the file to turn it on and delete it to turn it off; it is inherited into secondmate homes.
+
+Inside the sandbox a sailor can write only to:
+
+- its own copy and that repository's Git metadata, never the repository's hooks or Git configuration;
+- its task temp directory and OpenCode's own data, state, and cache directories;
+- exactly the files its instructions tell it to write: its status line, inbox acknowledgements, busy state, the opt-in fleet ledger, its report, and its pipeline findings.
+
+The rest of this home's state and data, including the sailor's own task record and instructions, is unwritable.
+It can connect only to its sailor's endpoint, the DNS resolver, and, for a no-mistakes ship, the no-mistakes socket and gate repository.
+A sailor endpoint on this machine is pinned to its port; one on another machine allows that port on every host, because a Seatbelt rule can name only the local host or any host.
+Reads are not confined, and the sandbox is not a boundary against same-user system services that start programs outside it.
+
+A home with the flag refuses a sailor spawn on a machine where `sandbox-exec` cannot run, rather than launching the sailor unconfined; ordinary OpenCode workers on hosted models are unaffected.
+A home selecting the `restricted` OpenCode permission profile requires the flag: without it every sailor spawn is refused.
+The sandboxed OpenCode spends about 75 seconds at startup failing to reach the package registry for its plugin directory before it works normally.
+`bin/fm-sandbox-exec.sh` owns the profile, `bin/fm-spawn.sh` owns the paths and endpoints a sailor launch passes, and `tests/fm-sailor-sandbox-live-e2e.test.sh` re-proves the confinement against the installed OpenCode without model tokens.
+A no-mistakes run from inside the sandbox is not yet verified live; [`verification/local-sailors.md`](verification/local-sailors.md) records what is.
+
 ## Worker account pin (config/claude-account, config/pi-account)
 
 A home that mixes accounts for one runner, such as a work login and a personal one, can pin the account its own Claude and Pi workers launch on.
@@ -1000,6 +1065,9 @@ This section is the single owner of the canonical schema and its per-field seman
 
 ```json
 {
+  "sailors": {
+    "<sailor name>": { "title": "<optional display name>", "host": "<optional machine description>", "endpoint": "<http(s) OpenAI-compatible base URL>", "status": "<live|placeholder>", "models": ["<model id>"], "max_concurrent": 1 }
+  },
   "rules": [
     {
       "when": "<natural-language condition describing a kind of task>",
@@ -1007,14 +1075,16 @@ This section is the single owner of the canonical schema and its per-field seman
       "min_confidence": 0.85,
       "floor": { "scope": "<quota-axi scope>", "min_percent": 20, "provider": "<quota-axi provider>" },
       "use": [
-        { "harness": "<adapter>", "model": "<optional model>", "effort": "<low|medium|high|xhigh|max|ultra, optional>", "provider": "<optional quota-axi provider>", "floor": { "scope": "<quota-axi scope>", "min_percent": 50 } }
+        { "harness": "<adapter>", "model": "<optional model>", "effort": "<low|medium|high|xhigh|max|ultra, optional>", "provider": "<optional quota-axi provider>", "floor": { "scope": "<quota-axi scope>", "min_percent": 50 } },
+        { "harness": "opencode", "sailor": "<sailor name>", "model": "<a model listed for that sailor>" }
       ],
       "why": "<optional rationale that helps firstmate choose>"
     }
   ],
   "default": [
     { "harness": "<adapter>", "model": "<optional model>", "effort": "<optional effort>" }
-  ]
+  ],
+  "sailor_fallback": { "harness": "<adapter>", "model": "<optional model>", "effort": "<optional effort>" }
 }
 ```
 
@@ -1027,6 +1097,7 @@ This section is the single owner of the canonical schema and its per-field seman
 | `use` and optional top-level `default` | Accept one profile object or a non-empty array of profile objects; the single-object form remains fully backward-compatible. |
 | Profile `harness` | Required in every profile. |
 | Profile `model` and `effort`; rule `why` | Optional. |
+| `sailors`, profile `sailor`, and `sailor_fallback` | Optional; see "Named sailors" below. |
 
 **Fields applied only by typed resolution**
 
@@ -1078,11 +1149,41 @@ This single-provider table is separate from the frozen legacy mapping used by `f
 
 See [`docs/examples/crew-dispatch.json`](examples/crew-dispatch.json) for a starting point to copy into local `config/crew-dispatch.json`; its Pi default declares the `claude` provider required for typed resolution of that Anthropic model.
 
+**Named sailors**
+
+A sailor is a named machine serving local models through an OpenAI-compatible endpoint, so ordinary work can run on it instead of a paid model.
+`bin/fm-sailor.sh` owns the checks below and its header owns their mechanics.
+
+- `sailors` maps each sailor's name (lowercase letters, digits, and single dashes) to its `endpoint`, its `status`, and the `models` it may be asked for; `title`, `host`, and `max_concurrent` (default 1) are optional.
+- A profile with `sailor` must use the `opencode` harness and name a `model` from that sailor's list; `fm-spawn.sh --sailor` then points the worker's OpenCode at that endpoint.
+- A `placeholder` sailor is never dispatched, even when something answers at its address; only the captain changes its status to `live`.
+- A `live` sailor is eligible only while `bin/fm-sailor.sh check <sailor> <model>` passes: its endpoint must answer within a few seconds and list the model, and this home must hold fewer than `max_concurrent` tasks on it.
+  The capacity count is per home, so homes that share one machine each count only their own tasks.
+- When every sailor candidate a matched rule or default offers is refused, firstmate uses `sailor_fallback` (one profile object or a non-empty array, never itself a sailor), for example Opus 5.5 in a home orchestrated through Claude Code.
+- Without `sailor_fallback`, sailor work waits in the queue until a sailor answers.
+  A home that must never reach Anthropic, such as a Privateer home, declares no `sailor_fallback` and no Claude profile at all.
+- With typed dispatch resolution on, each sailor profile must also declare a `provider`, as every OpenCode profile must; quota-axi measures no local machine, so the resolver hands sailor rules back to firstmate's own intake.
+- [Sailor sandbox](#sailor-sandbox-configsailor-sandbox) optionally confines every sailor launch on macOS.
+
+```json
+{
+  "sailors": {
+    "tiller": { "title": "Tiller", "host": "this Mac", "endpoint": "http://127.0.0.1:11234/v1", "status": "live", "models": ["<vendor coder build>"], "max_concurrent": 1 },
+    "stoker": { "title": "Stoker", "host": "RTX 4090 box", "endpoint": "http://stoker.<tailnet>.ts.net:8000/v1", "status": "placeholder", "models": ["<vendor coder build>"] }
+  },
+  "default": [
+    { "harness": "opencode", "sailor": "stoker", "model": "<vendor coder build>" },
+    { "harness": "opencode", "sailor": "tiller", "model": "<vendor coder build>" }
+  ],
+  "sailor_fallback": { "harness": "claude", "model": "claude-opus-5-5" }
+}
+```
+
 **Validation and diagnostics**
 
 - When the file exists, bootstrap validates it with `jq`.
 - Valid files stay silent by default; with `FM_BOOTSTRAP_VERBOSE_FACTS=1`, bootstrap emits `BOOTSTRAP_INFO: crew dispatch active config/crew-dispatch.json`, one `BOOTSTRAP_INFO:` fact per rule, and one fact for the optional default profile set.
-- Malformed JSON, malformed rules, an empty or malformed profile array, an unverified harness, or an effort value unsupported by that harness is reported as `CREW_DISPATCH: invalid config/crew-dispatch.json - ...`.
+- Malformed JSON, malformed rules, an empty or malformed profile array, an unverified harness, an effort value unsupported by that harness, or a malformed sailor map, sailor reference, or `sailor_fallback` is reported as `CREW_DISPATCH: invalid config/crew-dispatch.json - ...`.
 - While typed resolution is active, malformed `approval`, `min_confidence`, `floor`, and present `provider` declarations receive the same diagnostic; without the key those inert declarations preserve the pre-existing bootstrap behavior.
 - Missing `jq` is reported through the normal `MISSING: jq` install-consent flow.
 - While the file remains present, no crewmate or scout spawn may proceed without an explicit resolved harness; malformed configuration must be reported and corrected rather than selected around.

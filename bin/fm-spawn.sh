@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Spawn a direct report: a crewmate in a treehouse or Orca worktree, or a
 # secondmate in its isolated firstmate home.
-# Usage: fm-spawn.sh <task-id> <project-dir> --mode <no-mistakes|direct-PR|local-only> --yolo <on|off> [--branch-prefix <prefix>] [--harness <name>|harness|launch-command] [--model <name>] [--effort <level>] [--backend <name>]
-#        fm-spawn.sh <task-id> <project-dir> --scout [--harness <name>|harness|launch-command] [--model <name>] [--effort <level>] [--backend <name>]
+# Usage: fm-spawn.sh <task-id> <project-dir> --mode <no-mistakes|direct-PR|local-only> --yolo <on|off> [--branch-prefix <prefix>] [--harness <name>|harness|launch-command] [--model <name>] [--effort <level>] [--sailor <name>] [--backend <name>]
+#        fm-spawn.sh <task-id> <project-dir> --scout [--harness <name>|harness|launch-command] [--model <name>] [--effort <level>] [--sailor <name>] [--backend <name>]
 #        fm-spawn.sh <task-id> [<firstmate-home>] [--harness <name>|harness|launch-command] [--model <name>] [--effort <level>] [--backend <name>] --secondmate
 #   --mode and --yolo are this task's delivery contract, REQUIRED for every ship
 #   spawn and refused on --scout and --secondmate spawns. Firstmate resolves both
@@ -85,6 +85,26 @@
 #   build agent's variant, keyed to the resolved model, inside the
 #   OPENCODE_CONFIG_CONTENT JSON its launch already carries (config schema
 #   verified on opencode 1.18.32); without a model the axis is recorded but omitted.
+#   --sailor <name> runs an OpenCode crewmate or scout on a named local sailor
+#   from config/crew-dispatch.json (docs/configuration.md "Named sailors"). It
+#   requires --harness opencode and a --model listed for that sailor, and
+#   refuses before any endpoint, worktree, or record exists unless
+#   `bin/fm-sailor.sh check` passes. The launch's OPENCODE_CONFIG_CONTENT then
+#   carries the sailor as its own provider (bin/fm-sailor.sh provider-json),
+#   OpenCode receives --model <sailor>/<model>, any effort is recorded but
+#   omitted because the sailor's server sets reasoning depth, and the record
+#   gets sailor=<name>. A relaunch that keeps OpenCode and the recorded model
+#   keeps the recorded sailor; a relaunch onto another harness drops it.
+#   With config/sailor-sandbox present, every sailor launch runs OpenCode inside
+#   bin/fm-sandbox-exec.sh: writes only to the task's copy (never its Git hooks
+#   or config), its Git metadata, its task temp, OpenCode's own data, and the
+#   exact status, inbox, busy-state, ledger, and report files the worker's own
+#   commands write, and network only to the sailor's endpoint, the DNS
+#   resolver, and, for a no-mistakes ship, the no-mistakes socket and gate
+#   repository. A home that asks for the sandbox where it cannot run refuses the
+#   sailor spawn rather than launching it unconfined, and a home selecting the
+#   restricted OpenCode profile refuses every sailor spawn without
+#   config/sailor-sandbox; the record gets sandbox=seatbelt.
 #   --backend <name> is the explicit runtime session-provider backend for this
 #   exact task only (docs/configuration.md "Runtime backend" owns when that flag
 #   is authorized). Without it, the script resolves FM_BACKEND, then
@@ -630,6 +650,7 @@ KIND_SET=0
 HARNESS_ARG=
 MODEL=
 EFFORT=
+SAILOR=
 BACKEND_ARG=
 MODE=
 YOLO=
@@ -638,6 +659,7 @@ TRACEPARENT_ARG=
 HARNESS_SET=0
 MODEL_SET=0
 EFFORT_SET=0
+SAILOR_SET=0
 BACKEND_SET=0
 MODE_SET=0
 YOLO_SET=0
@@ -666,6 +688,10 @@ for a in "$@"; do
     effort)
       EFFORT=$a
       EFFORT_SET=1
+      ;;
+    sailor)
+      SAILOR=$a
+      SAILOR_SET=1
       ;;
     backend)
       BACKEND_ARG=$a
@@ -720,6 +746,11 @@ for a in "$@"; do
     EFFORT=${a#--effort=}
     EFFORT_SET=1
     ;;
+  --sailor) want_value=sailor ;;
+  --sailor=*)
+    SAILOR=${a#--sailor=}
+    SAILOR_SET=1
+    ;;
   --backend) want_value=backend ;;
   --backend=*)
     BACKEND_ARG=${a#--backend=}
@@ -764,6 +795,10 @@ done
   echo "error: --effort requires a non-empty value" >&2
   exit 1
 }
+[ "$SAILOR_SET" -eq 0 ] || [ -n "$SAILOR" ] || {
+  echo "error: --sailor requires a non-empty value" >&2
+  exit 1
+}
 [ "$BACKEND_SET" -eq 0 ] || [ -n "$BACKEND_ARG" ] || {
   echo "error: --backend requires a non-empty value" >&2
   exit 1
@@ -778,6 +813,10 @@ done
 }
 [ "$TRACEPARENT_SET" -eq 0 ] || [ -n "$TRACEPARENT_ARG" ] || {
   echo "error: --traceparent requires a non-empty value" >&2
+  exit 1
+}
+[ "$SAILOR_SET" -eq 0 ] || [ "$KIND" != secondmate ] || {
+  echo "error: --sailor applies to crewmate and scout spawns only; a secondmate runs its own home" >&2
   exit 1
 }
 # A parent-delivered carrier replaces this home's own resolution, so it is
@@ -1445,6 +1484,7 @@ if [ "${#POS[@]}" -gt 0 ] && [ "${POS[0]}" != "$idpart" ] && case "$idpart" in *
   [ -z "$HARNESS_ARG" ] || shared_args+=(--harness "$HARNESS_ARG")
   [ -z "$MODEL" ] || shared_args+=(--model "$MODEL")
   [ -z "$EFFORT" ] || shared_args+=(--effort "$EFFORT")
+  [ -z "$SAILOR" ] || shared_args+=(--sailor "$SAILOR")
   [ -z "$BACKEND_ARG" ] || shared_args+=(--backend "$BACKEND_ARG")
   # One delivery contract applies to every pair in a batch, exactly like the shared
   # harness. Each pair still re-validates it against its own brief, so a batch
@@ -2007,7 +2047,7 @@ launch_template() {
       printf '%s' 'codex __MODELFLAG____EFFORTFLAG__--dangerously-bypass-approvals-and-sandbox --disable hooks -c "notify=[\"bash\",\"-c\",\"touch __TURNEND__\"]" "$(__OPINPUT__ encode launch-brief < __BRIEF__)"'
     fi
     ;;
-  opencode) printf '%s' 'OPENCODE_CONFIG_CONTENT='\''{"permission":{"*":"allow"}__EFFORTFLAG__}'\'' opencode __MODELFLAG__--prompt "$(__OPINPUT__ encode launch-brief < __BRIEF__)"' ;;
+  opencode) printf '%s' 'OPENCODE_CONFIG_CONTENT='\''{"permission":__OCPERMISSION____OCPROVIDER____EFFORTFLAG__}'\'' __OCSANDBOX__opencode __MODELFLAG__--prompt "$(__OPINPUT__ encode launch-brief < __BRIEF__)"' ;;
   pi | pi-signed)
     printf '%s' '__PIBIN____PITUIMODE____PIRESUME__'
     if [ "$kind" = secondmate ]; then
@@ -2348,6 +2388,71 @@ fi
 if [ "$HARNESS" = agy ]; then
   agy_model_validate "$AGY_BIN" "$MODEL" || exit 1
 fi
+# Named sailor (header above; docs/configuration.md "Named sailors"). A relaunch
+# that keeps OpenCode and the recorded model keeps the recorded sailor, so a
+# grant applied through bin/fm-control.sh relaunch never moves the task off it.
+if [ "$SAILOR_SET" -eq 0 ] && [ "$RELAUNCH" -eq 1 ] && [ "$HARNESS" = opencode ]; then
+  RELAUNCH_SAILOR=$(fm_meta_get "$RELAUNCH_META" sailor)
+  RELAUNCH_SAILOR_MODEL=$(fm_meta_get "$RELAUNCH_META" model)
+  if [ -n "$RELAUNCH_SAILOR" ] && { [ -z "$MODEL" ] || [ "$MODEL" = "$RELAUNCH_SAILOR_MODEL" ]; }; then
+    SAILOR=$RELAUNCH_SAILOR
+    MODEL=$RELAUNCH_SAILOR_MODEL
+  fi
+fi
+# OpenCode permission profile (header above; docs/configuration.md "OpenCode
+# permission profile"). Resolved before any endpoint, worktree, or record exists,
+# so an invalid selector refuses the spawn. A secondmate is a firstmate primary
+# in its own home and keeps every tool, as it does today.
+OC_PERMISSION_JSON='{"*":"allow"}'
+OC_WORKER_NOTE=
+OC_PROFILE=allow
+if [ "$HARNESS" = opencode ] && [ "$RAW_LAUNCH" = 0 ] && [ "$KIND" != secondmate ]; then
+  OC_PROFILE=$(FM_HOME="$FM_HOME" FM_CONFIG_OVERRIDE="$CONFIG" "$SCRIPT_DIR/fm-opencode-permissions.sh" profile) || exit 1
+  OC_PERMISSION_JSON=$(FM_HOME="$FM_HOME" FM_STATE_OVERRIDE="$STATE" FM_DATA_OVERRIDE="$DATA" FM_CONFIG_OVERRIDE="$CONFIG" \
+    "$SCRIPT_DIR/fm-opencode-permissions.sh" compose "$ID") || exit 1
+  OC_WORKER_NOTE=$(FM_HOME="$FM_HOME" FM_CONFIG_OVERRIDE="$CONFIG" "$SCRIPT_DIR/fm-opencode-permissions.sh" worker-note) || exit 1
+fi
+SAILOR_PROVIDER_JSON=
+if [ -n "$SAILOR" ]; then
+  [ "$KIND" != secondmate ] || {
+    echo "error: --sailor applies to crewmate and scout spawns only; a secondmate runs its own home" >&2
+    exit 1
+  }
+  [ "$HARNESS" = opencode ] && [ "$RAW_LAUNCH" = 0 ] || {
+    echo "error: --sailor requires --harness opencode, the one harness that takes a sailor's endpoint" >&2
+    exit 1
+  }
+  [ -n "$MODEL" ] && [ "$MODEL" != default ] || {
+    echo "error: --sailor requires --model naming one of the sailor's models" >&2
+    exit 1
+  }
+  if ! SAILOR_CHECK=$(FM_CONFIG_OVERRIDE="$CONFIG" FM_STATE_OVERRIDE="$STATE" "$SCRIPT_DIR/fm-sailor.sh" check "$SAILOR" "$MODEL" --task "$ID" 2>&1); then
+    echo "error: sailor $SAILOR cannot take task $ID: ${SAILOR_CHECK#refused: }" >&2
+    exit 1
+  fi
+  SAILOR_PROVIDER_JSON=$(FM_CONFIG_OVERRIDE="$CONFIG" FM_STATE_OVERRIDE="$STATE" "$SCRIPT_DIR/fm-sailor.sh" provider-json "$SAILOR" "$MODEL") || {
+    echo "error: sailor $SAILOR's OpenCode provider entry could not be built" >&2
+    exit 1
+  }
+fi
+# Sailor sandbox (header above; docs/configuration.md "Sailor sandbox"). The
+# wrapper's paths need the task's copy, so only its availability is proven here,
+# before any endpoint, worktree, or record exists. A restricted sailor always
+# needs it: the profile's shell patterns cannot rule out a redirection that
+# writes outside the copy, so the sandbox is what bounds those writes.
+SAILOR_SANDBOX=0
+if [ -n "$SAILOR" ] && [ "$OC_PROFILE" = restricted ] && [ ! -e "$CONFIG/sailor-sandbox" ]; then
+  echo "error: sailor $SAILOR runs under the restricted OpenCode profile, which requires config/sailor-sandbox; create it to launch restricted sailors inside the sandbox" >&2
+  exit 1
+fi
+if [ -n "$SAILOR" ] && [ -e "$CONFIG/sailor-sandbox" ]; then
+  "$SCRIPT_DIR/fm-sandbox-exec.sh" available || {
+    echo "error: config/sailor-sandbox asks for the sailor sandbox, but sandbox-exec cannot run on this machine; refusing to launch sailor $SAILOR unconfined" >&2
+    exit 1
+  }
+  SAILOR_SANDBOX=1
+  SAILOR_ENDPOINT=$(jq -r --arg s "$SAILOR" '.sailors[$s].endpoint' "$CONFIG/crew-dispatch.json")
+fi
 # Worker account pin (header above): resolved before any endpoint, worktree, or
 # record exists. An absent pin selects nothing and leaves every later launch
 # step exactly as it was. A pinned Claude root is exported here as well, so the
@@ -2524,6 +2629,46 @@ relaunch_resume_args() {  # <harness> <backend> <target>
   flag=$(fm_control_relaunch_resume_flag "$harness" "$agent") || return 0
   [ -n "$flag" ] && [ -n "$ref" ] || return 0
   printf -- ' %s %s' "$flag" "$(shell_quote "$ref")"
+}
+
+# sailor_sandbox_prefix: the bin/fm-sandbox-exec.sh invocation, shell-quoted and
+# ending in `-- `, that a sandboxed sailor launch puts before `opencode`.
+sailor_sandbox_prefix() {
+  local common gitdir gate q a
+  local -a args
+  common=$(git -C "$WT" rev-parse --path-format=absolute --git-common-dir) || return 1
+  gitdir=$(git -C "$WT" rev-parse --path-format=absolute --git-dir) || return 1
+  # The copy and its Git metadata, but never a hook, a Git config, or the
+  # copy's own gitdir pointer: each of those runs code or redirects Git for a
+  # later process outside the sandbox.
+  args=(run --write "$WT" --write "$common" --deny-write "$common/hooks" --deny-write "$common/config"
+    --deny-write "$gitdir/config.worktree")
+  [ ! -f "$WT/.git" ] || args+=(--deny-write "$WT/.git")
+  # This home's state and data directories are denied whole, wherever they
+  # live, and exactly the task files a worker's own commands write are exposed
+  # again: its status line, inbox acknowledgements, busy state, the opt-in
+  # ledger, its report, and its pipeline findings. Its task record, instructions,
+  # and per-task Git hooks stay out of reach, because firstmate's own scripts
+  # act on them outside the sandbox.
+  args+=(--write "$TASK_TMP"
+    --write "${XDG_DATA_HOME:-$HOME/.local/share}/opencode" --write "${XDG_STATE_HOME:-$HOME/.local/state}/opencode"
+    --write "${XDG_CACHE_HOME:-$HOME/.cache}/opencode"
+    --deny-write "$STATE" --deny-write "$DATA"
+    --write-prefix "$STATE/$ID.status" --write-prefix "$STATE/$ID.inbox" --write-prefix "$STATE/$ID.busy-state"
+    --write-prefix "$STATE/$ID.progress" --write-prefix "$STATE/$ID.turn-ended"
+    --write-prefix "$STATE/.$ID.fleet-ledger-offset" --write-prefix "$STATE/fleet-ledger.jsonl"
+    --write-prefix "$STATE/.fleet-ledger.lock" --write-prefix "$DATA/$ID/report" --write-prefix "$DATA/$ID/nm-"
+    --connect "$SAILOR_ENDPOINT")
+  if [ "$KIND" = ship ] && [ "$MODE" = no-mistakes ]; then
+    args+=(--unix-socket "$HOME/.no-mistakes/socket")
+    gate=$(git -C "$WT" remote get-url no-mistakes 2>/dev/null || true)
+    case "$gate" in
+      /*) args+=(--write "$gate" --deny-write "$gate/hooks" --deny-write "$gate/config") ;;
+    esac
+  fi
+  q=$(shell_quote "$SCRIPT_DIR/fm-sandbox-exec.sh")
+  for a in "${args[@]}"; do q="$q $(shell_quote "$a")"; done
+  printf '%s -- ' "$q"
 }
 
 model_flag_for_harness() {
@@ -2975,6 +3120,9 @@ if [ "$KIND" = ship ] || [ "$KIND" = scout ]; then
       cat "$SOURCE_BRIEF" &&
       if [ "$KIND" = ship ] && [ "$MODE" = no-mistakes ]; then
         fm_brief_intent_overlay "$CAPTAIN_INTENT"
+      fi &&
+      if [ -n "${OC_WORKER_NOTE:-}" ]; then
+        printf '%s\n' "$OC_WORKER_NOTE"
       fi
   } >"$BRIEF_TMP" || {
     rm -f -- "$BRIEF_TMP"
@@ -4753,7 +4901,7 @@ SPAWN_META_PATH=$SPAWN_META_TMP
 preserve_relaunch_meta() {
   awk -F= '
     BEGIN {
-      split("window endpoint_task_id worktree project harness kind mode yolo branch tasktmp model effort account account_provider busy_gen spawn_gen traceparent backend herdr_session herdr_workspace_id herdr_tab_id herdr_pane_id zellij_session zellij_tab_id zellij_pane_id orca_worktree_id terminal cmux_workspace_id cmux_surface_id home projects control_relaunch_tx", keys, " ")
+      split("window endpoint_task_id worktree project harness kind mode yolo branch tasktmp model effort sailor sandbox account account_provider busy_gen spawn_gen traceparent backend herdr_session herdr_workspace_id herdr_tab_id herdr_pane_id zellij_session zellij_tab_id zellij_pane_id orca_worktree_id terminal cmux_workspace_id cmux_surface_id home projects control_relaunch_tx", keys, " ")
       for (i in keys) owned[keys[i]] = 1
     }
     !($1 in owned)
@@ -4772,6 +4920,12 @@ preserve_relaunch_meta() {
   echo "tasktmp=$TASK_TMP"
   echo "model=${MODEL:-default}"
   echo "effort=${EFFORT:-default}"
+  [ -z "$SAILOR" ] || echo "sailor=$SAILOR"
+  [ "$SAILOR_SANDBOX" != 1 ] || echo "sandbox=seatbelt"
+  # The dispatch stamp a task-scoped permission grant binds to
+  # (bin/fm-permission-grant.sh): written once, kept across relaunches, so a
+  # later task that reuses this id never inherits this one's grants.
+  [ "$RELAUNCH" -eq 1 ] || echo "dispatched_at=$(date +%s)"
   # The worker account pin, only when this home declares one, so an unpinned
   # task record stays byte-identical.
   [ -z "$WORKER_ACCOUNT" ] || echo "account=$WORKER_ACCOUNT_DECLARED"
@@ -4915,8 +5069,32 @@ MODELFLAG=$(model_flag_for_harness "$HARNESS" "$MODEL")
 # A pinned Pi launch confines Pi's model lookup to the declared provider.
 [ -z "$WORKER_ACCOUNT_PROVIDER" ] || MODELFLAG="--provider $(shell_quote "$WORKER_ACCOUNT_PROVIDER") $MODELFLAG"
 EFFORTFLAG=$(effort_flag_for_harness "$HARNESS" "$EFFORT" "$MODEL") || exit 1
+# A named sailor is its own OpenCode provider: the model is addressed through
+# it, and its server, not a variant, sets the reasoning depth.
+OCPROVIDER=
+if [ -n "$SAILOR_PROVIDER_JSON" ]; then
+  MODELFLAG=$(model_flag_for_harness "$HARNESS" "$SAILOR/$MODEL")
+  EFFORTFLAG=
+  # The entry lands inside the launch's single-quoted assignment, so a literal
+  # quote (a sailor title may carry one) must close and reopen that quoting.
+  OCPROVIDER=${SAILOR_PROVIDER_JSON//\'/\'\\\'\'}
+  OCPROVIDER=",\"provider\":$OCPROVIDER"
+fi
 LAUNCH=${LAUNCH//__MODELFLAG__/$MODELFLAG}
 LAUNCH=${LAUNCH//__EFFORTFLAG__/$EFFORTFLAG}
+LAUNCH=${LAUNCH//__OCPROVIDER__/$OCPROVIDER}
+# The permission block lands inside the same single-quoted assignment, and a
+# restricted profile's shell patterns quote their paths.
+OCPERMISSION=${OC_PERMISSION_JSON//\'/\'\\\'\'}
+LAUNCH=${LAUNCH//__OCPERMISSION__/$OCPERMISSION}
+OCSANDBOX=
+if [ "$SAILOR_SANDBOX" = 1 ]; then
+  OCSANDBOX=$(sailor_sandbox_prefix) || {
+    echo "error: the sandbox for sailor $SAILOR could not be prepared for task $ID" >&2
+    exit 1
+  }
+fi
+LAUNCH=${LAUNCH//__OCSANDBOX__/$OCSANDBOX}
 # Relaunch session continuity. Computed here, where the adopted endpoint (T) is
 # known, and substituted only into the Pi-family template's `__PIRESUME__`
 # placeholder; an empty value leaves every other launch byte-identical.
@@ -5341,5 +5519,8 @@ SPAWN_ACCOUNT=
 [ -z "$WORKER_ACCOUNT" ] || SPAWN_ACCOUNT=" account=$WORKER_ACCOUNT_DECLARED"
 [ -z "$WORKER_ACCOUNT_PROVIDER" ] || SPAWN_ACCOUNT="$SPAWN_ACCOUNT account_provider=$WORKER_ACCOUNT_PROVIDER"
 # Opt-in fleet activity ledger (docs/fleet-ledger.md); off costs one file test.
-[ ! -e "$CONFIG/fleet-ledger" ] || [ "$RELAUNCH" -eq 1 ] || FM_HOME=$FM_HOME FM_STATE_OVERRIDE=$STATE FM_CONFIG_OVERRIDE=$CONFIG "$SCRIPT_DIR/fm-fleet-ledger.sh" dispatched "$ID" "$KIND" "${PROJ_ABS##*/}" "$HARNESS" "$MODEL" || true
-echo "spawned $ID harness=$HARNESS kind=$KIND$SPAWN_DELIVERY window=$META_WINDOW worktree=$WT$SPAWN_ACCOUNT"
+[ ! -e "$CONFIG/fleet-ledger" ] || [ "$RELAUNCH" -eq 1 ] || FM_HOME=$FM_HOME FM_STATE_OVERRIDE=$STATE FM_CONFIG_OVERRIDE=$CONFIG "$SCRIPT_DIR/fm-fleet-ledger.sh" dispatched "$ID" "$KIND" "${PROJ_ABS##*/}" "$HARNESS" "$MODEL" "$SAILOR" || true
+SPAWN_SAILOR=
+[ -z "$SAILOR" ] || SPAWN_SAILOR=" sailor=$SAILOR"
+[ "$SAILOR_SANDBOX" != 1 ] || SPAWN_SAILOR="$SPAWN_SAILOR sandbox=seatbelt"
+echo "spawned $ID harness=$HARNESS kind=$KIND$SPAWN_DELIVERY$SPAWN_SAILOR window=$META_WINDOW worktree=$WT$SPAWN_ACCOUNT"
