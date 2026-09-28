@@ -1,0 +1,5 @@
+### F1 setup: backlog rows with milestone/waters + chart file
+$ fm-fleet-snapshot.sh | jq backlog.records milestone/waters, .charts
+exit=127
+stderr:
+(eval):18: no such file or directory: env -u NO_MISTAKES_GATE -u FM_GATE_REFUSE_BYPASS -u FM_ROOT_OVERRIDE -u FM_STATE_OVERRIDE -u FM_DATA_OVERRIDE -u FM_CONFIG_OVERRIDE -u FM_PROJECTS_OVERRIDE FM_HOME=/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.m7a47V

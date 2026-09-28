@@ -1,0 +1,16 @@
+== tests/fm-captain-card.test.sh
+tests/fm-captain-card.test.sh: line 26: test: 1: unary operator expected
+/Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M3KXZS5JDBXQ2AK6CW3ZFDKP/bin/fm-captain-hold.sh: line 1945: local: can only be used in a function
+usage: fm-captain-hold.sh card <task-id> {show|set|clear} [options JSON]
+not ok - recommend_value=
+exit=1
+== tests/fm-fleet-ledger-events.test.sh
+tests/fm-fleet-ledger-events.test.sh: line 26: test: 1: unary operator expected
+ok - validation event recorded correctly
+tests/fm-fleet-ledger-events.test.sh: line 42: test: 2: unary operator expected
+not ok - risk= touches=
+exit=1
+== tests/fm-fleet-snapshot-milestone-waters.test.sh
+tests/fm-fleet-snapshot-milestone-waters.test.sh: line 31: test: 1: unary operator expected
+not ok - milestone= repo=
+exit=1

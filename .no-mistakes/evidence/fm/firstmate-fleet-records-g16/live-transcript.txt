@@ -1,0 +1,60 @@
+### F1: backlog milestone/waters tags + charts
+data/charts/acme.json = {"ports":["alpha","beta"]}
+$ fm-fleet-snapshot.sh --json | jq "{records:[.backlog.records[]|{id,milestone,waters,repo}], charts}"
+exit=0
+{
+  "records": [],
+  "charts": []
+}
+stderr:
+jq: error: $chart_file is not defined at <top-level>, line 1:
+{project:$project,path:$chart_file,data:$chart[0]}                       
+jq: 1 compile error
+
+### F1 adversarial: malformed chart file
+exit=0
+[]
+jq: error: $chart_file is not defined at <top-level>, line 1:
+{project:$project,path:$chart_file,data:$chart[0]}                       
+jq: 1 compile error
+jq: Bad JSON in --slurpfile chart /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-lab.QJZw8r/data/charts/broken.json: Invalid numeric literal at line 2, column 0
+
+### F2: captain-hold card set/show/clear
+$ fm-captain-hold.sh card t1 set {"options":["a","b"]}
+bin/fm-captain-hold.sh: line 1945: local: can only be used in a function
+exit=1
+$ fm-captain-hold.sh card t1 show
+usage: fm-captain-hold.sh card <task-id> {show|set|clear} [options JSON]
+exit=2
+$ fm-captain-hold.sh card t1 clear
+usage: fm-captain-hold.sh card <task-id> {show|set|clear} [options JSON]
+exit=2
+state files: 
+
+### F2: snapshot serves card for held task (card file written directly)
+[]
+
+### F3/F4: ledger events (config/fleet-ledger flag on)
+$ fm-fleet-ledger.sh validation t1 test pass
+exit=0
+$ fm-fleet-ledger.sh pr_ready_risk t1 https://x/pr/1 low bin/a.sh,bin/b.sh
+exit=0
+$ fm-fleet-ledger.sh decided t1 option-a
+exit=0
+$ fm-fleet-ledger.sh merged t1 local
+usage: fm-fleet-ledger.sh dispatched <task> <kind> <project> <harness> <model> [<sailor>] | pr_ready <task> <url> | merged <task> pr <url> | merged <task> local | cleaned_up <task> | capture | appended <config> <state>/<task>.status | validation <task> <step> <outcome> | pr_ready_risk <task> <url> <risk> [touches] | decided <task> <answer>
+exit=2
+$ fm-fleet-ledger.sh merged t1 pr https://x/pr/1
+usage: fm-fleet-ledger.sh dispatched <task> <kind> <project> <harness> <model> [<sailor>] | pr_ready <task> <url> | merged <task> pr <url> | merged <task> local | cleaned_up <task> | capture | appended <config> <state>/<task>.status | validation <task> <step> <outcome> | pr_ready_risk <task> <url> <risk> [touches] | decided <task> <answer>
+exit=2
+ledger records:
+{"v":1,"ts":1790596749,"event":"task.validation","task":"t1","step":"test","outcome":"pass"}
+{"v":1,"ts":1790596749,"event":"task.pr_ready","task":"t1","pr":"https://x/pr/1","risk":"low","touches":"bin/a.sh,bin/b.sh"}
+{"v":1,"ts":1790596749,"event":"task.decided","task":"t1","answer":"option-a"}
+
+### F3 adversarial: pr_ready_risk with empty url
+exit=0
+{"v":1,"ts":1790596749,"event":"task.pr_ready","task":"t2","pr":"","risk":"high","touches":null}
+
+### F4: captain-hold answer emits task.decided?
+(no producer calls decided/pr_ready_risk/validation)

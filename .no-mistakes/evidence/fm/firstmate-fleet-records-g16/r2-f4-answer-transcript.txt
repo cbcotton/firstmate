@@ -1,0 +1,5 @@
+ledger task.decided count before: 0
+$ fm-captain-hold.sh answer held1 --decision-file decision.txt
+answered: held1
+answer exit=0
+ledger task.decided count for held1 after: 0

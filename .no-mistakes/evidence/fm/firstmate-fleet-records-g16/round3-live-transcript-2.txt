@@ -1,0 +1,35 @@
+== [with config/fleet-ledger opt-in]
+== Regression: merged local
+usage: fm-fleet-ledger.sh dispatched <task> <kind> <project> <harness> <model> [<sailor>] | pr_ready <task> <url> | merged <task> pr <url> | merged <task> local | cleaned_up <task> | capture | appended <config> <state>/<task>.status | validation <task> <step> <outcome> | pr_ready_risk <task> <url> <risk> [touches] | decided <task> <answer>
+exit=2
+== Regression: merged pr
+usage: fm-fleet-ledger.sh dispatched <task> <kind> <project> <harness> <model> [<sailor>] | pr_ready <task> <url> | merged <task> pr <url> | merged <task> local | cleaned_up <task> | capture | appended <config> <state>/<task>.status | validation <task> <step> <outcome> | pr_ready_risk <task> <url> <risk> [touches] | decided <task> <answer>
+exit=2
+== F3 validation
+exit=0
+== F3 pr_ready_risk
+exit=0
+== F3 adversarial empty url
+exit=0
+== F4 decided (ledger subcommand)
+exit=0
+== ledger file:
+{"v":1,"ts":1790597074,"event":"task.validation","task":"t1","step":"test","outcome":"pass"}
+{"v":1,"ts":1790597074,"event":"task.pr_ready","task":"t1","pr":"https://x/pr/2","risk":"high","touches":"bin/a.sh,bin/b.sh"}
+{"v":1,"ts":1790597074,"event":"task.pr_ready","task":"t2","pr":"","risk":"high","touches":null}
+{"v":1,"ts":1790597074,"event":"task.decided","task":"t1","answer":"option-a"}
+== F4 end-to-end: grep answer path for decided emission
+(no reference to decided in fm-captain-hold.sh)
+== F1 snapshot with backlog tags + manually placed chart; F2 card on held backlog task
+exit=0
+jq: error: $chart_file is not defined at <top-level>, line 1:
+{project:$project,path:$chart_file,data:$chart[0]}                       
+jq: 1 compile error
+jq: Bad JSON in --slurpfile chart /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.lBS6lW/data/charts/broken.json: Invalid numeric literal at line 2, column 0
+-- records:
+[{"id":"t1","milestone":"m9","waters":"shallow","hold_kind":null},{"id":"held1","milestone":null,"waters":null,"hold_kind":"captain"}]
+-- charts:
+[]
+-- any decision card anywhere in snapshot:
+[]
+0

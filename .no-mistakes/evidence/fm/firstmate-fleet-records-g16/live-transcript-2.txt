@@ -1,0 +1,54 @@
+### F1 (retry with sectioned backlog)
+## Queued
+- [ ] ship-a - Feature X (milestone: v2.0) (waters: deep-sea) (repo: acme) (kind: ship)
+- [ ] ship-b - Plain row (repo: acme) (kind: ship)
+- [ ] held-c - Choose route (repo: acme) (kind: captain) (hold: choose a route) (hold-kind: captain)
+(card file state/held-c.decision-card.json written directly, since 'card set' fails)
+exit=0
+{
+  "records": [
+    {
+      "id": "ship-a",
+      "milestone": "v2.0",
+      "waters": "deep-sea",
+      "repo": "acme",
+      "hold_reason": null
+    },
+    {
+      "id": "ship-b",
+      "milestone": null,
+      "waters": null,
+      "repo": "acme",
+      "hold_reason": null
+    },
+    {
+      "id": "held-c",
+      "milestone": null,
+      "waters": null,
+      "repo": "acme",
+      "hold_reason": "choose a route"
+    }
+  ],
+  "charts": [],
+  "task_cards": []
+}
+stderr:
+jq: error: $chart_file is not defined at <top-level>, line 1:
+{project:$project,path:$chart_file,data:$chart[0]}                       
+jq: 1 compile error
+
+### merged regression check: base commit vs change
+base:   $ fm-fleet-ledger.sh merged t9 local
+/tmp/fm-fleet-ledger.base.sh: line 137: /tmp/fm-wake-lib.sh: No such file or directory
+exit=1
+{"v":1,"ts":1790596749,"event":"task.pr_ready","task":"t2","pr":"","risk":"high","touches":null}
+change: $ fm-fleet-ledger.sh merged t9 local
+usage: fm-fleet-ledger.sh dispatched <task> <kind> <project>
+exit=2
+base (ca4ab65): $ fm-fleet-ledger.sh merged t9 local
+exit=0
+{"v":1,"ts":1790596770,"event":"task.merged","task":"t9","via":"local"}
+change (14c37db): $ fm-fleet-ledger.sh merged t10 local
+usage: fm-fleet-ledger.sh dispatched <task> <kind> <project> <harness>
+exit=
+0

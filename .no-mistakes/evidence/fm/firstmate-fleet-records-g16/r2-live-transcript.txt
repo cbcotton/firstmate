@@ -1,0 +1,48 @@
+=== F1: snapshot with milestone/waters rows + data/charts/{acme,broken}.json
+exit=0
+[]
+charts: []
+stderr:
+jq: error: $chart_file is not defined at <top-level>, line 1:
+{project:$project,path:$chart_file,data:$chart[0]}                       
+jq: 1 compile error
+jq: Bad JSON in --slurpfile chart /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.m7a47V/data/charts/broken.json: Invalid numeric literal at line 1, column 4
+
+=== F2: captain-hold card set/show/clear
+bin/fm-captain-hold.sh: line 1945: local: can only be used in a function
+set exit=1
+usage: fm-captain-hold.sh card <task-id> {show|set|clear} [options JSON]
+show exit=2
+usage: fm-captain-hold.sh card <task-id> {show|set|clear} [options JSON]
+clear exit=2
+
+=== F3: ledger validation / pr_ready_risk
+validation exit=0
+pr_ready_risk exit=0
+pr_ready_risk empty-url exit=0
+
+=== F4: ledger decided
+decided exit=0
+
+=== Regression: merged local / merged pr
+usage: fm-fleet-ledger.sh dispatched <task> <kind> <project> <harness> <model> [<sailor>] | pr_ready <task> <url> | merged <task> pr <url> | merged <task> local | cleaned_up <task> | capture | appended <config> <state>/<task>.status | validation <task> <step> <outcome> | pr_ready_risk <task> <url> <risk> [touches] | decided <task> <answer>
+merged local exit=2
+usage: fm-fleet-ledger.sh dispatched <task> <kind> <project> <harness> <model> [<sailor>] | pr_ready <task> <url> | merged <task> pr <url> | merged <task> local | cleaned_up <task> | capture | appended <config> <state>/<task>.status | validation <task> <step> <outcome> | pr_ready_risk <task> <url> <risk> [touches] | decided <task> <answer>
+merged pr exit=2
+
+=== Ledger contents
+/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.m7a47V/state/fleet-ledger.jsonl
+{"event":"task.validation","task":"t1","pr":null,"risk":null,"touches":null,"step":"tests","outcome":"pass","answer":null,"via":null}
+{"event":"task.pr_ready","task":"t1","pr":"https://github.com/x/y/pull/1","risk":"high","touches":"bin/a.sh,bin/b.sh","step":null,"outcome":null,"answer":null,"via":null}
+{"event":"task.pr_ready","task":"t2","pr":"","risk":"high","touches":null,"step":null,"outcome":null,"answer":null,"via":null}
+{"event":"task.decided","task":"t1","pr":null,"risk":null,"touches":null,"step":null,"outcome":null,"answer":"go with option a","via":null}
+
+=== F2 via snapshot: card file for held backlog task held1 (written directly since card cmd fails)
+exit=0
+occurrences of card options in snapshot: 0
+[]
+
+=== F4 wiring: answer a captain call via fm-captain-hold.sh, then check ledger for task.decided
+owes an answer. The invoking agent decides what is genuinely waiting on the
+keyed-answer intake every channel feeds.
+  fm-captain-hold.sh answer <task-id> --decision-file <path> [--release]

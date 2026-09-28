@@ -1,0 +1,25 @@
+=== backlog.md
+# Backlog
+
+## Queued
+- [ ] t1 - Build the thing (repo: acme) (kind: ship) (milestone: m1) (waters: harbor)
+- [ ] t2 - Other thing (repo: acme) (kind: ship)
+- [ ] held1 - Needs captain call (repo: acme) (kind: captain) (since 2026-09-01) (hold: pick option) (hold-kind: captain)
+=== data/charts:
+acme.json: {"ports":["a","b"]}
+broken.json: not json
+=== state/held1.decision-card.json:
+{"options":["a","b"]}
+=== $ fm-fleet-snapshot.sh
+exit=0
+--- backlog records milestone/waters:
+{"id":"t1","milestone":"m1","waters":"harbor","hold_bucket":null}
+{"id":"t2","milestone":null,"waters":null,"hold_bucket":null}
+{"id":"held1","milestone":null,"waters":null,"hold_bucket":"aged"}
+--- .charts: []
+--- objects carrying card "options" anywhere in snapshot: 0
+--- stderr:
+jq: error: $chart_file is not defined at <top-level>, line 1:
+{project:$project,path:$chart_file,data:$chart[0]}                       
+jq: 1 compile error
+jq: Bad JSON in --slurpfile chart /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.m7a47V/data/charts/broken.json: Invalid numeric literal at line 1, column 4

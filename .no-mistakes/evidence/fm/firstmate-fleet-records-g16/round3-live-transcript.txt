@@ -1,0 +1,34 @@
+== LAB=/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.lBS6lW (round 3, commit 14c37db)
+== Regression: ledger merged local
+usage: fm-fleet-ledger.sh dispatched <task> <kind> <project> <harness> <model> [<sailor>] | pr_ready <task> <url> | merged <task> pr <url> | merged <task> local | cleaned_up <task> | capture | appended <config> <state>/<task>.status | validation <task> <step> <outcome> | pr_ready_risk <task> <url> <risk> [touches] | decided <task> <answer>
+exit=2
+== Regression: ledger merged pr url
+usage: fm-fleet-ledger.sh dispatched <task> <kind> <project> <harness> <model> [<sailor>] | pr_ready <task> <url> | merged <task> pr <url> | merged <task> local | cleaned_up <task> | capture | appended <config> <state>/<task>.status | validation <task> <step> <outcome> | pr_ready_risk <task> <url> <risk> [touches] | decided <task> <answer>
+exit=2
+== F3: validation
+exit=0
+== F3: pr_ready_risk
+exit=0
+== F3 adversarial: pr_ready_risk empty url
+exit=0
+== F4: decided
+exit=0
+== ledger contents
+== F2: card set
+bin/fm-captain-hold.sh: line 1945: local: can only be used in a function
+exit=1
+== F2: card show
+usage: fm-captain-hold.sh card <task-id> {show|set|clear} [options JSON]
+exit=2
+== F2: card clear
+usage: fm-captain-hold.sh card <task-id> {show|set|clear} [options JSON]
+exit=2
+== F1: charts
+jq: error: $chart_file is not defined at <top-level>, line 1:
+{project:$project,path:$chart_file,data:$chart[0]}                       
+jq: 1 compile error
+jq: Bad JSON in --slurpfile chart /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.lBS6lW/data/charts/broken.json: Invalid numeric literal at line 2, column 0
+exit=0
+[]
+== F1: milestone/waters keys present in records?
+[]
