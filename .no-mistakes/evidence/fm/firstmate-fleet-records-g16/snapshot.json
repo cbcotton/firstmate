@@ -1,0 +1,265 @@
+{
+  "schema": "fm-fleet-snapshot.v1",
+  "generated": "2026-09-28T12:23:42Z",
+  "fm_home": "/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.04uCou",
+  "roots": {
+    "fm_root": "/Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M3KZCFNJDHDRBRYH3QQYYK97",
+    "state": "/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.04uCou/state",
+    "data": "/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.04uCou/data",
+    "config": "/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.04uCou/config",
+    "projects": "/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.04uCou/projects"
+  },
+  "backlog": {
+    "path": "/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.04uCou/data/backlog.md",
+    "present": true,
+    "records": [
+      {
+        "order": 1,
+        "state": "queued",
+        "structured": true,
+        "id": "chart-task",
+        "checked": false,
+        "title": "Build feature X (milestone: v2.0) (waters: deep-sea)",
+        "repo": "acme/app",
+        "kind": null,
+        "priority": "high",
+        "milestone": "v2.0",
+        "waters": "deep-sea",
+        "hold_reason": null,
+        "hold_kind": null,
+        "hold_until": null,
+        "hold_set": null,
+        "blocked_by": null,
+        "blocked_by_ids": [],
+        "blocked_reason": null,
+        "since": null,
+        "merged": null,
+        "reported": null,
+        "done": null,
+        "completion": {
+          "verb": null,
+          "date": null
+        },
+        "links": [],
+        "pr_url": null,
+        "report_path": null,
+        "local_note": null,
+        "raw": "- [ ] chart-task - Build feature X (milestone: v2.0) (waters: deep-sea) (priority: high) (repo: acme/app)",
+        "body_lines": [],
+        "body_excerpt": null,
+        "unresolved_blocker_ids": [],
+        "current_role": "queued",
+        "requires_child_metadata": false,
+        "hold_age_days": null,
+        "hold_bucket": null,
+        "captain_actionable": false
+      },
+      {
+        "order": 2,
+        "state": "queued",
+        "structured": true,
+        "id": "plain-task",
+        "checked": false,
+        "title": "No tags",
+        "repo": "acme/app",
+        "kind": null,
+        "priority": null,
+        "milestone": null,
+        "waters": null,
+        "hold_reason": null,
+        "hold_kind": null,
+        "hold_until": null,
+        "hold_set": null,
+        "blocked_by": null,
+        "blocked_by_ids": [],
+        "blocked_reason": null,
+        "since": null,
+        "merged": null,
+        "reported": null,
+        "done": null,
+        "completion": {
+          "verb": null,
+          "date": null
+        },
+        "links": [],
+        "pr_url": null,
+        "report_path": null,
+        "local_note": null,
+        "raw": "- [ ] plain-task - No tags (repo: acme/app)",
+        "body_lines": [],
+        "body_excerpt": null,
+        "unresolved_blocker_ids": [],
+        "current_role": "queued",
+        "requires_child_metadata": false,
+        "hold_age_days": null,
+        "hold_bucket": null,
+        "captain_actionable": false
+      }
+    ]
+  },
+  "tasks": [
+    {
+      "id": "held-task",
+      "kind": "ship",
+      "harness": "claude",
+      "mode": "ship",
+      "yolo": "off",
+      "branch": null,
+      "project": "acme",
+      "spawn_gen": null,
+      "backend": "tmux",
+      "remote": null,
+      "paths": {
+        "meta": {
+          "path": "/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.04uCou/state/held-task.meta",
+          "present": true
+        },
+        "status_log": {
+          "path": "/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.04uCou/state/held-task.status",
+          "present": true,
+          "kind": "event_history",
+          "last_event": {
+            "state": "needs-decision",
+            "note": "choose an API shape",
+            "raw": "needs-decision [key=api]: choose an API shape",
+            "age_seconds": null
+          }
+        },
+        "worktree": {
+          "path": "/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.04uCou/projects/acme-wt",
+          "present": false
+        },
+        "home": {
+          "path": null,
+          "present": false
+        },
+        "report": {
+          "path": "/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.04uCou/data/held-task/report.md",
+          "present": false
+        }
+      },
+      "secondmate_projects": [],
+      "current_state": {
+        "state": "unknown",
+        "source": "none",
+        "detail": "worktree gone (torn down?)",
+        "raw": "state: unknown · source: none · worktree gone (torn down?)",
+        "observed_at": "2026-09-28T12:23:42Z",
+        "freshness": "fresh"
+      },
+      "endpoint": {
+        "target": "firstmate:fm-held-task",
+        "exists": true,
+        "agent_alive": "not_checked",
+        "status": "unknown",
+        "observed_at": "2026-09-28T12:23:42Z",
+        "freshness": "fresh"
+      },
+      "pr": {
+        "url": null,
+        "source": "absent",
+        "head": null
+      },
+      "hints": {
+        "pending_decision": true,
+        "blocked_event": false,
+        "open_decisions": [
+          {
+            "key": "api",
+            "verb": "needs-decision",
+            "summary": "choose an API shape"
+          }
+        ],
+        "scout_report_present": false,
+        "last_event_text": "needs-decision [key=api]: choose an API shape",
+        "decision_card": {
+          "options": [
+            "approve",
+            "reject"
+          ],
+          "recommend_value": "approve"
+        }
+      },
+      "actions": {
+        "watch": "bin/fm-peek.sh fm-held-task",
+        "steer": "bin/fm-send.sh fm-held-task '<instruction>'",
+        "return_channel_note": null
+      },
+      "backlog": null
+    }
+  ],
+  "main_inventory": {
+    "valid": true,
+    "reason": null,
+    "orphan_in_flight": [],
+    "unstructured_current_count": 0
+  },
+  "contributions": {
+    "known": 0,
+    "checked": 0,
+    "counts": {
+      "captain": 0,
+      "fleet": 0,
+      "maintainer": 0,
+      "nobody": 0
+    },
+    "unmeasured": 0,
+    "complete": true,
+    "proven_clear": true,
+    "stale_verdicts": 0,
+    "missing_verdicts": 0,
+    "unreadable_records": 0,
+    "valid_until": 900,
+    "captain": [],
+    "captain_omitted": 0
+  },
+  "scout_reports": [],
+  "charts": [
+    {
+      "project": "acme",
+      "path": "/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.04uCou/data/charts/acme.json",
+      "data": {
+        "ports": [
+          "v2.0"
+        ],
+        "waters": [
+          "deep-sea"
+        ]
+      }
+    }
+  ],
+  "secondmate_current": {
+    "registry": {
+      "present": false,
+      "available": true,
+      "complete": true,
+      "reason": null,
+      "provenance": "registered-table",
+      "path": "/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.04uCou/data/secondmates.md",
+      "freshness": {
+        "status": "fresh",
+        "observed_at": "2026-09-28T12:23:42Z"
+      },
+      "records": [],
+      "input_truncated": false,
+      "records_truncated": false,
+      "reasons": [],
+      "lines_in_window": 0,
+      "records_in_window": 0
+    },
+    "records": [],
+    "total_registered": 0,
+    "total": 0,
+    "shown": 0,
+    "truncated": 0
+  },
+  "secondmate_landed": {
+    "records": [],
+    "truncated": [],
+    "unreadable": [],
+    "partial": []
+  },
+  "secondmate_guidance": {
+    "note": "For kind=secondmate, bearings selects validated structured state from that registered home; parent events and bounded terminal evidence are fallback-only supplements and never current-state authority."
+  }
+}

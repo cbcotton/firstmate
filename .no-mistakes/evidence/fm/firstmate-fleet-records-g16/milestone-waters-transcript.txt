@@ -1,0 +1,24 @@
+## F1: backlog rows with milestone/waters tags (data/backlog.md):
+## Queued
+- [ ] chart-task - Build feature X (milestone: v2.0) (waters: deep-sea) (priority: high) (repo: acme/app)
+- [ ] plain-task - No tags (repo: acme/app)
+$ bin/fm-fleet-snapshot.sh --json | jq '[.backlog.records[] | {id,repo,priority,milestone,waters,title}]'
+  -> rc=0
+[
+  {
+    "id": "chart-task",
+    "repo": "acme/app",
+    "priority": "high",
+    "milestone": "v2.0",
+    "waters": "deep-sea",
+    "title": "Build feature X (milestone: v2.0) (waters: deep-sea)"
+  },
+  {
+    "id": "plain-task",
+    "repo": "acme/app",
+    "priority": null,
+    "milestone": null,
+    "waters": null,
+    "title": "No tags"
+  }
+]

@@ -1,0 +1,17 @@
+=== tests/fm-fleet-snapshot-view.test.sh
+ok - milestone and waters tags parse and are stripped from the title
+ok - fleet view renders secondmate agent liveness
+ok - milestone and waters tags parse and are stripped from the title
+exit=0
+=== tests/fm-captain-card.test.sh
+ok - decision card cleared
+not ok - recomm=
+exit=1
+=== tests/fm-fleet-ledger-events.test.sh
+ok - validation event recorded correctly
+not ok - risk= touches=
+exit=1
+=== tests/fm-fleet-snapshot-milestone-waters.test.sh
+not ok - milestone= repo=
+not ok - milestone= repo=
+exit=1

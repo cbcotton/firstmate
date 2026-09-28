@@ -1,0 +1,12 @@
+## F2: held task (idle, open needs-decision) with a stored card
+{"id":"held-task","state":"parked","pending":true,"decision_card":{"question":"Which API shape?","options":["REST","GraphQL"],"recommend_value":"REST"}}
+## F2: after card clear
+{"id":"held-task","state":"parked","pending":true,"decision_card":null}
+## F2 adversarial: malformed card JSON stored (validation declined earlier) -> snapshot behaviour
+set exit=0
+snapshot exit=0
+jq: invalid JSON text passed to --argjson
+Use jq --help for help with command-line options,
+jq: invalid JSON text passed to --argjson
+Use jq --help for help with command-line options,
+or see the jq manpage, or online docs  at https://jqlang.github.io/jq

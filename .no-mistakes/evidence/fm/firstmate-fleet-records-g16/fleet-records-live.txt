@@ -1,0 +1,70 @@
+## F1: tagged backlog row + chart
+$ fm-fleet-snapshot.sh --json | jq {records,charts}
+{
+  "records": [
+    {
+      "id": "chart-task",
+      "title": "Build feature X",
+      "milestone": "v2.0",
+      "waters": "deep-sea",
+      "priority": "high",
+      "repo": "acme/app"
+    },
+    {
+      "id": "plain-task",
+      "title": "Untagged work",
+      "milestone": null,
+      "waters": null,
+      "priority": null,
+      "repo": "acme/app"
+    }
+  ],
+  "charts": [
+    {
+      "project": "acme",
+      "path": "/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.xB8h6c/data/charts/acme.json",
+      "data": {
+        "ports": [
+          "a",
+          "b"
+        ],
+        "course": "north"
+      }
+    }
+  ]
+}
+exit=
+## F1 adversarial: malformed chart
+exit=0
+jq: Bad JSON in --slurpfile chart /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.xB8h6c/data/charts/bad.json: Invalid numeric literal at line 1, column 5
+["acme"]
+## F2: card set/show/clear
+set exit=0
+{"question":"Ship?","options":["approve","reject"],"recommend_value":"approve"}
+show exit=0
+clear exit=0
+null
+## F2 adversarial
+fm-captain-hold: bad task id ../x
+traversal exit=2
+ls: /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.xB8h6c/x.decision-card.json: No such file or directory
+fm-captain-hold: unknown card action frob
+unknown exit=2
+usage: fm-captain-hold.sh card <task-id> {show|set|clear} [options JSON]
+missing-action exit=2
+## F3/F4 ledger
+validation exit=0
+pr_ready_risk exit=0
+pr_ready_risk(no touches) exit=0
+decided exit=0
+pr_ready exit=0
+merged local exit=0
+merged pr exit=0
+## adversarial ledger
+usage: fm-fleet-ledger.sh dispatched <task> <kind> <project> <harness> <model> [<sailor>] | pr_ready <task> <url> | merged <task> pr <url> | merged <task> local | cleaned_up <task> | capture | appended <config> <state>/<task>.status | validation <task> <step> <outcome> | pr_ready_risk <task> <url> <risk> [touches] | decided <task> <answer>
+validation missing arg exit=2
+usage: fm-fleet-ledger.sh dispatched <task> <kind> <project> <harness> <model> [
+decided empty exit=
+pr_ready_risk empty url exit=0
+--- ledger file(s) ---
+(eval):40: no matches found: /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.xB8h6c/state/*ledger*.jsonl

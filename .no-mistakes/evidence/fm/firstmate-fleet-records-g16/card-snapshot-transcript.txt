@@ -1,0 +1,62 @@
+## F2: decision card store/show/clear
+$ bin/fm-captain-hold.sh card held-task set {"options":["approve","reject"],"recommend_value":"approve"}
+  -> rc=0
+$ bin/fm-captain-hold.sh card held-task show
+{"options":["approve","reject"],"recommend_value":"approve"}
+  -> rc=0
+$ bin/fm-captain-hold.sh card other set {"options":["A"]}
+  -> rc=0
+$ bin/fm-captain-hold.sh card other clear
+  -> rc=0
+$ bin/fm-captain-hold.sh card other show
+null
+  -> rc=0
+## F2 adversarial
+$ bin/fm-captain-hold.sh card ../escape set {"x":1}
+fm-captain-hold: bad task id ../escape
+  -> rc=2
+ls: /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.04uCou/escape.decision-card.json: No such file or directory
+$ bin/fm-captain-hold.sh card held-task bogus
+fm-captain-hold: unknown card action bogus
+  -> rc=2
+$ bin/fm-captain-hold.sh card held-task
+usage: fm-captain-hold.sh card <task-id> {show|set|clear} [options JSON]
+  -> rc=2
+
+## Fixtures: held task meta+needs-decision, backlog with milestone/waters, chart
+$ bin/fm-fleet-snapshot.sh --json | jq '{records, charts, card}'
+  -> rc=0
+{
+  "backlog_records": [],
+  "charts": [
+    {
+      "project": "acme",
+      "path": "<LAB>/data/charts/acme.json",
+      "data": {
+        "ports": [
+          "v2.0"
+        ],
+        "waters": [
+          "deep-sea"
+        ]
+      }
+    }
+  ],
+  "held_task": {
+    "id": "held-task",
+    "pending_decision": true,
+    "decision_card": {
+      "options": [
+        "approve",
+        "reject"
+      ],
+      "recommend_value": "approve"
+    }
+  }
+}
+
+## F1 adversarial: malformed chart file
+  -> rc=0
+stderr:
+jq: Bad JSON in --slurpfile chart /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.04uCou/data/charts/broken.json: Invalid numeric literal at line 1, column 5
+["acme"]

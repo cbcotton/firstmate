@@ -1,0 +1,30 @@
+## Ledger (F3, F4, merged regression) — config/fleet-ledger enabled
+$ bin/fm-fleet-ledger.sh merged t1 local
+  -> rc=0
+$ bin/fm-fleet-ledger.sh merged t1 pr https://x/pr/1
+  -> rc=0
+$ bin/fm-fleet-ledger.sh validation t1 test pass
+  -> rc=0
+$ bin/fm-fleet-ledger.sh pr_ready_risk t1 https://x/pr/1 high bin/a.sh,bin/b.sh
+  -> rc=0
+$ bin/fm-fleet-ledger.sh pr_ready t1 https://x/pr/1
+  -> rc=0
+$ bin/fm-fleet-ledger.sh decided t1 approve
+  -> rc=0
+## adversarial
+$ bin/fm-fleet-ledger.sh pr_ready_risk t2  high
+  -> rc=0
+$ bin/fm-fleet-ledger.sh validation t1 test
+usage: fm-fleet-ledger.sh dispatched <task> <kind> <project> <harness> <model> [<sailor>] | pr_ready <task> <url> | merged <task> pr <url> | merged <task> local | cleaned_up <task> | capture | appended <config> <state>/<task>.status | validation <task> <step> <outcome> | pr_ready_risk <task> <url> <risk> [touches] | decided <task> <answer>
+  -> rc=2
+$ bin/fm-fleet-ledger.sh decided ../x approve
+usage: fm-fleet-ledger.sh dispatched <task> <kind> <project> <harness> <model> [<sailor>] | pr_ready <task> <url> | merged <task> pr <url> | merged <task> local | cleaned_up <task> | capture | appended <config> <state>/<task>.status | validation <task> <step> <outcome> | pr_ready_risk <task> <url> <risk> [touches] | decided <task> <answer>
+  -> rc=2
+--- state/fleet-ledger.jsonl:
+{"v":1,"event":"task.merged","task":"t1","via":"local"}
+{"v":1,"event":"task.merged","task":"t1","via":"pr","pr":"https://x/pr/1"}
+{"v":1,"event":"task.validation","task":"t1","step":"test","outcome":"pass"}
+{"v":1,"event":"task.pr_ready","task":"t1","pr":"https://x/pr/1","risk":"high","touches":"bin/a.sh,bin/b.sh"}
+{"v":1,"event":"task.pr_ready","task":"t1","pr":"https://x/pr/1"}
+{"v":1,"event":"task.decided","task":"t1","answer":"approve"}
+{"v":1,"event":"task.pr_ready","task":"t2","pr":"","risk":"high","touches":null}

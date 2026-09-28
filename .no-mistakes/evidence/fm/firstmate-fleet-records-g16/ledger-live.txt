@@ -1,0 +1,23 @@
+## F3/F4 ledger (config/fleet-ledger opt-in on)
+validation exit=0
+pr_ready_risk exit=0
+pr_ready_risk(no touches) exit=0
+decided exit=0
+## regression: existing commands
+pr_ready exit=0
+merged local exit=0
+merged pr exit=0
+## adversarial
+validation missing outcome exit=2
+decided empty answer exit=2
+decided bad task exit=2
+pr_ready_risk empty url exit=0 (known, previously declined)
+--- state/fleet-ledger.jsonl ---
+{"v":1,"event":"task.validation","task":"t1","step":"test","outcome":"pass"}
+{"v":1,"event":"task.pr_ready","task":"t1","pr":"https://github.com/o/r/pull/1","risk":"high","touches":"bin/a.sh,bin/b.sh"}
+{"v":1,"event":"task.pr_ready","task":"t1","pr":"https://github.com/o/r/pull/2","risk":"low","touches":null}
+{"v":1,"event":"task.decided","task":"t1","answer":"approve"}
+{"v":1,"event":"task.pr_ready","task":"t1","pr":"https://github.com/o/r/pull/3"}
+{"v":1,"event":"task.merged","task":"t1","via":"local"}
+{"v":1,"event":"task.merged","task":"t1","via":"pr","pr":"https://github.com/o/r/pull/3"}
+{"v":1,"event":"task.pr_ready","task":"t1","pr":"","risk":"high","touches":null}
