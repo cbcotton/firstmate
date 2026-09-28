@@ -100,7 +100,11 @@ session_stamp() {
   pid=$(head -1 "$LOCK_FILE" 2>/dev/null)
   case "$pid" in '' | *[!0-9]*) return 0 ;; esac
   kill -0 "$pid" 2>/dev/null || return 0
-  mtime=$(stat -f %m "$LOCK_FILE" 2>/dev/null || stat -c %Y "$LOCK_FILE" 2>/dev/null) || return 0
+  if [ "$(uname -s 2>/dev/null || true)" = Darwin ]; then
+    mtime=$(/usr/bin/stat -f %m "$LOCK_FILE" 2>/dev/null) || return 0
+  else
+    mtime=$(stat -c %Y "$LOCK_FILE" 2>/dev/null) || return 0
+  fi
   printf '%s@%s\n' "$pid" "$mtime"
 }
 
