@@ -38,8 +38,10 @@
 # project that hold credentials, system or shell configuration, Git
 # configuration, a command directory on PATH, a whole home or
 # filesystem root, or this firstmate home; and shell patterns for privilege
-# escalation, a wildcard in the command or subcommand position, a shell,
-# interpreter, or command runner, pushing with force, deletion, or a wildcard; branch, tag, or
+# escalation, a leading environment assignment, a shell, interpreter, or
+# command or package runner, Git global options or configuration, a wildcard
+# that does not follow a literal program and subcommand (bash_shape_reason),
+# pushing with force, deletion, or a wildcard; branch, tag, or
 # history deletion; merging; recursive or out-of-copy deletion; credential or
 # keychain access; system configuration; network tools; global installs or
 # running downloaded code; fleet, permission, or sandbox control; and anything
@@ -111,10 +113,67 @@ read_words() {  # <path>
   [ -n "$(tr -d '[:space:]' <"$1")" ] || die "--words-file holds only whitespace; record the captain's actual words"
 }
 
+# bash_shape_reason <lowercased pattern>: why a shell allow's shape can run
+# commands it does not name, or nothing when it cannot. A pattern with a
+# wildcard (`*` or `?`) must spell a literal program word and a literal
+# subcommand word before it; any other allow is one exact command.
+bash_shape_reason() {
+  local pat=$1 prefix head sub partial runner
+  local -a w=() pw=()
+  set -f
+  read -r -a w <<<"$pat"
+  set +f
+  head=${w[0]:-}
+  sub=${w[1]:-}
+  case "$head" in
+    *=*) echo "an environment assignment before the command can change what it runs"; return ;;
+  esac
+  case "${head##*/}" in
+    sh | bash | zsh | dash | ksh | fish | csh | tcsh | python | python[0-9]* | node | deno | bun | bunx | perl | ruby | php | lua | osascript | awk | gawk | \
+      env | xargs | find | make | gmake | command | exec | eval | source | . | nohup | nice | timeout | time | watch | caffeinate | script | arch | stdbuf | \
+      npx | uvx | pipx)
+      echo "a shell, interpreter, or command runner runs any command it is given"; return ;;
+  esac
+  for runner in "npm exec" "npm x" "pnpm exec" "pnpm dlx" "yarn dlx" "yarn exec"; do
+    [ "$head $sub" != "$runner" ] || { echo "a package runner runs any command it is given"; return; }
+  done
+  if [ "${head##*/}" = git ]; then
+    case "$sub" in
+      -*) echo "a Git global option can change what any Git command runs"; return ;;
+      config) echo "Git configuration can make any later Git command run arbitrary code"; return ;;
+    esac
+  fi
+  case "$pat" in *[*?]*) ;; *) return ;; esac
+  prefix=${pat%%[*?]*}
+  set -f
+  read -r -a pw <<<"$prefix"
+  set +f
+  if [ "${#pw[@]}" -lt 2 ]; then
+    echo "a wildcard allow must name its program and subcommand before the first wildcard; grant the exact command otherwise"; return
+  fi
+  case "${pw[1]}" in -*) echo "a wildcard allow must name a subcommand, not an option, before the first wildcard"; return ;; esac
+  partial=0
+  if [ "${#pw[@]}" -eq 2 ]; then
+    case "$prefix" in *[[:space:]]) ;; *) partial=1 ;; esac
+  fi
+  if [ "$partial" = 1 ]; then
+    [ "${head##*/}" != git ] || { echo "a partial Git subcommand matches every Git subcommand it begins; grant the whole subcommand"; return; }
+    for runner in "npm exec" "npm x" "pnpm exec" "pnpm dlx" "yarn dlx" "yarn exec"; do
+      case "$runner" in "$head ${pw[1]}"*) echo "a partial subcommand that can match a package runner is never granted"; return ;; esac
+    done
+  fi
+  if [ "${head##*/}" = git ]; then
+    case "${pw[1]}" in
+      push | branch | tag | reflog | update-ref | filter-branch | filter-repo | remote | stash | gc | prune | worktree | clean)
+        echo "a wildcard over git ${pw[1]} reaches its deleting or rewriting forms; grant one exact command"; return ;;
+    esac
+  fi
+}
+
 # refusal_reason <permission> <pattern>: why an allow can never be pre-granted,
 # or nothing when it can.
 refusal_reason() {
-  local perm=$1 pat=$2 lower home_re head sub
+  local perm=$1 pat=$2 lower home_re reason
   lower=$(printf '%s' "$pat" | tr '[:upper:]' '[:lower:]')
   case "$lower" in
     *anthropic* | *claude*) echo "nothing that names Anthropic or Claude may be granted"; return ;;
@@ -139,16 +198,8 @@ refusal_reason() {
     *) return ;;
   esac
   [ "$pat" != '*' ] || { echo "a blanket shell allow is never granted"; return; }
-  head=$(printf '%s\n' "$lower" | awk '{print $1}')
-  sub=$(printf '%s\n' "$lower" | awk '{print $2}')
-  case "$head $sub" in
-    *[*?]*) echo "a wildcard in the command or subcommand position allows every command it matches; grant the exact command"; return ;;
-  esac
-  case "${head##*/}" in
-    sh | bash | zsh | dash | ksh | fish | csh | tcsh | python | python[0-9]* | node | deno | bun | perl | ruby | php | lua | osascript | awk | gawk | \
-      env | xargs | find | make | gmake | command | exec | eval | source | . | nohup | nice | timeout | time | watch)
-      echo "a shell, interpreter, or command runner runs any command it is given"; return ;;
-  esac
+  reason=$(bash_shape_reason "$lower")
+  [ -z "$reason" ] || { echo "$reason"; return; }
   if printf '%s\n' "$lower" | grep -Eq '(^|[;&|( ])(sudo|su|doas)( |$)'; then echo "privilege escalation is never granted"; return; fi
   if printf '%s\n' "$lower" | grep -Eq 'git +push'; then
     if printf '%s\n' "$lower" | grep -Eq -- '--force|(^| )-f( |$)|--mirror|--delete|(^| )-d( |$)|(^| )\+|\*'; then

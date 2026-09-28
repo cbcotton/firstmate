@@ -168,7 +168,8 @@ test_real_opencode_honors_the_restricted_profile() {
   status_result=$(jq -r 'select(.results == 10) | .last' "$case_dir/model.log" | tail -1)
   [ -n "$status_result" ] || guard_fail "the bare git status step never returned a result"
   case "$status_result" in
-    *"prevents you from using this specific tool call"*) guard_fail "a bare git status must be allowed, but was denied" ;;
+    *"On branch main"*) ;;
+    *) guard_fail "a bare git status must be allowed and print its output, but the model received: ${status_result:0:300}" ;;
   esac
   pass "opencode $OPENCODE_VERSION honors the restricted profile: edits, commits, a bare git status and the worker protocol run; a push, a compound's denied half, an outside read, and git diff --output do not"
 }

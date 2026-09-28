@@ -133,6 +133,22 @@ bash|bin/fm-permission-grant.sh grant
 bash|claude -p hi
 bash|git *
 bash|git b*
+bash|git --no-pager *
+bash|git -c *
+bash|git -C . *
+bash|git config *
+bash|git config user.name x
+bash|git branch *
+bash|FOO=1 bash *
+bash|FOO=1 npm test
+bash|npm exec *
+bash|npm e*
+bash|pnpm dlx *
+bash|yarn dlx *
+bash|caffeinate -i npm test
+bash|stdbuf -o0 npm test
+bash|npm -w app *
+bash|ls *
 bash|g* status
 bash|sh -c *
 bash|bash scripts/x.sh
@@ -174,6 +190,9 @@ test_ordinary_grants_and_every_deny_are_accepted() {
     expect_code 0 "$status" "allow $perm '$pat' must be accepted: $out"
   done <<'ROWS'
 bash|npm test *
+bash|npm test*
+bash|npm run lint*
+bash|git log *
 bash|git status --short
 bash|npm install
 bash|git push origin fm/task-x
