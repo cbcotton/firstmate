@@ -154,7 +154,7 @@ bash_shape_reason() {
     *) pw=() ;;
   esac
   first=${pw[0]:-}
-  case "${first##*/} ${pw[1]:-}" in
+  case "$first ${pw[1]:-}" in
     git\ log | git\ diff | git\ show | git\ status | git\ add | git\ commit | git\ rev-parse | git\ blame | git\ ls-files | git\ shortlog | git\ describe) ;;
     *) echo "a wildcard allow is granted only over git log, diff, show, status, add, commit, rev-parse, blame, ls-files, shortlog, or describe; grant one exact command otherwise"; return ;;
   esac

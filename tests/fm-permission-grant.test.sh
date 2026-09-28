@@ -100,6 +100,30 @@ test_protocol_rules_still_come_last() {
   pass "the worker's own protocol commands stay allowed after every grant"
 }
 
+# resolve <profile-json> <command>: the bash action OpenCode applies, by its own
+# matching rule: `*` matches any text, a trailing " *" is optional, and the
+# last matching rule in order wins.
+resolve() {
+  printf '%s' "$1" | jq -r --arg cmd "$2" '
+    def glob2re: gsub("(?<c>[.+^${}()|\\[\\]\\\\?])"; "\\\(.c)") | gsub("\\*"; ".*")
+      | if endswith(" .*") then .[:-3] + "( .*)?" else . end;
+    [.bash | to_entries[] | select(.key as $k | $cmd | test("^" + ($k | glob2re) + "$"; "s"))] | last | .value'
+}
+
+test_granted_git_wildcards_never_lift_the_output_deny() {
+  local sub profile
+  make_home output
+  for sub in log diff show shortlog; do
+    run_grant grant --scope task --task t1 --permission bash --pattern "git $sub *" --action allow --words-file "$WORDS" --channel chat >/dev/null
+  done
+  profile=$(compose)
+  for sub in log diff show shortlog; do
+    assert_equals allow "$(resolve "$profile" "git $sub -1")" "a git $sub * grant must allow git $sub"
+    assert_equals deny "$(resolve "$profile" "git $sub -1 --output=x")" "a git $sub * grant must leave git $sub --output denied"
+  done
+  pass "a granted Git wildcard allows its subcommand but never lifts the --output deny"
+}
+
 test_refused_classes_are_never_granted() {
   local perm pat out status n=0
   make_home refuse
@@ -155,6 +179,9 @@ bash|git switch *
 bash|git rebase *
 bash|git replace *
 bash|git pull *
+bash|/usr/bin/git diff *
+bash|./git log *
+bash|tools/git diff *
 bash|uv run *
 bash|bundle exec *
 bash|/opt/homebrew/bin/npm exec *
@@ -211,7 +238,6 @@ test_ordinary_grants_and_every_deny_are_accepted() {
 bash|npm test
 bash|npm install
 bash|git log *
-bash|/usr/bin/git diff *
 bash|git status --short
 bash|npm install
 bash|git push origin fm/task-x
@@ -250,6 +276,7 @@ test_task_grant_does_not_follow_a_reused_task_id
 test_session_grant_ends_with_the_session
 test_later_narrowing_wins_and_revoke_removes
 test_protocol_rules_still_come_last
+test_granted_git_wildcards_never_lift_the_output_deny
 test_refused_classes_are_never_granted
 test_ordinary_grants_and_every_deny_are_accepted
 test_words_channel_and_scope_are_required

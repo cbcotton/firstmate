@@ -24,6 +24,8 @@
 #   1. the baseline, whose catch-all "*": "deny" comes first;
 #   2. every permission grant in force for the task, oldest first
 #      (bin/fm-permission-grant.sh active), so the captain's latest word wins;
+#   2a. the guard: the deny on a Git command writing its output with --output,
+#      which no grant may lift;
 #   3. the worker protocol: the task's own brief directory, steering inbox, and
 #      status file under external_directory, and the exact shell commands the
 #      brief tells a worker to run against them, last so no grant can break it.
@@ -87,10 +89,13 @@ BASELINE='{
     "git rev-parse *": "allow",
     "git branch --show-current": "allow",
     "no-mistakes axi *": "allow",
-    "git push*": "deny",
-    "git *--output*": "deny"
+    "git push*": "deny"
   }
 }'
+
+# Composed after every grant, so no grant for a Git subcommand that takes
+# --output can move its allow past this deny.
+GUARD='{"bash":{"git *--output*":"deny"}}'
 
 usage() {
   echo "usage: fm-opencode-permissions.sh profile | compose <task-id> | worker-note | baseline" >&2
@@ -197,7 +202,7 @@ cmd_compose() {
   while IFS= read -r layer; do
     [ -z "$layer" ] || layers+=("$layer")
   done < <(printf '%s' "$grants" | jq -c '.[]')
-  layers+=("$(protocol_layer "$id")")
+  layers+=("$GUARD" "$(protocol_layer "$id")")
   compose_layers "${layers[@]}"
 }
 
