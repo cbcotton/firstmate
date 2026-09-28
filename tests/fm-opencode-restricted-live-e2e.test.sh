@@ -108,14 +108,17 @@ test_real_opencode_honors_the_restricted_profile() {
   config_q="'$home/config'"
   flag_q="'$home/config/fleet-ledger'"
   jq -n --arg wt "$wt" --arg status "$status_q" --arg inbox "$inbox_q" \
-    --arg ledger "$ledger_q" --arg config "$config_q" --arg flag "$flag_q" '[
+    --arg ledger "$ledger_q" --arg config "$config_q" --arg flag "$flag_q" \
+    --arg outside_diff "'$case_dir/diff-out.txt'" --arg outside_log "'$case_dir/log-out.txt'" '[
     {tool: "edit", args: {filePath: ($wt + "/a.txt"), oldString: "foo", newString: "bar"}},
     {tool: "bash", args: {command: "git commit -am \"say bar\"", description: "commit"}},
     {tool: "bash", args: {command: "git push origin main", description: "push"}},
     {tool: "bash", args: {command: "git status && rm -f a.txt", description: "compound"}},
     {tool: "bash", args: {command: ("echo \"working [at=1]: probe\" >> " + $status + " && { [ ! -e " + $flag + " ] || " + $ledger + " appended " + $config + " " + $status + " >/dev/null 2>&1 || true; }"), description: "status"}},
     {tool: "bash", args: {command: ("mv " + $inbox + "/001.msg " + $inbox + "/handled/"), description: "acknowledge"}},
-    {tool: "read", args: {filePath: "/etc/hosts"}}
+    {tool: "read", args: {filePath: "/etc/hosts"}},
+    {tool: "bash", args: {command: ("git diff --output=" + $outside_diff + " HEAD~1"), description: "diff output"}},
+    {tool: "bash", args: {command: ("git log > " + $outside_log), description: "log redirect"}}
   ]' > "$case_dir/script.json"
 
   write_scripted_model "$case_dir/model.py"
@@ -157,7 +160,10 @@ test_real_opencode_honors_the_restricted_profile() {
   case "$hosts_result" in
     *localhost*) guard_fail "reading outside the copy must be denied, but the model received /etc/hosts" ;;
   esac
-  pass "opencode $OPENCODE_VERSION honors the restricted profile: edits, commits and the worker protocol run; a push, a compound's denied half, and an outside read do not"
+  # Denied: a Git command writing its output with --output or a redirection.
+  [ ! -e "$case_dir/diff-out.txt" ] || guard_fail "git diff --output must be denied"
+  [ ! -e "$case_dir/log-out.txt" ] || guard_fail "a redirected git log must be denied"
+  pass "opencode $OPENCODE_VERSION honors the restricted profile: edits, commits and the worker protocol run; a push, a compound's denied half, an outside read, and a Git command writing its output elsewhere do not"
 }
 
 test_real_opencode_honors_the_restricted_profile

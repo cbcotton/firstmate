@@ -846,8 +846,9 @@ Any other value, or an unreadable file, refuses every OpenCode crewmate or scout
 An OpenCode secondmate is a firstmate primary in its own home and keeps every tool.
 
 Under `restricted`, a worker may read, search, and edit inside its own copy, make local Git commits and branches, run `no-mistakes axi`, and use its own task's brief directory, status file, and steering inbox exactly as its instructions spell them.
-Everything else is denied: every path outside the copy, `git push`, any other shell command, web fetch and search, and sub-agents.
+Everything else is denied: every path outside the copy, `git push`, a Git command that redirects its output or writes it with `--output`, any other shell command, web fetch and search, and sub-agents.
 OpenCode checks each part of a compound shell command separately, so an allowed first command cannot carry a denied second one.
+A shell pattern cannot rule out a redirection inside an allowed command, such as the status append, so a home selecting `restricted` refuses every [named sailor](#crew-dispatch-profiles-configcrew-dispatchjson) spawn unless the [sailor sandbox](#sailor-sandbox-configsailor-sandbox) is on; this holds in every home, a Privateer home included.
 A denied worker is told, in its launch instructions, to report what it needs as a keyed decision rather than look for another route, so widening a worker's permissions stays the captain's call; [permission grants](#permission-grants-statepermission-grantsjsonl) record that call.
 
 `bin/fm-opencode-permissions.sh` owns the baseline, the composition order, and the worker note; its `compose <task-id>` prints the exact profile a launch would carry.
@@ -890,6 +891,7 @@ A sailor endpoint on this machine is pinned to its port; one on another machine 
 Reads are not confined, and the sandbox is not a boundary against same-user system services that start programs outside it.
 
 A home with the flag refuses a sailor spawn on a machine where `sandbox-exec` cannot run, rather than launching the sailor unconfined; ordinary OpenCode workers on hosted models are unaffected.
+A home selecting the `restricted` OpenCode permission profile requires the flag: without it every sailor spawn is refused.
 The sandboxed OpenCode spends about 75 seconds at startup failing to reach the package registry for its plugin directory before it works normally.
 `bin/fm-sandbox-exec.sh` owns the profile, `bin/fm-spawn.sh` owns the paths and endpoints a sailor launch passes, and `tests/fm-sailor-sandbox-live-e2e.test.sh` re-proves the confinement against the installed OpenCode without model tokens.
 A no-mistakes run from inside the sandbox is not yet verified live; [`verification/local-sailors.md`](verification/local-sailors.md) records what is.

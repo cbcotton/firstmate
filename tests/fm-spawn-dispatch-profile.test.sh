@@ -926,6 +926,30 @@ test_sandbox_that_cannot_run_refuses_the_sailor() {
   pass "a home that asks for the sailor sandbox where it cannot run refuses the sailor spawn"
 }
 
+test_restricted_sailor_requires_the_sandbox() {
+  local rec id out status
+  id=profile-sailor-restricted-x4
+  rec=$(make_spawn_case profile-sailor-restricted opencode "$id")
+  read_case_record "$rec"
+  enable_sailors "$HOME_DIR" "$FAKEBIN_DIR" live
+  fake_sandbox_exec "$FAKEBIN_DIR" 0
+  printf 'restricted\n' > "$HOME_DIR/config/opencode-permission-profile"
+
+  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR" --harness opencode --model qwen-coder --sailor tiller)
+  status=$?
+  expect_code 1 "$status" "a restricted sailor without config/sailor-sandbox must be refused"
+  assert_contains "$out" "requires config/sailor-sandbox" "the refusal must name the missing sandbox flag"
+  [ ! -e "$HOME_DIR/state/$id.meta" ] || fail "a refused spawn must leave no task record"
+  [ ! -s "$LAUNCH_LOG" ] || fail "a refused spawn must launch nothing"
+
+  : > "$HOME_DIR/config/sailor-sandbox"
+  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR" --harness opencode --model qwen-coder --sailor tiller)
+  status=$?
+  expect_code 0 "$status" "a restricted sailor with the sandbox should launch"$'\n'"$out"
+  assert_contains "$out" "sailor=tiller sandbox=seatbelt" "a restricted sailor must launch inside the sandbox"
+  pass "a restricted sailor launches only inside the sailor sandbox"
+}
+
 test_sandbox_leaves_non_sailor_opencode_launches_alone() {
   local rec id out status
   id=profile-oc-nosailor-x3
@@ -1904,6 +1928,7 @@ test_opencode_invalid_permission_profile_refuses_before_endpoint_or_metadata
 test_non_opencode_harness_ignores_the_opencode_permission_profile
 test_sandboxed_sailor_launch_runs_inside_the_sandbox
 test_sandbox_that_cannot_run_refuses_the_sailor
+test_restricted_sailor_requires_the_sandbox
 test_sandbox_leaves_non_sailor_opencode_launches_alone
 test_native_effort_validator_keeps_axes_separate
 test_native_pi_ultra_is_explicit_and_model_scoped

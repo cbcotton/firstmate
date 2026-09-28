@@ -55,7 +55,10 @@ SELECTOR="$CONFIG/opencode-permission-profile"
 # The shipped baseline. Reading and editing inside the task's own copy, the
 # read-only and local-commit Git commands, and the pipeline's own CLI are
 # allowed; everything else, including every path outside the copy, the network
-# tools, sub-agents, and any shell command not listed, is denied.
+# tools, sub-agents, any shell command not listed, and a Git command that
+# redirects its output or writes it with --output, is denied. A shell glob
+# cannot rule out every redirection, so a restricted sailor also needs the
+# sailor sandbox (bin/fm-spawn.sh refuses it without config/sailor-sandbox).
 BASELINE='{
   "*": "deny",
   "read": "allow",
@@ -72,10 +75,10 @@ BASELINE='{
   "doom_loop": "deny",
   "bash": {
     "*": "deny",
-    "git status*": "allow",
-    "git diff*": "allow",
-    "git log*": "allow",
-    "git show*": "allow",
+    "git status *": "allow",
+    "git diff *": "allow",
+    "git log *": "allow",
+    "git show *": "allow",
     "git add *": "allow",
     "git commit *": "allow",
     "git switch -c *": "allow",
@@ -83,7 +86,9 @@ BASELINE='{
     "git rev-parse *": "allow",
     "git branch --show-current": "allow",
     "no-mistakes axi *": "allow",
-    "git push*": "deny"
+    "git push*": "deny",
+    "git *>*": "deny",
+    "git *--output*": "deny"
   }
 }'
 
@@ -153,13 +158,13 @@ protocol_layer() {
       external_directory: ([$status, $status_real, ($inbox + "/*"), ($inbox_real + "/*"), $inbox, $inbox_real, ($brief + "/*"), ($brief_real + "/*")]
         | unique | map({key: ., value: "allow"}) | from_entries),
       bash: {
-        ("echo * >> " + $qstatus + "*"): "allow",
+        ("echo * >> " + $qstatus): "allow",
         ("[ ! -e " + $qflag + " ]"): "allow",
-        ($qledger + " appended " + $qconfig + " " + $qstatus + "*"): "allow",
+        ($qledger + " appended " + $qconfig + " " + $qstatus): "allow",
         ("true"): "allow",
-        ("ls " + $qinbox + "*"): "allow",
-        ("cat " + $qinbox + "/*"): "allow",
-        ("mv " + $qinbox + "/*"): "allow",
+        ("ls " + $qinbox + "/*.msg"): "allow",
+        ("cat " + $qinbox + "/*.msg"): "allow",
+        ("mv " + $qinbox + "/*.msg " + $qinbox + "/handled/"): "allow",
         ("mkdir -p " + $qinbox + "/handled"): "allow"
       }
     }'

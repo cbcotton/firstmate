@@ -102,8 +102,9 @@
 #   commands write, and network only to the sailor's endpoint, the DNS
 #   resolver, and, for a no-mistakes ship, the no-mistakes socket and gate
 #   repository. A home that asks for the sandbox where it cannot run refuses the
-#   sailor spawn rather than launching it unconfined; the record gets
-#   sandbox=seatbelt.
+#   sailor spawn rather than launching it unconfined, and a home selecting the
+#   restricted OpenCode profile refuses every sailor spawn without
+#   config/sailor-sandbox; the record gets sandbox=seatbelt.
 #   --backend <name> is the explicit runtime session-provider backend for this
 #   exact task only (docs/configuration.md "Runtime backend" owns when that flag
 #   is authorized). Without it, the script resolves FM_BACKEND, then
@@ -2404,7 +2405,9 @@ fi
 # in its own home and keeps every tool, as it does today.
 OC_PERMISSION_JSON='{"*":"allow"}'
 OC_WORKER_NOTE=
+OC_PROFILE=allow
 if [ "$HARNESS" = opencode ] && [ "$RAW_LAUNCH" = 0 ] && [ "$KIND" != secondmate ]; then
+  OC_PROFILE=$(FM_HOME="$FM_HOME" FM_CONFIG_OVERRIDE="$CONFIG" "$SCRIPT_DIR/fm-opencode-permissions.sh" profile) || exit 1
   OC_PERMISSION_JSON=$(FM_HOME="$FM_HOME" FM_STATE_OVERRIDE="$STATE" FM_DATA_OVERRIDE="$DATA" FM_CONFIG_OVERRIDE="$CONFIG" \
     "$SCRIPT_DIR/fm-opencode-permissions.sh" compose "$ID") || exit 1
   OC_WORKER_NOTE=$(FM_HOME="$FM_HOME" FM_CONFIG_OVERRIDE="$CONFIG" "$SCRIPT_DIR/fm-opencode-permissions.sh" worker-note) || exit 1
@@ -2434,8 +2437,14 @@ if [ -n "$SAILOR" ]; then
 fi
 # Sailor sandbox (header above; docs/configuration.md "Sailor sandbox"). The
 # wrapper's paths need the task's copy, so only its availability is proven here,
-# before any endpoint, worktree, or record exists.
+# before any endpoint, worktree, or record exists. A restricted sailor always
+# needs it: the profile's shell patterns cannot rule out a redirection that
+# writes outside the copy, so the sandbox is what bounds those writes.
 SAILOR_SANDBOX=0
+if [ -n "$SAILOR" ] && [ "$OC_PROFILE" = restricted ] && [ ! -e "$CONFIG/sailor-sandbox" ]; then
+  echo "error: sailor $SAILOR runs under the restricted OpenCode profile, which requires config/sailor-sandbox; create it to launch restricted sailors inside the sandbox" >&2
+  exit 1
+fi
 if [ -n "$SAILOR" ] && [ -e "$CONFIG/sailor-sandbox" ]; then
   "$SCRIPT_DIR/fm-sandbox-exec.sh" available || {
     echo "error: config/sailor-sandbox asks for the sailor sandbox, but sandbox-exec cannot run on this machine; refusing to launch sailor $SAILOR unconfined" >&2

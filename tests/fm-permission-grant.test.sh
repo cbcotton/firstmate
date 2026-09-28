@@ -95,8 +95,8 @@ test_later_narrowing_wins_and_revoke_removes() {
 
 test_protocol_rules_still_come_last() {
   make_home protocol
-  run_grant grant --scope task --task t1 --permission bash --pattern "mv '$HOME_DIR/state/t1.inbox'/*" --action deny --words-file "$WORDS" --channel chat >/dev/null
-  assert_equals '"allow"' "$(compose | jq -c --arg p "mv '$HOME_DIR/state/t1.inbox'/*" '.bash[$p]')" "the worker protocol must stay usable whatever a grant says"
+  run_grant grant --scope task --task t1 --permission bash --pattern "mv '$HOME_DIR/state/t1.inbox'/*.msg '$HOME_DIR/state/t1.inbox'/handled/" --action deny --words-file "$WORDS" --channel chat >/dev/null
+  assert_equals '"allow"' "$(compose | jq -c --arg p "mv '$HOME_DIR/state/t1.inbox'/*.msg '$HOME_DIR/state/t1.inbox'/handled/" '.bash[$p]')" "the worker protocol must stay usable whatever a grant says"
   pass "the worker's own protocol commands stay allowed after every grant"
 }
 

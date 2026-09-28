@@ -76,8 +76,8 @@ test_restricted_allows_exactly_this_tasks_protocol_paths() {
   assert_equals '"allow"' "$(printf '%s' "$json" | jq -c --arg p "$state/t1.inbox/*" '.external_directory[$p]')" "the task's inbox must be reachable"
   assert_equals '"allow"' "$(printf '%s' "$json" | jq -c --arg p "$data/t1/*" '.external_directory[$p]')" "the task's brief directory must be reachable"
   assert_equals 'null' "$(printf '%s' "$json" | jq -c --arg p "$state/t2.status" '.external_directory[$p]')" "another task's status file must stay denied"
-  assert_equals '"allow"' "$(printf '%s' "$json" | jq -c --arg p "echo * >> '$HOME_DIR/state/t1.status'*" '.bash[$p]')" "the brief's status command must be allowed as the brief spells it"
-  assert_equals '"allow"' "$(printf '%s' "$json" | jq -c --arg p "mv '$HOME_DIR/state/t1.inbox'/*" '.bash[$p]')" "the inbox acknowledgement must be allowed"
+  assert_equals '"allow"' "$(printf '%s' "$json" | jq -c --arg p "echo * >> '$HOME_DIR/state/t1.status'" '.bash[$p]')" "the brief's status command must be allowed as the brief spells it"
+  assert_equals '"allow"' "$(printf '%s' "$json" | jq -c --arg p "mv '$HOME_DIR/state/t1.inbox'/*.msg '$HOME_DIR/state/t1.inbox'/handled/" '.bash[$p]')" "the inbox acknowledgement must be allowed"
   pass "the restricted profile opens exactly this task's status file, inbox, and brief directory"
 }
 

@@ -114,13 +114,16 @@ test_sandboxed_sailor_launch_confines_the_real_opencode() {
   OUTSIDE=$(mktemp -d /private/tmp/fm-sailor-sandbox-outside.XXXXXX)
 
   jq -n --arg wt "$wt" --arg meta "$home/state/$id.meta" --arg status "$home/state/$id.status" \
-    --arg hook "$common/hooks/pre-commit" --arg outside "$OUTSIDE/escaped.txt" --arg q "'" '[
+    --arg hook "$common/hooks/pre-commit" --arg outside "$OUTSIDE/escaped.txt" \
+    --arg outside_redirect "$OUTSIDE/redirected.txt" --arg outside_diff "$OUTSIDE/diff.txt" --arg q "'" '[
     {tool: "edit", args: {filePath: ($wt + "/README.md"), oldString: "project", newString: "sailor"}},
     {tool: "bash", args: {command: "git commit -qam \"sailor edit\"", description: "commit"}},
     {tool: "bash", args: {command: ("echo \"working [at=1]: sandboxed\" >> " + $q + $status + $q + ""), description: "status"}},
     {tool: "bash", args: {command: ("echo escaped > " + $q + $outside + $q + ""), description: "outside"}},
     {tool: "bash", args: {command: ("echo worktree=/ >> " + $q + $meta + $q + ""), description: "task record"}},
     {tool: "bash", args: {command: ("echo exit 0 > " + $q + $hook + $q + ""), description: "hook"}},
+    {tool: "bash", args: {command: ("echo redirected >> " + $q + $status + $q + " > " + $q + $outside_redirect + $q), description: "status redirect"}},
+    {tool: "bash", args: {command: ("git diff --output=" + $q + $outside_diff + $q + " HEAD~1"), description: "diff output"}},
     {tool: "bash", args: {command: "curl -s -m 3 https://example.com/ >/dev/null && echo reached > net-reached.txt; echo ok > sailor-done.txt", description: "network and marker"}}
   ]' > "$case_dir/script.json"
 
@@ -163,12 +166,14 @@ test_sandboxed_sailor_launch_confines_the_real_opencode() {
   assert_equals "sailor edit" "$(git -C "$wt" log -1 --format=%s)" "opencode $OPENCODE_VERSION: a commit must succeed in the sandbox"
   assert_equals "working [at=1]: sandboxed" "$(cat "$home/state/$id.status")" "opencode $OPENCODE_VERSION: the worker's status append must succeed in the sandbox"
   [ ! -e "$OUTSIDE/escaped.txt" ] || guard_fail "a write outside every allowed path must fail"
+  [ ! -e "$OUTSIDE/redirected.txt" ] || guard_fail "a redirection appended to the status command must not write outside the copy"
+  [ ! -e "$OUTSIDE/diff.txt" ] || guard_fail "git diff --output must not write outside the copy"
   ! grep -qx 'worktree=/' "$home/state/$id.meta" || guard_fail "the worker must not be able to rewrite its own task record"
   [ ! -e "$common/hooks/pre-commit" ] || guard_fail "the worker must not be able to plant a Git hook"
   [ ! -e "$wt/net-reached.txt" ] || guard_fail "a connection beyond the sailor's endpoint must fail"
   grep -q opencode-plugin "$home/state/$id.busy-state" 2>/dev/null \
     || guard_fail "firstmate's busy-state plugin must still record the worker's state from inside the sandbox"
-  pass "opencode $OPENCODE_VERSION in a sandboxed sailor launch edits, commits, reports and records its busy state, but cannot write outside, rewrite its record, plant a hook, or reach the network"
+  pass "opencode $OPENCODE_VERSION in a sandboxed sailor launch edits, commits, reports and records its busy state, but cannot write outside (by redirection or git diff --output included), rewrite its record, plant a hook, or reach the network"
 }
 
 test_sandboxed_sailor_launch_confines_the_real_opencode

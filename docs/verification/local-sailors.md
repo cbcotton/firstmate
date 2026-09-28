@@ -67,10 +67,12 @@ The server answers each model request with the next scripted tool call, so the r
 | `edit` of `a.txt` inside the copy | Allowed |
 | `git commit -am "say bar"` | Allowed |
 | `git push origin main` | Denied; the bare remote kept one commit |
-| `git status && rm -f a.txt` | Denied; `a.txt` still exists although `git status*` is allowed |
+| `git status && rm -f a.txt` | Denied; `a.txt` still exists although `git status *` is allowed |
 | The brief's status command against the task's own status file | Allowed; the line was appended |
 | `mv` of the task's inbox message into `handled/` | Allowed |
 | `read` of `/etc/hosts` | Denied; the tool result carried no file contents |
+| `git diff --output=<outside file> HEAD~1` | Denied; the file was not created |
+| `git log > <outside file>` | Denied; the file was not created |
 
 An earlier live run with a local model under the same profile also denied `git log -1; touch inside-probe` inside the copy, although `git log*` is allowed: OpenCode checks each part of a compound command on its own.
 Each guard run took 9 to 16 seconds.
@@ -90,6 +92,8 @@ The sailor's endpoint is a scripted OpenAI-compatible server on a loopback port,
 | Write to a directory under `/private/tmp` outside every allowed path | Denied |
 | Append to the task's own record in `state/` | Denied |
 | Write `pre-commit` into the repository's Git hooks | Denied |
+| The status append followed by `> <outside file>` | Denied; the outside file was not created |
+| `git diff --output=<outside file> HEAD~1` | Denied; the outside file was not created |
 | `curl https://example.com/` | Denied |
 | Firstmate's busy-state plugin recording the worker's state | Allowed |
 
