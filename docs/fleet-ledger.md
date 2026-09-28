@@ -1,6 +1,6 @@
 # Fleet activity ledger
 
-The fleet activity ledger is an opt-in, append-only file that outside tools can read to follow what a firstmate home is doing: which tasks were dispatched, what their workers reported, when a PR became ready for review, when their work merged, and when they were cleaned up.
+The fleet activity ledger is an opt-in, append-only file that outside tools can read to follow what a firstmate home is doing: which tasks were dispatched, what their workers reported, how their validation is going, when a PR became ready for review, what the captain decided, when their work merged, and when they were cleaned up.
 It is the stable, documented hook for firstmate status; this page is its contract.
 
 ## Turning it on and off
@@ -31,21 +31,29 @@ Readers must ignore members and events they do not recognize, so later versions 
 | ------------------ | ---------------------------------------------- | ------------ |
 | `task.dispatched`  | `kind`, `project`, `harness`, `model`, `sailor` | A new worker or second mate is launched. A relaunch of an existing task is not recorded. |
 | `task.status`      | `state`, `key`, `text`                         | A complete, nonblank line in the task's status log is captured. |
-| `task.pr_ready`    | `pr`, plus `risk` and `touches` when written by `pr_ready_risk` | Firstmate records the task's PR as ready for review. |
-| `task.validation`  | `step`, `outcome`                              | `fm-fleet-ledger.sh validation` records a validation step's outcome. |
-| `task.decided`     | `answer`                                       | `fm-fleet-ledger.sh decided` records the captain's answer to a call. |
+| `task.validation`  | `run`, `step`, `outcome`                       | Firstmate reads a new outcome for one step of the task's no-mistakes run. |
+| `task.pr_ready`    | `pr`, `risk`, `touches`                        | Firstmate records the task's PR as ready for review. |
+| `task.decided`     | `answer`                                       | The captain's answer to a task held for them is recorded. |
 | `task.merged`      | `via` (`"pr"` or `"local"`), plus `pr` when `via` is `"pr"` | The task's PR merge is recorded, or its local-only branch landed. |
 | `task.cleaned_up`  | none                                           | The task's worker and local copy were removed. |
 
 `task.dispatched` members: `kind` is `ship`, `scout`, or `secondmate`; `project` is the project directory name, or `null` for a remote second mate; `harness` names the agent tool; `model` is the requested model, or `null` for the tool's default; `sailor` names the local machine the worker runs on ([named sailors](configuration.md#crew-dispatch-profiles-configcrew-dispatchjson)), or `null` for a worker on a hosted model.
 
+`task.validation` members: `run` is the no-mistakes run id.
+`step` is `review`, `tests`, `docs`, or `pr`, for the run's review, test, document, and pr steps; its other steps are not recorded.
+`outcome` is `running` while the step runs or applies fixes, `waiting` while it stops at a gate, `passed` when it completed, or `failed`; other step states are not recorded.
+Firstmate writes it whenever it reads the current state of a ship task whose no-mistakes run it can match to the task with full step detail: on every fleet snapshot, when the supervision monitor sorts one of the task's wakes, and when firstmate checks the task itself.
+So an outcome appears when it is first seen, which can trail the step itself, and a short step can pass between two reads without its `running` outcome ever being recorded.
+Each outcome is recorded once per step and run, and a new run starts over.
+
 `task.pr_ready` members: `pr` is the PR's full URL.
 It is written each time firstmate records a PR for the task, so registering a replacement PR, or the same PR again, writes another record; recording the PR again as part of merging it writes none.
-A record written by `fm-fleet-ledger.sh pr_ready_risk` also carries `risk`, a free-form string, and `touches`, the given string verbatim or `null` when omitted.
+`risk` and `touches` come from the newest `done` line in the task's status log that names the PR.
+A worker's ready line ends with `risk=<low|medium|high> touches=<phrase>`, where the phrase names the sensitive surfaces the change touches and runs to the end of the line.
+`risk` is `low`, `medium`, or `high`, or `null` when that line has no such word; `touches` is the phrase, capped at 2000 characters, or `null` when absent.
 
-`task.validation` members: `step` names the validation step and `outcome` its result, both free-form strings.
-`task.decided` members: `answer` is the recorded answer, verbatim.
-No bundled producer writes `task.validation`, `task.decided`, or the `risk`/`touches` form of `task.pr_ready` yet; they are written only when `bin/fm-fleet-ledger.sh` is run with those subcommands.
+`task.decided` members: `answer` is the captain's decision as recorded on the held task, verbatim, and can span several lines.
+It is written when firstmate records a new answer for the task, whether the answer closes it or releases its hold; repeating the same answer writes none.
 
 `task.status` members: `state` is the status line's leading word, such as `working`, `needs-decision`, `blocked`, `paused`, `done`, `failed`, or `resolved`, or `null` when the line has none.
 `key` is the line's `[key=...]` decision key, or `null`.
@@ -56,8 +64,9 @@ Example:
 ```json
 {"v":1,"ts":1790132857,"event":"task.dispatched","task":"fix-login","kind":"ship","project":"webapp","harness":"claude","model":null,"sailor":null}
 {"v":1,"ts":1790132870,"event":"task.status","task":"fix-login","state":"working","key":null,"text":" bug reproduced"}
-{"v":1,"ts":1790133400,"event":"task.status","task":"fix-login","state":"done","key":null,"text":" PR https://github.com/acme/webapp/pull/7 checks green"}
-{"v":1,"ts":1790133410,"event":"task.pr_ready","task":"fix-login","pr":"https://github.com/acme/webapp/pull/7"}
+{"v":1,"ts":1790133000,"event":"task.validation","task":"fix-login","run":"01M3KZCFNJDHDRBRYH3QQYYK97","step":"review","outcome":"running"}
+{"v":1,"ts":1790133400,"event":"task.status","task":"fix-login","state":"done","key":null,"text":" PR https://github.com/acme/webapp/pull/7 checks green risk=low touches=none"}
+{"v":1,"ts":1790133410,"event":"task.pr_ready","task":"fix-login","pr":"https://github.com/acme/webapp/pull/7","risk":"low","touches":"none"}
 {"v":1,"ts":1790133900,"event":"task.merged","task":"fix-login","via":"pr","pr":"https://github.com/acme/webapp/pull/7"}
 {"v":1,"ts":1790133960,"event":"task.cleaned_up","task":"fix-login"}
 ```

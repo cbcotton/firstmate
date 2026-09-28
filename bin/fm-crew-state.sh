@@ -700,6 +700,47 @@ nm_steps_rows() {
   '
 }
 
+# Opt-in fleet activity ledger (docs/fleet-ledger.md); off costs one file test.
+# Records the attributed run's review, test, document, and pr steps as the
+# ledger's review, tests, docs, and pr validation steps: running or fixing is
+# running, a gate is waiting, completed is passed, failed is failed, and any
+# other step status records nothing. bin/fm-fleet-ledger.sh records only
+# outcomes that changed since its last record for this run, so every read may
+# pass the whole table. A ledger failure never changes this read's answer.
+record_validation_steps() {
+  local config=${FM_CONFIG_OVERRIDE:-$FM_HOME/config} run row rest step status outcome
+  local -a pairs=()
+  [ -e "$config/fleet-ledger" ] || return 0
+  run=$(strip_quotes "$(nm_field id)")
+  [ -n "$run" ] || return 0
+  while IFS= read -r row; do
+    row=$(trim "$row")
+    step=$(trim "${row%%,*}")
+    rest=${row#*,}
+    status=$(strip_quotes "$(trim "${rest%%,*}")")
+    case "$step" in
+      review) ;;
+      test) step=tests ;;
+      document) step=docs ;;
+      pr) ;;
+      *) continue ;;
+    esac
+    case "$status" in
+      running|fixing) outcome=running ;;
+      awaiting_approval|fix_review|awaiting_agent) outcome=waiting ;;
+      completed) outcome=passed ;;
+      failed) outcome=failed ;;
+      *) continue ;;
+    esac
+    pairs+=("$step" "$outcome")
+  done <<EOF
+$(nm_steps_rows)
+EOF
+  [ "${#pairs[@]}" -gt 0 ] || return 0
+  FM_HOME=$FM_HOME FM_STATE_OVERRIDE=$STATE FM_CONFIG_OVERRIDE=$config \
+    "$SCRIPT_DIR/fm-fleet-ledger.sh" validation "$ID" "$run" "${pairs[@]}" >/dev/null 2>&1 || true
+}
+
 # 0 when the pipeline itself reports RECENT activity on an actively running or
 # fixing step. The client prefixes a step's `last_activity` with `quiet` once no
 # step log or native-agent lifecycle event has arrived for longer than its
@@ -1077,6 +1118,7 @@ if [ "$HAVE_RUN" = 1 ]; then
       *)         RUN_STATE=unknown; RUN_DETAIL="runs list status: $COARSE_STATUS" ;;
     esac
   else
+    record_validation_steps
     status=$(strip_quotes "$(nm_field status)")
     RUN_STATUS=$status
     outcome=$(strip_quotes "$(nm_field outcome)")

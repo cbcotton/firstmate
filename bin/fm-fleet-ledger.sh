@@ -15,10 +15,12 @@
 #   bin/fm-watch.sh              capture, once per poll cycle
 #   bin/fm-pr-check.sh           pr_ready (a PR registered for review, not the
 #                                merge-time re-record from bin/fm-pr-merge.sh)
+#   bin/fm-crew-state.sh         validation (each read of a ship task's
+#                                attributed no-mistakes run with full step detail)
+#   bin/fm-captain-hold.sh       decided (each newly recorded answer)
 #   bin/fm-merge-outcome-lib.sh  merged ... pr (a recorded PR merge)
 #   bin/fm-merge-local.sh        merged ... local (a local-only landing)
 #   bin/fm-teardown.sh           cleaned_up
-#   (none yet)                   validation, pr_ready_risk, decided
 #
 # Usage:
 #   fm-fleet-ledger.sh dispatched <task> <kind> <project> <harness> <model> [<sailor>]
@@ -28,8 +30,7 @@
 #   fm-fleet-ledger.sh cleaned_up <task>
 #   fm-fleet-ledger.sh capture
 #   fm-fleet-ledger.sh appended <config> <state>/<task>.status
-#   fm-fleet-ledger.sh validation <task> <step> <outcome>
-#   fm-fleet-ledger.sh pr_ready_risk <task> <url> <risk> [<touches>]
+#   fm-fleet-ledger.sh validation <task> <run> <step> <outcome> [<step> <outcome>]...
 #   fm-fleet-ledger.sh decided <task> <answer>
 #
 # capture appends one task.status record for every complete (newline-ended)
@@ -44,10 +45,22 @@
 # recording it again. Its arguments name the home, because a worker has no
 # firstmate environment: the flag lives in <config> and the state directory is
 # the status file's directory.
-# pr_ready, pr_ready_risk, merged, validation, decided, and cleaned_up first
-# capture their own task, so its status records precede them. cleaned_up then deletes the task's offset, because teardown
-# retires that status log right after. dispatched deletes any leftover offset
-# so a reused task id starts at byte 0 of its fresh log.
+# pr_ready, merged, validation, decided, and cleaned_up first capture their own
+# task, so its status records precede them. cleaned_up then deletes the task's
+# offset, because teardown retires that status log right after. dispatched
+# deletes any leftover offset so a reused task id starts at byte 0 of its fresh
+# log.
+# pr_ready reads its risk and touches from the newest `done` line in the task's
+# status log that names the URL, through fm-classify-lib.sh's ready-line tag
+# readers; a line without them records null.
+# validation records one task.validation per <step> <outcome> pair whose
+# outcome differs from the one last recorded for that step of the same run, in
+# state/.<task>.fleet-ledger-validation (a `run <id>` line, then one
+# `<step> <outcome>` line per step). A different run starts that record over.
+# Records are appended before the record is saved, like capture's offset. When
+# no pair changed it returns after one file read, without the lock or the libs,
+# so a caller may pass the whole run on every read. dispatched and cleaned_up
+# delete that record with the offset.
 # Every write holds state/.fleet-ledger.lock.
 #
 # Environment: FM_HOME, FM_STATE_OVERRIDE, and FM_CONFIG_OVERRIDE resolve the
@@ -69,7 +82,7 @@ LOCK="$STATE/.fleet-ledger.lock"
 TEXT_MAX_CHARS=2000
 
 usage() {
-  echo "usage: fm-fleet-ledger.sh dispatched <task> <kind> <project> <harness> <model> [<sailor>] | pr_ready <task> <url> | merged <task> pr <url> | merged <task> local | cleaned_up <task> | capture | appended <config> <state>/<task>.status | validation <task> <step> <outcome> | pr_ready_risk <task> <url> <risk> [touches] | decided <task> <answer>" >&2
+  echo "usage: fm-fleet-ledger.sh dispatched <task> <kind> <project> <harness> <model> [<sailor>] | pr_ready <task> <url> | merged <task> pr <url> | merged <task> local | cleaned_up <task> | capture | appended <config> <state>/<task>.status | validation <task> <run> <step> <outcome> [<step> <outcome>]... | decided <task> <answer>" >&2
   exit 2
 }
 
@@ -86,11 +99,8 @@ case "$cmd" in
     case "$#:${3:-}" in 4:pr) [ -n "$4" ] || usage ;; 3:local) ;; *) usage ;; esac
     ;;
   validation)
-    { [ "$#" -eq 4 ] && task_ok "$2" && [ -n "$3" ] && [ -n "$4" ]; } || usage
-    ;;
-  pr_ready_risk)
-    task_ok "${2:-}" || usage
-    case "$#" in 4|5) [ -n "${3:-}" ] && [ -n "${4:-}" ] ;; *) usage ;; esac
+    { [ "$#" -ge 5 ] && [ $((($# - 3) % 2)) -eq 0 ] && task_ok "$2" && task_ok "$3"; } || usage
+    for arg in "${@:4}"; do task_ok "$arg" || usage; done
     ;;
   decided)
     { [ "$#" -eq 3 ] && task_ok "$2" && [ -n "$3" ]; } || usage
@@ -115,6 +125,55 @@ esac
 [ -d "$STATE" ] && [ ! -L "$STATE" ] || exit 1
 
 offset_path() { printf '%s/.%s.fleet-ledger-offset' "$STATE" "$1"; }
+validation_path() { printf '%s/.%s.fleet-ledger-validation' "$STATE" "$1"; }
+
+# The `<step> <outcome>` lines last recorded for <run>, empty when the record
+# is absent, unreadable, or for another run.
+recorded_validation() { # <task> <run>
+  local path first rest
+  path=$(validation_path "$1")
+  [ -f "$path" ] && [ ! -L "$path" ] || return 0
+  { IFS= read -r first && rest=$(cat); } < "$path" 2>/dev/null || return 0
+  [ "$first" = "run $2" ] || return 0
+  printf '%s\n' "$rest"
+}
+
+# Print each "<step> <outcome>" pair whose outcome differs from the recorded one.
+validation_changes() { # <task> <run> <step> <outcome> [<step> <outcome>]...
+  local recorded
+  recorded=$(recorded_validation "$1" "$2")
+  shift 2
+  while [ "$#" -ge 2 ]; do
+    case $'\n'"$recorded"$'\n' in
+      *$'\n'"$1 $2"$'\n'*) ;;
+      *) printf '%s %s\n' "$1" "$2" ;;
+    esac
+    shift 2
+  done
+}
+
+# Replace each changed step's line in the record for <run>.
+save_validation() { # <task> <run> <changes>
+  local path recorded step outcome
+  path=$(validation_path "$1")
+  recorded=$(recorded_validation "$1" "$2")
+  while read -r step outcome; do
+    recorded=$(printf '%s\n' "$recorded" | awk -v s="$step" 'NF && $1 != s')
+    recorded=${recorded:+$recorded$'\n'}"$step $outcome"
+  done <<< "$3"
+  printf 'run %s\n%s\n' "$2" "$recorded" > "$path.tmp" && mv -f "$path.tmp" "$path"
+}
+
+# The newest `done` line in the task's status log naming <url>, or empty.
+ready_line() { # <task> <url>
+  local log="$STATE/$1.status" line verb found=''
+  [ -f "$log" ] && [ ! -L "$log" ] || return 0
+  while IFS= read -r line; do
+    status_line_verb "$line" verb
+    [ "$verb" != "done" ] || found=$line
+  done < <(grep -F -- "$2" "$log" 2>/dev/null)
+  printf '%s' "$found"
+}
 
 read_offset() { # <task> <out-var>: saved byte offset, 0 when absent or malformed
   local value=0
@@ -205,6 +264,9 @@ if [ "$cmd" = capture ]; then
   grown=$(grown_logs) || exit 1
   [ -n "$grown" ] || exit 0
 fi
+if [ "$cmd" = validation ]; then
+  [ -n "$(validation_changes "${@:2}")" ] || exit 0
+fi
 
 load_libs || exit 1
 fm_lock_acquire_wait "$LOCK" || exit 1
@@ -221,14 +283,17 @@ case "$cmd" in
     capture_task "$APPENDED_TASK" || rc=1
     ;;
   dispatched)
-    rm -f -- "$(offset_path "$2")"
+    rm -f -- "$(offset_path "$2")" "$(validation_path "$2")"
     append task.dispatched "$2" \
       '{kind: ($kind | n), project: ($project | n), harness: ($harness | n), model: ($model | n), sailor: ($sailor | n)}' \
       --arg kind "$3" --arg project "$4" --arg harness "$5" --arg model "$6" --arg sailor "${7:-}" || rc=1
     ;;
   pr_ready)
     capture_task "$2" || rc=1
-    append task.pr_ready "$2" '{pr: $pr}' --arg pr "$3" || rc=1
+    line=$(ready_line "$2" "$3")
+    append task.pr_ready "$2" "{pr: \$pr, risk: (\$risk | n), touches: (\$touches[0:$TEXT_MAX_CHARS] | n)}" \
+      --arg pr "$3" --arg risk "$(status_line_ready_risk "$line")" \
+      --arg touches "$(status_line_ready_touches "$line")" || rc=1
     ;;
   merged)
     capture_task "$2" || rc=1
@@ -240,15 +305,13 @@ case "$cmd" in
     ;;
   validation)
     capture_task "$2" || rc=1
-    append task.validation "$2" '{step: $step, outcome: $outcome}' --arg step "$3" --arg outcome "$4" || rc=1
-    ;;
-  pr_ready_risk)
-    capture_task "$2" || rc=1
-    if [ "$#" -eq 5 ]; then
-      append task.pr_ready "$2" '{pr: $pr, risk: $risk, touches: $touches}' --arg pr "$3" --arg risk "$4" --arg touches "$5" || rc=1
-    else
-      append task.pr_ready "$2" '{pr: $pr, risk: $risk, touches: null}' --arg pr "$3" --arg risk "$4" || rc=1
-    fi
+    changes=$(validation_changes "${@:2}")
+    while read -r step outcome; do
+      [ -n "$step" ] || continue
+      append task.validation "$2" '{run: $run, step: $step, outcome: $outcome}' \
+        --arg run "$3" --arg step "$step" --arg outcome "$outcome" || rc=1
+    done <<< "$changes"
+    [ "$rc" -ne 0 ] || save_validation "$2" "$3" "$changes" || rc=1
     ;;
   decided)
     capture_task "$2" || rc=1
@@ -257,7 +320,7 @@ case "$cmd" in
   cleaned_up)
     capture_task "$2" || rc=1
     append task.cleaned_up "$2" '{}' || rc=1
-    [ "$rc" -ne 0 ] || rm -f -- "$(offset_path "$2")"
+    [ "$rc" -ne 0 ] || rm -f -- "$(offset_path "$2")" "$(validation_path "$2")"
     ;;
 esac
 [ "$rc" -eq 0 ] || echo "fm-fleet-ledger: could not record $cmd${2:+ for $2}; the ledger may be missing records" >&2
