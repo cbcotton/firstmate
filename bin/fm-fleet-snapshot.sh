@@ -834,10 +834,14 @@ task_json_lines() {
     pending_decision=$(printf '%s' "$open_decisions_json" | jq 'if any(.[]; .verb == "needs-decision") then 1 else 0 end')
     blocked_event=$(printf '%s' "$open_decisions_json" | jq 'if any(.[]; .verb == "blocked") then 1 else 0 end')
 
-    # Read the decision card if present for this task
+    # The task's decision card (bin/fm-captain-hold.sh `card`). A file that is
+    # not exactly one JSON object is served as null, because it would otherwise
+    # fail this task's jq call below and drop the held task from .tasks.
     decision_card_json='null'
     if [ "$pending_decision" = 1 ] && [ -f "$STATE/$id.decision-card.json" ]; then
-      decision_card_json=$(cat "$STATE/$id.decision-card.json" 2>/dev/null || echo 'null')
+      decision_card_json=$(jq -c -s 'if length == 1 and (.[0] | type) == "object" then .[0] else null end' \
+        "$STATE/$id.decision-card.json" 2>/dev/null) || decision_card_json='null'
+      [ -n "$decision_card_json" ] || decision_card_json='null'
     fi
 
     endpoint_exists=null

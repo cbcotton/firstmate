@@ -187,9 +187,12 @@
 # one captain call. See "record divergence" beside command_diverged below.
 #
 # `card` stores, prints, or removes a task's decision card at
-# state/<task-id>.decision-card.json. `set` writes its argument verbatim, and
-# `show` prints `null` when no card exists. bin/fm-fleet-snapshot.sh serves the
-# card as hints.decision_card while the task has an open needs-decision.
+# state/<task-id>.decision-card.json. A card is exactly one JSON object: `set`
+# refuses anything else with exit 2, leaving any stored card in place, and
+# otherwise replaces the file atomically with its argument verbatim. `show`
+# prints `null` when no card exists. bin/fm-fleet-snapshot.sh serves the card
+# as hints.decision_card while the task has an open needs-decision, and serves
+# a file that is not one JSON object as null.
 #
 # Resolution records: the block written into the body names this script, the
 # decision digest, and a `Resolution mode:` of answered, released, repaired, or
@@ -1947,11 +1950,20 @@ command_card() {
       fi
       ;;
     set)
-      if [ $# -lt 1 ]; then
+      if [ $# -ne 1 ]; then
         printf 'usage: fm-captain-hold.sh card <task-id> set <options-json>\n' >&2
         exit 2
       fi
-      printf '%s\n' "$1" > "$card_file"
+      if ! printf '%s' "$1" | jq -e -s 'length == 1 and (.[0] | type) == "object"' >/dev/null 2>&1; then
+        printf 'fm-captain-hold: a decision card must be one JSON object\n' >&2
+        exit 2
+      fi
+      local tmp
+      tmp=$(mktemp "$STATE/.$id.decision-card.XXXXXX") || fail "cannot stage the decision card for $id"
+      if ! { printf '%s\n' "$1" > "$tmp" && mv -f -- "$tmp" "$card_file"; }; then
+        rm -f -- "$tmp"
+        fail "cannot record the decision card for $id"
+      fi
       ;;
     clear)
       rm -f "$card_file"
