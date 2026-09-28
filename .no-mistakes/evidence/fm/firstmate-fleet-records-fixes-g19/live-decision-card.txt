@@ -1,0 +1,35 @@
++(eval):6> id=held-bad
++(eval):7> mkdir -p /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.fteFZe/projects/held-bad
++(eval):8> printf 'window=firstmate:fm-%s\nworktree=%s\nproject=alpha\nharness=claude\nkind=ship\nmode=ship\n' held-bad /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.fteFZe/projects/held-bad
++(eval):9> gen=+(eval):9> bin/fm-busy-event.sh arm /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.fteFZe/state held-bad
++(eval):9> gen=g1790605342.39893.4781 
++(eval):9> bin/fm-busy-event.sh apply /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.fteFZe/state held-bad idle --gen g1790605342.39893.4781 --source claude-hook --event stop
++(eval):10> printf 'needs-decision [at=1727500000] [key=%s]: how should we proceed?\n' held-bad
++(eval):6> id=held-good
++(eval):7> mkdir -p /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.fteFZe/projects/held-good
++(eval):8> printf 'window=firstmate:fm-%s\nworktree=%s\nproject=alpha\nharness=claude\nkind=ship\nmode=ship\n' held-good /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.fteFZe/projects/held-good
++(eval):9> gen=+(eval):9> bin/fm-busy-event.sh arm /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.fteFZe/state held-good
++(eval):9> gen=g1790605343.39929.5207 
++(eval):9> bin/fm-busy-event.sh apply /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.fteFZe/state held-good idle --gen g1790605343.39929.5207 --source claude-hook --event stop
++(eval):10> printf 'needs-decision [at=1727500000] [key=%s]: how should we proceed?\n' held-good
++(eval):12> bin/fm-captain-hold.sh card held-good set '{"options":["approve","reject"],"recommend_value":"approve"}'
++(eval):12> echo 'rc=0'
+rc=0
++(eval):13> bin/fm-captain-hold.sh card held-bad set 'not json {'
+fm-captain-hold: a decision card must be one JSON object
++(eval):13> echo 'rc=2'
+rc=2
++(eval):14> bin/fm-captain-hold.sh card held-bad set '["a"]'
+fm-captain-hold: a decision card must be one JSON object
++(eval):14> echo 'rc=2'
+rc=2
++(eval):15> bin/fm-captain-hold.sh card held-bad show
+null
++(eval):16> printf 'garbage {{{\n'
++(eval):17> bin/fm-fleet-snapshot.sh --json
++(eval):17> jq -c '.tasks[] | {id, pending: .hints.pending_decision, card: .hints.decision_card}'
+{"id":"held-bad","pending":true,"card":null}
+{"id":"held-good","pending":true,"card":{"options":["approve","reject"],"recommend_value":"approve"}}
++(eval):17> echo 'snapshot rc='
+snapshot rc=
++(eval):18> set +x

@@ -1,0 +1,3 @@
+### mutation: base fm-inactive-reconcile.sh
+ok - ledger delivery carries the report pointer, the failed verb, and each new terminal line
+not ok - a ready-signal line carrying risk and touches lost its PR: done [key=child-outcome-direct-done-e33c1fae] [at=1790605329]: child direct done: PR https://example.test/owner/repo/pull/99 risk=medium touches=auth mode=direct-PR yolo=off

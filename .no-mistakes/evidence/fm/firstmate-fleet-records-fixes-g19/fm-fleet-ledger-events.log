@@ -1,0 +1,6 @@
+ok - validation records a step outcome only when it changed for that run
+ok - validation refuses a missing outcome, an odd pair, a spaced word, and a bad task id
+ok - pr_ready records the risk and touches of the newest done line naming the PR, else null
+ok - decided event recorded correctly
+---
+fm-fleet-ledger new event types complete

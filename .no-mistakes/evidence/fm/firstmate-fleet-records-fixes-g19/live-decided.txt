@@ -1,0 +1,7 @@
+$ fm-captain-hold.sh hold lab-lamp-call --title "Pick the lamp" --reason "captain lamp choice pending" --repo sample
+rc=0
+$ fm-captain-hold.sh answer lab-lamp-call --decision-file lamp.txt   (x2, retry)
+rc=0
+rc=0
+$ jq task.decided rows in state/fleet-ledger.jsonl
+{"v":1,"ts":1790605357,"event":"task.decided","task":"lab-lamp-call","answer":"Captain chose the brass lamp."}

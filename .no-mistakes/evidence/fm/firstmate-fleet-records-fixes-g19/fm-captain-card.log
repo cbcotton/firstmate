@@ -1,0 +1,7 @@
+ok - decision card created and retrieved
+ok - decision card cleared
+ok - card set refuses input that is not one JSON object and keeps the stored card
+ok - snapshot includes decision card
+ok - a malformed card is served as null and its held task stays in the snapshot
+---
+fm-captain-hold decision cards complete

@@ -1,0 +1,9 @@
+$ status log:
+working: building
+done [at=1790000000]: PR https://github.com/acme/sample/pull/11 risk=medium touches=network route, read-only
+$ fm-pr-check.sh lab-ship https://github.com/acme/sample/pull/11
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+armed: state/lab-ship.check.sh
+rc=0
+$ task.pr_ready rows:
+{"task":"lab-ship","pr":"https://github.com/acme/sample/pull/11","risk":"medium","touches":"network route, read-only"}

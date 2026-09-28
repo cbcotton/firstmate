@@ -1,0 +1,19 @@
+# fm-crew-state.sh lab-nm2 against a faked `no-mistakes axi status`; args: run status review test document pr
+> 01RUNA running running pending pending pending :: state: working · source: run-step · validating (running)
+> 01RUNA running running pending pending pending :: state: working · source: run-step · validating (running)
+> 01RUNA awaiting_approval awaiting_approval pending pending pending :: state: parked · source: run-step · parked at review: 0 finding(s)
+> 01RUNA running completed completed fixing pending :: state: working · source: run-step · validating (running)
+> 01RUNA failed completed completed completed failed :: state: failed · source: run-step · run failed
+> 01RUNB running running pending pending pending :: state: working · source: run-step · validating (running)
+$ task.validation rows for lab-nm2 in state/fleet-ledger.jsonl:
+["lab-nm2","01RUNA","review","running"]
+["lab-nm2","01RUNA","review","waiting"]
+["lab-nm2","01RUNA","review","passed"]
+["lab-nm2","01RUNA","tests","passed"]
+["lab-nm2","01RUNA","docs","running"]
+["lab-nm2","01RUNA","docs","passed"]
+["lab-nm2","01RUNA","pr","failed"]
+["lab-nm2","01RUNB","review","running"]
+$ ledger flag removed (config/fleet-ledger deleted), one more read on a new run:
+> 01RUNC running running pending pending pending :: state: working · source: run-step · validating (running)
+ledger lines before=      13 after=      13

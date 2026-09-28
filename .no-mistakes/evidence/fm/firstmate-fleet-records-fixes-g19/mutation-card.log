@@ -1,0 +1,11 @@
+### mutation: base fm-fleet-snapshot.sh (pre-fix card read)
+ok - decision card cleared
+ok - card set refuses input that is not one JSON object and keeps the stored card
+ok - snapshot includes decision card
+not ok - a malformed card ('not json') dropped held task bad-card from the snapshot
+rc=
+### mutation: snapshot ignores stored card
+ok - decision card cleared
+ok - card set refuses input that is not one JSON object and keeps the stored card
+not ok - recomm=MISSING
+rc=
