@@ -829,6 +829,12 @@ task_json_lines() {
     pending_decision=$(printf '%s' "$open_decisions_json" | jq 'if any(.[]; .verb == "needs-decision") then 1 else 0 end')
     blocked_event=$(printf '%s' "$open_decisions_json" | jq 'if any(.[]; .verb == "blocked") then 1 else 0 end')
 
+    # Read the decision card if present for this task
+    decision_card_json='null'
+    if [ "$pending_decision" = 1 ] && [ -f "$STATE/$id.decision-card.json" ]; then
+      decision_card_json=$(cat "$STATE/$id.decision-card.json" 2>/dev/null || echo 'null')
+    fi
+
     endpoint_exists=null
     agent_alive=not_checked
     endpoint_file="$SNAPSHOT_TASK_DIR/$id.endpoint"
@@ -884,10 +890,11 @@ task_json_lines() {
       --argjson home_path "$home_json" \
       --argjson endpoint_exists "$endpoint_exists" \
       --argjson open_decisions "$open_decisions_json" \
-      --argjson pending_decision "$(bool_json "$pending_decision")" \
-      --argjson blocked_event "$(bool_json "$blocked_event")" \
-      --argjson report_present "$(bool_json "$report_present")" \
-      '{
+       --argjson pending_decision "$(bool_json "$pending_decision")" \
+       --argjson blocked_event "$(bool_json "$blocked_event")" \
+       --argjson report_present "$(bool_json "$report_present")" \
+       --argjson decision_card "$decision_card_json" \
+       '{
         id:$id,
         kind:$kind,
         harness:($harness // ""),
@@ -918,7 +925,8 @@ task_json_lines() {
           blocked_event:$blocked_event,
           open_decisions:$open_decisions,
           scout_report_present:$report_present,
-          last_event_text:$last_event_raw
+          last_event_text:$last_event_raw,
+          decision_card:$decision_card
         },
         actions:(
           if $kind == "secondmate" then
