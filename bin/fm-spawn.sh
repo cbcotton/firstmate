@@ -332,10 +332,13 @@
 #   Privateer launch clears the environment exactly as config/launch-env-allowlist
 #   does (with that file's names added when it exists) and exports the OpenCode
 #   isolation assignments `fm-privateer.sh launch-env` prints, so a worker's
-#   OpenCode reads no config, login, session, or cache of the captain's own; its
-#   OPENCODE_CONFIG_CONTENT also turns auto-update off and disables sharing.
-#   The sailor sandbox is required by the check, so every Privateer worker runs
-#   inside it. With the flag absent nothing here changes.
+#   OpenCode reads no config, login, session, or cache of the captain's own and
+#   sends its traffic to the session's egress proxy; its OPENCODE_CONFIG_CONTENT
+#   also turns auto-update off and disables sharing. The sailor sandbox is
+#   required by the check, so every Privateer worker runs inside it, and there
+#   its one allowed connection is that proxy rather than the sailor's endpoint;
+#   a spawn is refused while no proxy runs. With the flag absent nothing here
+#   changes.
 # Claude permission mode (config/claude-permission-mode):
 #   One token selecting the permission flag every claude launch (ship, scout,
 #   secondmate, and relaunch) carries. Absent or `bypass` keeps today's
@@ -2501,12 +2504,17 @@ if [ -e "$CONFIG/privateer" ] || [ -L "$CONFIG/privateer" ]; then
   fi
   # The environment is cleared at the worker's command boundary whether or not
   # config/launch-env-allowlist exists (its names, already checked, still apply),
-  # and OpenCode's directories are this home's own, for the sandbox paths below
-  # and for the launch.
+  # OpenCode's directories are this home's own, for the sandbox paths below and
+  # for the launch, and the sandbox reaches only the session's egress proxy.
   LAUNCH_ENV_ENABLED=1
+  if ! PRIVATEER_ENV=$(FM_HOME="$FM_HOME" FM_STATE_OVERRIDE="$STATE" "$SCRIPT_DIR/fm-privateer.sh" launch-env 2>&1); then
+    echo "error: the Privateer quarantine refuses this spawn: ${PRIVATEER_ENV#fm-privateer: refused: }" >&2
+    exit 1
+  fi
   while IFS= read -r privateer_assignment; do
     [ -z "$privateer_assignment" ] || export "${privateer_assignment?}"
-  done < <(FM_HOME="$FM_HOME" FM_STATE_OVERRIDE="$STATE" "$SCRIPT_DIR/fm-privateer.sh" launch-env)
+  done <<< "$PRIVATEER_ENV"
+  SAILOR_ENDPOINT=$HTTP_PROXY
 fi
 # Worker account pin (header above): resolved before any endpoint, worktree, or
 # record exists. An absent pin selects nothing and leaves every later launch
@@ -5281,13 +5289,14 @@ if [ "$LAVISH_AXI_HOST_CONFIG_PRESENT" = 1 ]; then
   LAUNCH="export LAVISH_AXI_HOST=$(shell_quote "$LAVISH_AXI_HOST"); $LAUNCH"
 fi
 # A Privateer worker's OpenCode reads and writes only this home's own
-# directories (bin/fm-privateer.sh launch-env), exported inside the cleared
-# environment the floor below establishes.
+# directories and reaches out only through the egress proxy (bin/fm-privateer.sh
+# launch-env), exported inside the cleared environment the floor below
+# establishes.
 if [ "$PRIVATEER" = 1 ]; then
   PRIVATEER_EXPORTS=
   while IFS= read -r privateer_assignment; do
     [ -z "$privateer_assignment" ] || PRIVATEER_EXPORTS="$PRIVATEER_EXPORTS ${privateer_assignment%%=*}=$(shell_quote "${privateer_assignment#*=}")"
-  done < <(FM_HOME="$FM_HOME" FM_STATE_OVERRIDE="$STATE" "$SCRIPT_DIR/fm-privateer.sh" launch-env)
+  done <<< "$PRIVATEER_ENV"
   LAUNCH="export$PRIVATEER_EXPORTS; $LAUNCH"
 fi
 LAUNCH="export COMPACT_ADVISER_DISABLE=1; $LAUNCH"

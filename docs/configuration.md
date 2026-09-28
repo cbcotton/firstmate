@@ -911,9 +911,11 @@ With the flag present, bootstrap reports each violation as `PRIVATEER: <violatio
 
 - `config/crew-harness` must hold `opencode`, and `config/secondmate-harness`, when present, must name it too.
 - `config/supervision-host`, `config/claude-account`, and `config/pi-account` must not exist.
+- The [spoken interface and captain inbox](#spoken-interface-and-captain-inbox-configvoice--configinbox-) settings `config/inbox-ask-model`, `inbox-stt-model`, `inbox-region`, `inbox-profile`, `voice-model`, `voice-region`, and `voice-profile` must not exist, because those side channels send the captain's words to Bedrock.
 - `config/sailor-sandbox` must exist, so every sailor runs inside the [sailor sandbox](#sailor-sandbox-configsailor-sandbox).
-- `.env` must set no Relay pairing token, no typed-resolution key, and no `ANTHROPIC_*`, `CLAUDE_*`, or `CLAUDECODE` line, and `config/launch-env-allowlist` must list none of those names.
+- `.env` must set no Relay pairing token, no typed-resolution key, no `FM_INBOX_*` or `FM_VOICE_*` override, and no `ANTHROPIC_*`, `CLAUDE_*`, or `CLAUDECODE` line, and `config/launch-env-allowlist` must list none of the Anthropic or Claude names.
 - `config/crew-dispatch.json` must exist, declare no `sailor_fallback`, give every profile the `opencode` harness and a sailor, and give every sailor a private endpoint: localhost, a loopback, RFC 1918, or tailnet (100.64/10) address, an IPv6 loopback or unique-local address, or a name ending in `.local` or `.ts.net`.
+- An endpoint's host is read from its authority, which ends at the first `/`, `?`, or `#`; an authority carrying userinfo or a backslash is refused, so no endpoint can hide a public host behind a private-looking suffix.
 
 A spawn in a Privateer home is also refused for a secondmate, a raw launch command, any harness but `opencode`, a missing `--sailor`, or a ship mode other than `local-only`.
 With no `sailor_fallback`, work waits in the queue while every sailor is down; a struggling sailor is retried on another local sailor or goes to the captain, never to a hosted model.
@@ -929,16 +931,22 @@ Every Privateer worker launch clears the environment the same way at its command
 OpenCode is isolated: the first mate and every worker read and write OpenCode's config, data, state, and cache under `state/privateer/opencode/` in the home, so the captain's own OpenCode logins, global configuration, and sessions are invisible to them.
 Auto-update is off, session sharing is disabled, and the first mate's configuration pins its model to its sailor as the only provider.
 
+Every connection leaves through the launcher's egress proxy, `bin/fm-privateer-proxy.py`, which runs in the session's `egress` window on a loopback port.
+It allows exactly the endpoint of every sailor in the sailor map and the forge origin of the checkout and of every clone under `projects/`, each by host and port, refuses everything else, and logs every allowed and refused destination to `state/privateer/egress/log`.
+`start` refuses, and leaves nothing running, if the proxy cannot bind.
+The first mate and every worker receive `HTTP_PROXY`, `HTTPS_PROXY`, and a `GIT_SSH_COMMAND` that tunnels Git over SSH through the proxy, and a spawn is refused while no proxy runs.
+
 The first mate runs inside the same macOS sandbox as a sailor.
-It can write only to the home, the checkout's `.opencode/` scratch, the worktree pool, and firstmate's per-task temp roots, and it can connect only to each live sailor's endpoint, the forge origins of the checkout and of every clone under `projects/`, the DNS resolver, and its own tmux socket.
-A Seatbelt rule names only localhost or any host, so a forge reached over port 443 leaves every host on that port reachable; the refusals above and the environment allowlist are what keep Anthropic out of that path, and the egress audit below is what proves it.
-Version 1 has honest limits: `sandbox-exec` is required, so Privateer runs on macOS only; a first mate whose checkout is not inside its home cannot update that checkout from inside its session; and Git over SSH needs a key file, because no agent socket enters the environment.
+It can write only to the home (never its egress record), the checkout's `.opencode/` scratch, the worktree pool, and firstmate's per-task temp roots, and it can connect only to the egress proxy, the DNS resolver, and its own tmux socket.
+Every Privateer worker's sailor sandbox likewise allows the egress proxy as its only address, in place of the sailor's endpoint.
+A client that ignores the proxy variables therefore reaches nothing remote at all, because the sandbox denies the direct connection.
+Version 1 has honest limits: `sandbox-exec` is required, so Privateer runs on macOS only; `python3` is required for the proxy; a first mate whose checkout is not inside its home cannot update that checkout from inside its session; and Git over SSH needs a key file, because no agent socket enters the environment.
 
 ### Egress audit
 
-`FM_PRIVATEER_EGRESS_LIVE=1 tests/fm-privateer-egress-live-e2e.test.sh` starts a short Privateer session through the launcher, with a fixture clone as the checkout and a throwaway home, behind a logging proxy on a loopback port that also serves a scripted model.
-`start --audit-proxy <url>` names that proxy in the session's `HTTP_PROXY` and `HTTPS_PROXY` and allows it in the sandbox, so every outbound request or tunnel the primary attempts is recorded there.
-The proxy refuses every tunnel; the audit fails on any recorded attempt naming Anthropic or Claude, and on a session that made no model request at all.
+`FM_PRIVATEER_EGRESS_LIVE=1 tests/fm-privateer-egress-live-e2e.test.sh` starts a short Privateer session through the launcher, with a fixture clone whose origin is an https forge as the checkout, a throwaway home, and a scripted model on a loopback port as the only sailor.
+Inside the sandbox, before OpenCode starts, the primary's command tries a direct connection to Anthropic and to the sailor that ignores the proxy, and the audit fails unless both are denied.
+It then fails on a session whose model requests did not pass through the egress proxy, on any destination the proxy allowed other than the sailor and the forge, and on any logged destination, allowed or refused, naming Anthropic or Claude.
 [`verification/local-sailors.md`](verification/local-sailors.md) records the dated result; rerun the audit after an OpenCode upgrade.
 
 ### Setting up a home

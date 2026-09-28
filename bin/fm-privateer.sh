@@ -9,9 +9,8 @@
 #
 # Usage:
 #   fm-privateer.sh check
-#   fm-privateer.sh endpoint-ok <url>
 #   fm-privateer.sh launch-env
-#   fm-privateer.sh start [--audit-proxy <http://127.0.0.1:port>]
+#   fm-privateer.sh start
 #   fm-privateer.sh attach
 #   fm-privateer.sh stop
 #
@@ -25,37 +24,57 @@
 #   - config/secondmate-harness, when present, must name opencode;
 #   - config/supervision-host, config/claude-account, and config/pi-account must
 #     not exist (a Claude engine, a Claude login, a Pi login);
+#   - config/inbox-ask-model, inbox-stt-model, inbox-region, inbox-profile,
+#     voice-model, voice-region, and voice-profile must not exist (the inbox and
+#     voice side channels send the captain's words to Bedrock);
 #   - config/sailor-sandbox must exist, so every sailor's egress is confined;
 #   - .env must set no FMX_PAIRING_TOKEN or TYPESAFE_API_KEY (Relay and typed
-#     resolution reach outside services) and no ANTHROPIC_*, CLAUDE_*, or
+#     resolution reach outside services), no FM_INBOX_* or FM_VOICE_* override
+#     (the same Bedrock side channels), and no ANTHROPIC_*, CLAUDE_*, or
 #     CLAUDECODE line;
 #   - config/launch-env-allowlist must list no ANTHROPIC_*, CLAUDE_*, or
 #     CLAUDECODE name;
 #   - config/crew-dispatch.json must exist and parse, declare no sailor_fallback,
 #     give every rule and default profile the opencode harness and a sailor, and
-#     give every sailor a private endpoint: localhost, a loopback, RFC 1918, or
-#     tailnet (100.64/10) IPv4 address, an IPv6 loopback or unique-local
-#     address, or a name ending in .local or .ts.net;
+#     give every sailor a private endpoint: an http or https URL whose authority
+#     (everything up to the first /, ?, or #) carries no userinfo or backslash
+#     and names localhost, a loopback, RFC 1918, or tailnet (100.64/10) IPv4
+#     address, an IPv6 loopback or unique-local address, or a name ending in
+#     .local or .ts.net;
 #   - a non-empty config/privateer must read <sailor>/<model> with that model
 #     listed for that sailor.
 #
-# endpoint-ok exits 0 when <url> passes the endpoint rule above and 1 otherwise.
+# launch-env prints the isolation assignments, one NAME=value per line, for
+# the first mate and for bin/fm-spawn.sh to export into every Privateer worker
+# launch: XDG_CONFIG_HOME, XDG_DATA_HOME, XDG_STATE_HOME, and XDG_CACHE_HOME
+# under state/privateer/opencode/, so the captain's own OpenCode config, logins,
+# sessions, and cache are invisible; OPENCODE_DISABLE_AUTOUPDATE=1;
+# HTTP_PROXY, HTTPS_PROXY, http_proxy, and https_proxy naming the running
+# egress proxy; and GIT_SSH_COMMAND, which tunnels Git over SSH through it. It
+# refuses (exit 1) while no egress proxy runs for this home.
 #
-# launch-env prints the OpenCode isolation assignments, one NAME=value per
-# line, for bin/fm-spawn.sh to export into every Privateer worker launch:
-# XDG_CONFIG_HOME, XDG_DATA_HOME, XDG_STATE_HOME, and XDG_CACHE_HOME under
-# state/privateer/opencode/, so the captain's own OpenCode config, logins,
-# sessions, and cache are invisible, plus OPENCODE_DISABLE_AUTOUPDATE=1.
+# The egress proxy (bin/fm-privateer-proxy.py) is the session's only way out.
+# It listens on a loopback port, writes that port to
+# state/privateer/egress/port, logs every allowed and refused destination to
+# state/privateer/egress/log, and allows exactly: every sailor endpoint in
+# config/crew-dispatch.json, and the origin of this checkout and of every clone
+# under projects/ (the forge: the URL's host and port, 443 for https, 80 for
+# http, 22 for ssh). The first mate and every Privateer worker run inside
+# bin/fm-sandbox-exec.sh with that loopback port as their only allowed
+# connection besides the DNS resolver and local sockets, so nothing else remote
+# is reachable, whether or not a client honours the proxy variables.
 #
 # start refuses without config/privateer, on any check violation, without a
 # first-mate line in config/privateer, and while the session already runs. It
 # probes the first mate's sailor with bin/fm-sailor.sh check, then starts a
 # dedicated tmux server (socket fm-privateer-<home hash>) whose session
-# `privateer` runs the OpenCode primary in this checkout with FM_HOME set to
-# this home. The server, and again the primary itself, start from an empty
-# environment plus exactly: HOME PATH USER LOGNAME SHELL TERM COLORTERM LANG
-# LC_ALL LC_CTYPE TMPDIR TMP TEMP TMUX_TMPDIR as the launcher saw them; FM_HOME; the
-# launch-env assignments above; and OPENCODE_CONFIG_CONTENT, which pins the
+# `privateer` runs the egress proxy in window `egress`, refusing and stopping
+# the server if the proxy cannot bind, and the OpenCode primary in window
+# `firstmate`, in this checkout with FM_HOME set to this home. The server, and
+# again the primary itself, start from an empty environment plus exactly: HOME
+# PATH USER LOGNAME SHELL TERM COLORTERM LANG LC_ALL LC_CTYPE TMPDIR TMP TEMP
+# TMUX_TMPDIR as the launcher saw them, and FM_HOME; the primary adds the
+# launch-env assignments above and OPENCODE_CONFIG_CONTENT, which pins the
 # model to the first mate's sailor as the only provider, allows every tool as a
 # secondmate primary is allowed, turns auto-update off, and disables sharing.
 # The primary also keeps the TMUX and TMUX_PANE names its own server sets. No
@@ -64,22 +83,16 @@
 # attaching client either. A worker pane's login shell may still read the
 # captain's shell profile, so bin/fm-spawn.sh clears the environment again at
 # each worker's command boundary.
-# The primary runs inside bin/fm-sandbox-exec.sh: it may write only to this
-# home, this checkout's .opencode/ scratch, the worktree pool under
-# ~/.treehouse, and firstmate's per-task temp roots under /tmp/fm-*; it may
-# connect only to each live sailor's endpoint, the origin of this checkout and
-# of every clone under projects/ (the forge, by port: the URL's port, 443 for
-# https, 22 for ssh), the DNS resolver, and its own tmux server socket. A
-# Seatbelt rule names only localhost or any host, so a forge on 443 leaves every
-# host on 443 reachable; the configuration and environment refusals are what
-# keep Anthropic out of that path, and the egress audit is what proves it.
-# --audit-proxy <url> serves that audit: a loopback http proxy that the
-# session's HTTP_PROXY and HTTPS_PROXY name and the sandbox may connect to, so
-# the proxy records every outbound request and tunnel the primary attempts.
+# The primary's sandbox lets it write only to this home (never its egress
+# directory), this checkout's .opencode/ scratch, the worktree pool under
+# ~/.treehouse, and firstmate's per-task temp roots under /tmp/fm-*, and
+# connect only to the egress proxy, the DNS resolver, and its own tmux server
+# socket.
 #
 # attach attaches this terminal to the running session. stop refuses while any
 # task record (state/<id>.meta) exists, because a running worker's copy would
-# be orphaned, and otherwise stops this home's watcher and the whole server.
+# be orphaned, and otherwise stops this home's watcher and the whole server,
+# the egress proxy with it.
 #
 # Environment: FM_HOME, FM_STATE_OVERRIDE, FM_CONFIG_OVERRIDE, and
 # FM_PROJECTS_OVERRIDE resolve the home exactly as the other bin/ scripts do. With FM_TEST_SEAM=1, FM_PRIVATEER_PRIMARY names a command to launch in
@@ -99,10 +112,11 @@ FLAG="$CONFIG/privateer"
 DISPATCH="$CONFIG/crew-dispatch.json"
 SESSION=privateer
 OPENCODE_ROOT="$STATE/privateer/opencode"
+EGRESS="$STATE/privateer/egress"
 FORBIDDEN_NAME_RE='^(ANTHROPIC_[A-Za-z0-9_]*|CLAUDE_[A-Za-z0-9_]*|CLAUDECODE)$'
 
 usage() {
-  echo "usage: fm-privateer.sh check | endpoint-ok <url> | launch-env | start [--audit-proxy <url>] | attach | stop" >&2
+  echo "usage: fm-privateer.sh check | launch-env | start | attach | stop" >&2
   exit 2
 }
 
@@ -126,21 +140,30 @@ shell_quote() {
   printf "'"
 }
 
-# url_host <url>: the host of an http(s) URL, without brackets or port; empty
-# when the URL has no host.
-url_host() {
-  local rest=$1 hostport
-  case "$rest" in
-    http://* | https://*) ;;
-    *) return 0 ;;
+# url_hostport <url>: `<host>:<port>` of an http(s) URL, the host lowercased
+# (an IPv6 address kept in brackets) and the port explicit or the scheme's
+# default. The authority ends at the first /, ?, or #, and one carrying
+# userinfo or a backslash fails, as does anything that is not such a URL.
+url_hostport() {
+  local url=$1 authority host port
+  case "$url" in
+    http://*) port=80 ;;
+    https://*) port=443 ;;
+    *) return 1 ;;
   esac
-  rest=${rest#*://}
-  hostport=${rest%%/*}
-  hostport=${hostport##*@}
-  case "$hostport" in
-    \[*\]*) hostport=${hostport#[}; printf '%s\n' "${hostport%%]*}" ;;
-    *) printf '%s\n' "${hostport%%:*}" ;;
+  authority=${url#*://}
+  authority=${authority%%[/?#]*}
+  case "$authority" in
+    '' | *@* | *\\*) return 1 ;;
+    \[*\]) host=$authority ;;
+    \[*\]:*) host="${authority%%]*}]"; port=${authority#*]:} ;;
+    \[*) return 1 ;;
+    *:*) host=${authority%%:*}; port=${authority#*:} ;;
+    *) host=$authority ;;
   esac
+  case "$port" in '' | *[!0-9]*) return 1 ;; esac
+  case "$host" in '' | '[]') return 1 ;; esac
+  printf '%s:%s\n' "$(printf '%s' "$host" | tr '[:upper:]' '[:lower:]')" "$((10#$port))"
 }
 
 # private_host <host>: the endpoint rule in the header, on the host alone.
@@ -173,9 +196,10 @@ EOF
 
 endpoint_ok() {
   local host
-  host=$(url_host "$1")
-  [ -n "$host" ] || return 1
-  private_host "$host"
+  host=$(url_hostport "$1") || return 1
+  host=${host%:*}
+  host=${host#[}
+  private_host "${host%]}"
 }
 
 # env_file_violations: forbidden keys set in this home's .env, one per line.
@@ -188,6 +212,7 @@ env_file_violations() {
       case "$key" in
         FMX_PAIRING_TOKEN) echo ".env sets FMX_PAIRING_TOKEN, and Relay answers public mentions through an outside service" ;;
         TYPESAFE_API_KEY) echo ".env sets TYPESAFE_API_KEY, and typed dispatch resolution sends every brief to an outside model" ;;
+        FM_INBOX_* | FM_VOICE_*) echo ".env sets $key, and the inbox and voice side channels send the captain's words to Bedrock" ;;
         *)
           if printf '%s\n' "$key" | grep -Eq "$FORBIDDEN_NAME_RE"; then
             echo ".env sets $key, an Anthropic or Claude variable"
@@ -251,7 +276,7 @@ dispatch_violations() {
 }
 
 cmd_check() {
-  local out
+  local out name
   active || return 0
   command -v jq >/dev/null 2>&1 || die "jq is required"
   out=$(
@@ -264,6 +289,9 @@ cmd_check() {
     [ ! -e "$CONFIG/supervision-host" ] || echo "config/supervision-host exists, and the supervision host runs on Claude"
     [ ! -e "$CONFIG/claude-account" ] || echo "config/claude-account exists, and it pins a Claude login"
     [ ! -e "$CONFIG/pi-account" ] || echo "config/pi-account exists, and it pins a Pi login"
+    for name in inbox-ask-model inbox-stt-model inbox-region inbox-profile voice-model voice-region voice-profile; do
+      [ ! -e "$CONFIG/$name" ] || echo "config/$name exists, and the inbox and voice side channels send the captain's words to Bedrock"
+    done
     [ -e "$CONFIG/sailor-sandbox" ] || echo "config/sailor-sandbox is absent; every Privateer sailor runs inside the sandbox"
     env_file_violations
     allowlist_violations
@@ -275,11 +303,19 @@ cmd_check() {
 }
 
 cmd_launch_env() {
+  local port proxy
+  port=$(cat "$EGRESS/port" 2>/dev/null) || port=
+  case "$port" in
+    '' | *[!0-9]*) refuse "the Privateer egress proxy is not running; start the session with fm-privateer.sh start" ;;
+  esac
+  proxy="http://127.0.0.1:$port"
   printf 'XDG_CONFIG_HOME=%s\n' "$OPENCODE_ROOT/config"
   printf 'XDG_DATA_HOME=%s\n' "$OPENCODE_ROOT/data"
   printf 'XDG_STATE_HOME=%s\n' "$OPENCODE_ROOT/state"
   printf 'XDG_CACHE_HOME=%s\n' "$OPENCODE_ROOT/cache"
   printf 'OPENCODE_DISABLE_AUTOUPDATE=1\n'
+  printf 'HTTP_PROXY=%s\nHTTPS_PROXY=%s\nhttp_proxy=%s\nhttps_proxy=%s\n' "$proxy" "$proxy" "$proxy" "$proxy"
+  printf "GIT_SSH_COMMAND=ssh -o ProxyCommand='/usr/bin/nc -X connect -x 127.0.0.1:%s %%h %%p'\n" "$port"
 }
 
 # socket_name: one tmux server per Privateer home, keyed by the home's path.
@@ -302,82 +338,91 @@ session_running() {  # <socket-name>
   tmux -L "$1" has-session -t "$SESSION" 2>/dev/null
 }
 
-# forge_connects: one --connect value per distinct forge origin the first mate
-# fetches from: this checkout and every clone under projects/.
-forge_connects() {
-  local repo url hostport host port
-  for repo in "$FM_ROOT" "$PROJECTS"/*/; do
-    [ -d "$repo" ] || continue
-    url=$(git -C "$repo" remote get-url origin 2>/dev/null) || continue
-    case "$url" in
-      https://* | http://*)
-        hostport=${url#*://}
-        hostport=${hostport%%/*}
-        hostport=${hostport##*@}
-        [ -n "$hostport" ] || continue
-        printf '%s://%s\n' "${url%%://*}" "$hostport"
-        ;;
-      ssh://*)
-        hostport=${url#ssh://}
-        hostport=${hostport%%/*}
-        hostport=${hostport##*@}
-        case "$hostport" in
-          *:*) host=${hostport%:*}; port=${hostport##*:} ;;
-          *) host=$hostport; port=22 ;;
-        esac
-        [ -n "$host" ] || continue
-        printf '%s:%s\n' "$host" "$port"
-        ;;
-      *@*:* | *:*/*)
-        case "$url" in
-          /* | file://*) continue ;;
-        esac
-        host=${url%%:*}
-        host=${host##*@}
-        [ -n "$host" ] || continue
-        printf '%s:22\n' "$host"
-        ;;
-    esac
-  done | LC_ALL=C sort -u
+# egress_allowlist: the egress proxy's destinations, one `<host>:<port>` per
+# line: every sailor endpoint, and the forge origin of this checkout and of
+# every clone under projects/. A forge URL's userinfo (the part of its
+# authority before the last @) is its login, not its host.
+egress_allowlist() {
+  local repo url rest authority hostport
+  {
+    jq -r '(.sailors // {}) | to_entries[] | .value.endpoint? // empty' "$DISPATCH" 2>/dev/null |
+      while IFS= read -r url; do url_hostport "$url" || true; done
+    for repo in "$FM_ROOT" "$PROJECTS"/*/; do
+      [ -d "$repo" ] || continue
+      url=$(git -C "$repo" remote get-url origin 2>/dev/null) || continue
+      case "$url" in
+        https://* | http://*)
+          rest=${url#*://}
+          authority=${rest%%[/?#]*}
+          url_hostport "${url%%://*}://${authority##*@}${rest#"$authority"}" || true
+          ;;
+        ssh://*)
+          hostport=${url#ssh://}
+          hostport=${hostport%%/*}
+          hostport=${hostport##*@}
+          case "$hostport" in
+            *:*) printf '%s:%s\n' "${hostport%:*}" "${hostport##*:}" ;;
+            ?*) printf '%s:22\n' "$hostport" ;;
+          esac
+          ;;
+        /* | file://*) ;;
+        *@*:* | *:*/*)
+          hostport=${url%%:*}
+          hostport=${hostport##*@}
+          [ -z "$hostport" ] || printf '%s:22\n' "$hostport"
+          ;;
+      esac
+    done
+  } | tr '[:upper:]' '[:lower:]' | LC_ALL=C sort -u
 }
 
-live_sailor_endpoints() {
-  jq -r '(.sailors // {}) | to_entries[] | select(.value.status == "live") | .value.endpoint' "$DISPATCH" 2>/dev/null
+# start_egress_proxy <socket>: the proxy in window `egress` of a new session,
+# started with cmd_start's env_args in its home_real;
+# prints its port once it has bound, or fails.
+start_egress_proxy() {
+  local socket=$1 proxy_cmd dest port
+  local -a allow
+  allow=()
+  while IFS= read -r dest; do
+    [ -z "$dest" ] || allow+=("$dest")
+  done < <(egress_allowlist)
+  mkdir -p "$EGRESS" || die "cannot create $EGRESS"
+  rm -f "$EGRESS/port"
+  proxy_cmd="exec python3 $(shell_quote "$SCRIPT_DIR/fm-privateer-proxy.py") $(shell_quote "$EGRESS/port") $(shell_quote "$EGRESS/log")"
+  for dest in "${allow[@]+"${allow[@]}"}"; do proxy_cmd="$proxy_cmd $(shell_quote "$dest")"; done
+  /usr/bin/env -i "${env_args[@]}" tmux -L "$socket" new-session -d -s "$SESSION" -n egress -c "$home_real" -- "$proxy_cmd" ||
+    return 1
+  for _ in $(seq 100); do
+    port=$(cat "$EGRESS/port" 2>/dev/null) || port=
+    case "$port" in
+      '' | *[!0-9]*) ;;
+      *) printf '%s\n' "$port"; return 0 ;;
+    esac
+    session_running "$socket" || break
+    sleep 0.1
+  done
+  tmux -L "$socket" kill-server 2>/dev/null || true
+  return 1
 }
 
 cmd_start() {
-  local audit_proxy='' line sailor model check provider config socket socket_path primary
-  local name value launch sandbox home_real root_real endpoint connect
-  local -a env_args inner sandbox_args
+  local line sailor model check provider config socket socket_path primary port
+  local name value launch sandbox home_real root_real egress_real
+  local -a env_args sandbox_args
   env_args=()
-  inner=()
   sandbox_args=()
-  while [ "$#" -gt 0 ]; do
-    case "$1" in
-      --audit-proxy)
-        [ "$#" -ge 2 ] || die "--audit-proxy requires a value"
-        audit_proxy=$2
-        shift 2
-        ;;
-      *) usage ;;
-    esac
-  done
+  [ "$#" -eq 0 ] || usage
   active || refuse "config/privateer is absent; this launcher starts only a Privateer home"
   if ! check=$(cmd_check); then
     printf 'fm-privateer: refused: the quarantine is not satisfied:\n%s\n' "$check" >&2
     exit 1
-  fi
-  if [ -n "$audit_proxy" ]; then
-    case "$(url_host "$audit_proxy")" in
-      localhost | 127.* | ::1) ;;
-      *) die "--audit-proxy must be an http URL on this machine, got '$audit_proxy'" ;;
-    esac
   fi
   line=$(first_mate_line)
   [ -n "$line" ] || refuse "config/privateer names no first mate; write one line <sailor>/<model> naming the sailor and model the first mate runs on"
   sailor=${line%%/*}
   model=${line#*/}
   command -v tmux >/dev/null 2>&1 || refuse "tmux is required to run the Privateer session"
+  command -v python3 >/dev/null 2>&1 || refuse "python3 is required to run the Privateer egress proxy"
   "$SCRIPT_DIR/fm-sandbox-exec.sh" available || refuse "the Privateer sandbox needs sandbox-exec, which cannot run on this machine"
   primary=opencode
   if [ "${FM_TEST_SEAM:-}" = 1 ] && [ -n "${FM_PRIVATEER_PRIMARY:-}" ]; then
@@ -405,31 +450,25 @@ cmd_start() {
   done
   home_real=$(cd "$FM_HOME" && pwd -P) || die "cannot resolve $FM_HOME"
   env_args+=("FM_HOME=$home_real")
+  port=$(start_egress_proxy "$socket") ||
+    refuse "the Privateer egress proxy could not bind a loopback port; nothing was started"
+  egress_real=$(cd "$EGRESS" && pwd -P) || die "cannot resolve $EGRESS"
   while IFS= read -r line; do
     [ -z "$line" ] || env_args+=("$line")
   done < <(cmd_launch_env)
   env_args+=("OPENCODE_CONFIG_CONTENT=$config")
-  if [ -n "$audit_proxy" ]; then
-    env_args+=("HTTP_PROXY=$audit_proxy" "HTTPS_PROXY=$audit_proxy" "http_proxy=$audit_proxy" "https_proxy=$audit_proxy")
-  fi
-  # The sandbox: writes to this home, this checkout's OpenCode scratch, the
-  # worktree pool, and the per-task temp roots; connections to the sailors,
-  # the forges, the audit proxy, and this server's socket.
+  # The sandbox: writes to this home but never its egress record, this
+  # checkout's OpenCode scratch, the worktree pool, and the per-task temp
+  # roots; connections to the egress proxy and this server's socket only.
   root_real=$(cd "$FM_ROOT" && pwd -P) || die "cannot resolve $FM_ROOT"
   socket_path=$(tmux_socket_path "$socket")
-  sandbox_args=(run --write "$home_real" --write-prefix /tmp/fm- --unix-socket "$socket_path")
+  sandbox_args=(run --write "$home_real" --deny-write "$egress_real" --write-prefix /tmp/fm- --unix-socket "$socket_path"
+    --connect "http://127.0.0.1:$port")
   [ -z "${HOME:-}" ] || sandbox_args+=(--write "$HOME/.treehouse")
   case "$root_real" in
     "$home_real" | "$home_real"/*) ;;
     *) sandbox_args+=(--write "$root_real/.opencode") ;;
   esac
-  while IFS= read -r endpoint; do
-    [ -z "$endpoint" ] || sandbox_args+=(--connect "$endpoint")
-  done < <(live_sailor_endpoints)
-  while IFS= read -r connect; do
-    [ -z "$connect" ] || sandbox_args+=(--connect "$connect")
-  done < <(forge_connects)
-  [ -z "$audit_proxy" ] || sandbox_args+=(--connect "$audit_proxy")
   sandbox=$(shell_quote "$SCRIPT_DIR/fm-sandbox-exec.sh")
   for value in "${sandbox_args[@]}"; do sandbox="$sandbox $(shell_quote "$value")"; done
   # The primary's own boundary: the pane shell tmux starts may have read the
@@ -439,11 +478,13 @@ cmd_start() {
   launch='/usr/bin/env -i ${TMUX+"TMUX=$TMUX"} ${TMUX_PANE+"TMUX_PANE=$TMUX_PANE"}'
   for value in "${env_args[@]}"; do launch="$launch $(shell_quote "$value")"; done
   launch="$launch $sandbox -- $(shell_quote "$primary")"
-  inner=(/usr/bin/env -i "${env_args[@]}" tmux -L "$socket" new-session -d -s "$SESSION" -n firstmate -c "$root_real" -- "$launch")
-  "${inner[@]}" || refuse "tmux could not start the Privateer session"
+  if ! tmux -L "$socket" new-window -t "$SESSION" -n firstmate -c "$root_real" -- "$launch"; then
+    tmux -L "$socket" kill-server 2>/dev/null || true
+    refuse "tmux could not start the Privateer first mate"
+  fi
   # Never copy a variable from a client that attaches later.
   tmux -L "$socket" set-option -g update-environment '' >/dev/null 2>&1 || true
-  echo "privateer: started session $SESSION on tmux socket $socket (first mate $sailor/$model); attach with: FM_HOME=$(shell_quote "$home_real") $(shell_quote "$SCRIPT_DIR/fm-privateer.sh") attach"
+  echo "privateer: started session $SESSION on tmux socket $socket (first mate $sailor/$model, egress proxy 127.0.0.1:$port); attach with: FM_HOME=$(shell_quote "$home_real") $(shell_quote "$SCRIPT_DIR/fm-privateer.sh") attach"
 }
 
 cmd_attach() {
@@ -473,6 +514,7 @@ cmd_stop() {
   fi
   FM_HOME="$FM_HOME" FM_STATE_OVERRIDE="$STATE" "$SCRIPT_DIR/fm-watch-arm.sh" --stop >/dev/null 2>&1 || true
   tmux -L "$socket" kill-server 2>/dev/null || refuse "the Privateer tmux server could not be stopped"
+  rm -f "$EGRESS/port"
   echo "privateer: stopped session $SESSION on tmux socket $socket"
 }
 
@@ -483,10 +525,6 @@ case "$cmd" in
   check)
     [ "$#" -eq 0 ] || usage
     cmd_check
-    ;;
-  endpoint-ok)
-    [ "$#" -eq 1 ] || usage
-    endpoint_ok "$1"
     ;;
   launch-env)
     [ "$#" -eq 0 ] || usage

@@ -1477,9 +1477,9 @@ families_for_changed_path() {
     bin/fm-dispatch-resolve.sh)
       printf '%s\n' "__script__:fm-dispatch-resolve.test.sh"
       ;;
-    bin/fm-privateer.sh)
-      # The quarantine's one owner: its own suite, the bootstrap report, the
-      # spawn refusals, and the live egress audit.
+    bin/fm-privateer.sh|bin/fm-privateer-proxy.py)
+      # The quarantine's one owner and its egress proxy: its own suite, the
+      # bootstrap report, the spawn refusals, and the live egress audit.
       printf '%s\n' "__script__:fm-privateer.test.sh"
       printf '%s\n' "__script__:fm-bootstrap.test.sh"
       printf '%s\n' backend-dispatch

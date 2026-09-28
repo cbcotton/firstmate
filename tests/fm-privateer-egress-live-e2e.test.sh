@@ -4,18 +4,18 @@
 # captain would start one, makes zero connection attempts to Anthropic.
 #
 # The launcher runs the real OpenCode primary, inside the real macOS sandbox,
-# in a fixture clone of this checkout with a throwaway Privateer home, so the
-# real firstmate plugins load and the real watcher arms. The session's only
-# sailor is a logging proxy on a loopback port that also serves a scripted
-# OpenAI-compatible model: it records every request, answers the model's
-# requests with a plain reply, and logs and refuses every CONNECT tunnel and
-# every proxied request to any other host. The session's HTTP_PROXY and
-# HTTPS_PROXY name that proxy, so a well-behaved client's outbound traffic is
-# recorded there, while the sandbox refuses whatever tries to go around it.
-# The guard fails unless at least one model request arrived, so it can never
-# pass by checking nothing, and it fails on any recorded attempt whose target
-# names Anthropic or Claude. It spends no model tokens but starts a whole
-# supervised primary session, so it stays opt-in.
+# behind the launcher's own egress proxy, in a fixture clone of this checkout
+# whose origin is an https forge, with a throwaway Privateer home, so the real
+# firstmate plugins load and the real watcher arms. The session's only sailor
+# is a scripted OpenAI-compatible model on a loopback port that records every
+# request and answers with a plain reply. Before OpenCode starts, the primary's
+# command first tries two direct connections that ignore the proxy variables,
+# one to Anthropic and one to the sailor itself, inside the same sandbox; both
+# must be denied. The proxy's own log must then name at least one allowed
+# request to the sailor, allow nothing but the sailor and the forge, and name
+# no Anthropic or Claude host among every allowed and refused destination, so
+# the audit can never pass by checking nothing. It spends no model tokens but
+# starts a whole supervised primary session, so it stays opt-in.
 set -u
 
 # shellcheck source=tests/lib.sh
@@ -52,13 +52,12 @@ guard_fail() {
   fail "opencode $OPENCODE_VERSION in a Privateer session: $*"
 }
 
-# write_audit_proxy <path>: the logging proxy and scripted model in one server.
-write_audit_proxy() {
+# write_model <path>: the scripted model, recording every request it serves.
+write_model() {
   cat > "$1" <<'PY'
 import json, sys, time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 PORT_FILE, LOG = sys.argv[1], sys.argv[2]
-PORT = 0
 
 def chunk(delta, finish=None):
     return "data: " + json.dumps({"id": "c", "object": "chat.completion.chunk", "created": int(time.time()),
@@ -68,82 +67,77 @@ class H(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
     def log_message(self, *a):
         pass
-    def record(self, kind, target):
-        with open(LOG, "a") as f:
-            f.write(json.dumps({"kind": kind, "target": target, "line": self.requestline}) + "\n")
     def reply(self, code, body, ctype):
+        with open(LOG, "a") as f:
+            f.write(json.dumps({"method": self.command, "path": self.path}) + "\n")
         data = body.encode()
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
         self.wfile.write(data)
-    def do_CONNECT(self):
-        self.record("connect", self.path)
-        self.reply(403, "tunnel refused by the egress audit\n", "text/plain")
-        self.close_connection = True
-    def route(self):
-        path = self.path
-        if path.startswith("http://") or path.startswith("https://"):
-            rest = path.split("://", 1)[1]
-            host, _, tail = rest.partition("/")
-            path = "/" + tail
-            if host not in ("127.0.0.1:%d" % PORT, "localhost:%d" % PORT):
-                self.record("request", host)
-                self.reply(403, "request refused by the egress audit\n", "text/plain")
-                return None
-        self.record("model", (self.headers.get("Host") or "") + path)
-        return path
     def do_GET(self):
-        path = self.route()
-        if path is None:
-            return
-        if path.startswith("/v1/models"):
+        if self.path.startswith("/v1/models"):
             self.reply(200, json.dumps({"object": "list", "data": [{"id": "scripted", "object": "model"}]}), "application/json")
         else:
             self.reply(404, "no such route\n", "text/plain")
     def do_POST(self):
-        path = self.route()
-        if path is None:
-            return
         self.rfile.read(int(self.headers.get("Content-Length") or 0))
-        if path.startswith("/v1/chat/completions"):
+        if self.path.startswith("/v1/chat/completions"):
             body = chunk({"role": "assistant", "content": "Aye. Nothing to do; standing by."}) + chunk({}, "stop") + "data: [DONE]\n\n"
             self.reply(200, body, "text/event-stream")
         else:
             self.reply(404, "no such route\n", "text/plain")
 
 srv = ThreadingHTTPServer(("127.0.0.1", 0), H)
-PORT = srv.server_address[1]
-open(PORT_FILE, "w").write(str(PORT))
+open(PORT_FILE, "w").write(str(srv.server_address[1]))
 srv.serve_forever()
 PY
 }
 
+# write_probe_primary <path> <sailor-port>: the primary's command. Inside the
+# sandbox it tries a direct connection to Anthropic and to the sailor, both
+# ignoring the proxy, records each curl status in the home, then runs OpenCode.
+write_probe_primary() {
+  cat > "$1" <<SH
+#!/bin/sh
+/usr/bin/curl --noproxy '*' -sS -m 5 -o /dev/null https://api.anthropic.com/ 2>/dev/null
+anthropic=\$?
+/usr/bin/curl --noproxy '*' -sS -m 5 -o /dev/null http://127.0.0.1:$2/v1/models 2>/dev/null
+sailor=\$?
+printf 'anthropic=%s sailor=%s\\n' "\$anthropic" "\$sailor" > "\$FM_HOME/state/direct-probe"
+exec opencode
+SH
+  chmod +x "$1"
+}
+
 test_privateer_session_reaches_nothing_but_its_sailor() {
-  local case_dir root port out status log model_requests anthropic tunnels pane started typed=no elapsed
+  local case_dir root port out status log egress model_requests proxied allowed anthropic probe destinations pane started typed=no elapsed
   case_dir="$TMP_ROOT/case"
   HOME_DIR="$case_dir/home"
   root="$case_dir/root"
   mkdir -p "$HOME_DIR/config" "$HOME_DIR/state" "$HOME_DIR/data" "$HOME_DIR/projects"
   # The first mate runs the working tree's scripts and plugins from a fixture
-  # clone, so nothing it writes lands in this checkout.
+  # clone, so nothing it writes lands in this checkout; its origin is an https
+  # forge, so the proxy allows that forge on 443 and nothing else there.
   git clone -q "$ROOT" "$root" || guard_fail "the fixture clone of this checkout failed"
   cp -R "$ROOT/bin/." "$root/bin/"
   cp -R "$ROOT/.opencode/." "$root/.opencode/"
+  git -C "$root" remote set-url origin https://github.com/cbcotton/firstmate.git
   LAUNCHER="$root/bin/fm-privateer.sh"
 
-  write_audit_proxy "$case_dir/proxy.py"
-  log="$case_dir/egress.log"
+  write_model "$case_dir/model.py"
+  log="$case_dir/model.log"
   : > "$log"
-  python3 "$case_dir/proxy.py" "$case_dir/port" "$log" &
+  python3 "$case_dir/model.py" "$case_dir/port" "$log" &
   SERVER_PID=$!
   for _ in $(seq 100); do
     [ -s "$case_dir/port" ] && break
     sleep 0.05
   done
   port=$(cat "$case_dir/port" 2>/dev/null)
-  [ -n "$port" ] || guard_fail "the audit proxy did not start"
+  [ -n "$port" ] || guard_fail "the scripted model did not start"
+  write_probe_primary "$case_dir/primary" "$port"
 
   printf 'tiller/scripted\n' > "$HOME_DIR/config/privateer"
   printf 'opencode\n' > "$HOME_DIR/config/crew-harness"
@@ -152,8 +146,10 @@ test_privateer_session_reaches_nothing_but_its_sailor() {
   printf '{"sailors":{"tiller":{"title":"Audit","endpoint":"http://127.0.0.1:%s/v1","status":"live","models":["scripted"]}},"default":{"harness":"opencode","sailor":"tiller","model":"scripted"}}\n' "$port" \
     > "$HOME_DIR/config/crew-dispatch.json"
   fm_test_track_watcher_state "$HOME_DIR/state"
+  egress="$HOME_DIR/state/privateer/egress/log"
 
-  out=$(cd "$case_dir" && ANTHROPIC_API_KEY=sk-audit-decoy FM_HOME="$HOME_DIR" "$LAUNCHER" start --audit-proxy "http://127.0.0.1:$port" 2>&1)
+  out=$(cd "$case_dir" && ANTHROPIC_API_KEY=sk-audit-decoy FM_TEST_SEAM=1 FM_PRIVATEER_PRIMARY="$case_dir/primary" \
+    FM_HOME="$HOME_DIR" "$LAUNCHER" start 2>&1)
   status=$?
   [ "$status" = 0 ] || guard_fail "the launcher refused to start: $out"
   SOCKET=$(printf '%s\n' "$out" | sed -n 's/.*on tmux socket \([^ ]*\).*/\1/p' | head -1)
@@ -165,29 +161,41 @@ test_privateer_session_reaches_nothing_but_its_sailor() {
   model_requests=0
   started=$(date +%s)
   for i in $(seq 240); do
-    model_requests=$(jq -r 'select(.kind == "model" and (.target | test("/v1/chat/completions"))) | .target' "$log" 2>/dev/null | wc -l | tr -d ' ')
+    model_requests=$(jq -r 'select(.path | test("/v1/chat/completions")) | .path' "$log" 2>/dev/null | wc -l | tr -d ' ')
     [ "$model_requests" -gt 0 ] && break
     if [ "$i" = 160 ]; then
       typed=yes
-      tmux -L "$SOCKET" send-keys -t privateer -l 'egress audit: say nothing and stand by' 2>/dev/null || true
-      tmux -L "$SOCKET" send-keys -t privateer Enter 2>/dev/null || true
+      tmux -L "$SOCKET" send-keys -t privateer:firstmate -l 'egress audit: say nothing and stand by' 2>/dev/null || true
+      tmux -L "$SOCKET" send-keys -t privateer:firstmate Enter 2>/dev/null || true
     fi
-    tmux -L "$SOCKET" has-session -t privateer 2>/dev/null || guard_fail "the session ended before its first model request; proxy log: $(cat "$log")"
+    tmux -L "$SOCKET" has-session -t privateer 2>/dev/null || guard_fail "the session ended before its first model request; proxy log: $(cat "$egress" 2>/dev/null)"
     sleep 0.5
   done
   elapsed=$(( $(date +%s) - started ))
-  pane=$(tmux -L "$SOCKET" capture-pane -p -t privateer 2>/dev/null | tr -cd '[:print:]\n' | tail -20)
-  [ "$model_requests" -gt 0 ] || guard_fail "no model request reached the sailor, so the session proves nothing; pane: $pane"
+  pane=$(tmux -L "$SOCKET" capture-pane -p -t privateer:firstmate 2>/dev/null | tr -cd '[:print:]\n' | tail -20)
+  [ "$model_requests" -gt 0 ] || guard_fail "no model request reached the sailor, so the session proves nothing; pane: $pane; proxy log: $(cat "$egress" 2>/dev/null)"
 
   out=$(FM_HOME="$HOME_DIR" "$LAUNCHER" stop 2>&1)
   status=$?
   [ "$status" = 0 ] || guard_fail "the launcher could not stop the idle session: $out"
   SOCKET=
 
-  anthropic=$(jq -r 'select((.target | ascii_downcase | test("anthropic|claude")) or (.line | ascii_downcase | test("anthropic|claude"))) | .line' "$log")
+  probe=$(cat "$HOME_DIR/state/direct-probe" 2>/dev/null)
+  case "$probe" in
+    "anthropic=0 "* | '') guard_fail "a direct connection to Anthropic that ignored the proxy was not denied: '${probe:-no probe ran}'" ;;
+  esac
+  case "$probe" in
+    *" sailor=0") guard_fail "a direct connection to the sailor that ignored the proxy was not denied: '$probe'" ;;
+  esac
+  [ -s "$egress" ] || guard_fail "the egress proxy logged nothing"
+  proxied=$(jq -r --arg d "127.0.0.1:$port" 'select(.verdict == "allowed" and .dest == $d) | .dest' "$egress" | wc -l | tr -d ' ')
+  [ "$proxied" -gt 0 ] || guard_fail "no sailor request passed through the egress proxy: $(cat "$egress")"
+  allowed=$(jq -r --arg d "127.0.0.1:$port" 'select(.verdict == "allowed" and .dest != $d and .dest != "github.com:443") | .dest' "$egress")
+  [ -z "$allowed" ] || guard_fail "the egress proxy allowed a destination other than the sailor and the forge:"$'\n'"$allowed"
+  anthropic=$(jq -r 'select(.dest | ascii_downcase | test("anthropic|claude")) | "\(.verdict) \(.method) \(.dest)"' "$egress")
   [ -z "$anthropic" ] || guard_fail "the session attempted to reach Anthropic:"$'\n'"$anthropic"
-  tunnels=$(jq -r 'select(.kind == "connect" or .kind == "request") | .target' "$log" | LC_ALL=C sort | uniq -c | tr -s ' ' | sed 's/^ //' | paste -sd ';' -)
-  pass "opencode $OPENCODE_VERSION in a Privateer session made $model_requests model request(s) to its sailor (first after ${elapsed}s, typed prompt needed: $typed) and zero connection attempts to Anthropic; other tunnels the proxy refused: ${tunnels:-none}"
+  destinations=$(jq -r '"\(.verdict) \(.dest)"' "$egress" | LC_ALL=C sort | uniq -c | tr -s ' ' | sed 's/^ //' | paste -sd ';' -)
+  pass "opencode $OPENCODE_VERSION in a Privateer session made $model_requests model request(s) to its sailor through the egress proxy (first after ${elapsed}s, typed prompt needed: $typed), its direct connections around the proxy were denied ($probe), and the proxy recorded zero Anthropic destinations among: $destinations"
 }
 
 test_privateer_session_reaches_nothing_but_its_sailor
