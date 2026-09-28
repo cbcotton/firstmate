@@ -1,0 +1,15 @@
+== second note, handling successor idle ==
+61439     1 Mon Sep 28 14:56:54 2026     bash /private/tmp/fm-plain.c34p5v/bin/fm-watch-arm.sh
+61460 61439 Mon Sep 28 14:56:54 2026     bash /private/tmp/fm-plain.c34p5v/bin/fm-watch.sh
+95672 43873 Mon Sep 28 14:57:40 2026     bash /private/tmp/fm-plain.c34p5v/bin/fm-claude-stop-autoarm.sh
+95891 95672 Mon Sep 28 14:57:40 2026     bash /private/tmp/fm-plain.c34p5v/bin/fm-watch-arm.sh
+reason=actionable-check
+successor=started:61460
+handed=1 seq=1
+note filed at 12:58:15Z
+queued 1790600295-8TW9GF
+  do number 2 from the pinnace
+  firstmate will pick this up at its next check.
+watcher delivered after 13s
+55909	Mon Sep 28 14:56:23 2026     bash /private/tmp/fm-plain.c34p5v/bin/fm-watch.sh	check: rearm-resurface
+61460	Mon Sep 28 14:56:54 2026     bash /private/tmp/fm-plain.c34p5v/bin/fm-watch.sh	check: undelivered queued wake: inbox:1790600295-8TW9GF

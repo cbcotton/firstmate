@@ -1,0 +1,2 @@
+skip: live: opt-in; set FM_CLAUDE_LIVE_E2E=1 to run
+bash tests/$t  0.02s user 0.02s system 76% cpu 0.050 total

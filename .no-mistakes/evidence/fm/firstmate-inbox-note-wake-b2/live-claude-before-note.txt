@@ -1,0 +1,50 @@
+     CONTEXT
+     ================================================================================
+
+     data/projects.md
+     --------------------------------------------------------------------------------
+     ABSENT
+
+     data/secondmates.md
+     --------------------------------------------------------------------------------
+     ABSENT
+
+     data/captain.md
+     --------------------------------------------------------------------------------
+     ABSENT
+
+     data/captain-shared.md (shared, main-authoritative, read-only in secondmate homes)
+     --------------------------------------------------------------------------------
+     ABSENT
+
+     data/learnings.md
+     --------------------------------------------------------------------------------
+     ABSENT
+
+     ================================================================================
+     NEXT STEP
+     ================================================================================
+     Follow the supervision operating instructions block above for harness 'claude'.
+     This script never starts supervision itself.
+
+     The digest above is complete for this session start. The READ-ONCE CONTRACT
+     section near the top of it governs what may still be read from disk.
+
+  Listed 2 directories, ran 1 shell command
+
+⏺ Captain, the session has started and I now hold the session lock, so this is the only session supervising the fleet. Nothing is running and nothing is waiting on you.
+
+  - Fleet: no work is in progress, the backlog is empty, and no second mates or projects are registered. There are no saved preferences or notes yet, so I'm using the default settings.
+  - Monitoring: it isn't running yet, and one custom check is registered. It starts on its own when this turn ends, so there's nothing for you to do. If it doesn't come up, I'll look into it.
+  - Network checks: GitHub sign-in and refreshing the project copies were still running when I last looked. I'll tell you only if something fails.
+  - Not done: I tried twice to look for project copies already on this machine. Both attempts stopped because the automatic safety check on my commands was temporarily unavailable, so I haven't
+    confirmed whether any exist. I'll check before the first project request. Otherwise I'll add projects as you name them.
+
+  What would you like to work on?
+
+✻ Worked for 19s · done 2:56 PM
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← 1 agent

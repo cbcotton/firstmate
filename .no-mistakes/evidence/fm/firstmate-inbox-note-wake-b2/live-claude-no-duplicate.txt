@@ -1,0 +1,9 @@
+== 60s observation after second rewake (both notes still queued, unacked) ==
+13:00:19Z
+deliveries before=       2 after=       2
+queue:
+1790600214	1	check	inbox:1790600214-9Fty2O	check: captain inbox note 1790600214-9Fty2O - do number 1
+1790600295	2	check	inbox:1790600295-8TW9GF	check: captain inbox note 1790600295-8TW9GF - do number 2 from the pinnace
+handed=2 seq=2
+-rw-r--r--@ 1 cotton  staff  0 Sep 28 15:00:11 2026 /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.TgC8M0/state/.last-watcher-beat
+34228       01:40 bash /private/tmp/fm-plain.c34p5v/bin/fm-watch.sh

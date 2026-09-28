@@ -1,0 +1,14 @@
+[13:23:29Z] FM_HOME=/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.4rv3FK  poll=default(15s)
+[13:23:30Z] handling-successor arm pid=10714 -> watcher: started pid=10733 (beacon fresh)
+[13:23:33Z] Stop-hook arm pid=11422 -> watcher: attached pid=10733 (beacon 0s)
+[13:23:33Z] idling 35s (>2 poll intervals) with nothing queued ...
+[13:24:08Z] Stop-hook arm still blocking (idle, no spurious wake): OK
+[13:24:08Z] filing captain inbox note via bin/fm-inbox.sh note --source pinnace 'do number 1'
+queued 1790601848-ImZt62
+  do number 1
+  firstmate will pick this up at its next check.
+  queue row: 1790601848	1	check	inbox:1790601848-ImZt62	check: captain inbox note 1790601848-ImZt62 - do number 1
+[13:25:08Z] FAIL: Stop-hook arm still blocked after 60s
+/Users/cotton/.no-mistakes/evidence/01M3M0EGFKA1R9Q17HGW8D8Z8X/live-lab-inbox-wake.sh: line 28: 10714 Terminated: 15          run FM_GATE_REFUSE_BYPASS=1 FM_WATCH_PREDECESSOR_ARM_PID=$$ "$ROOT/bin/fm-watch-arm.sh" > "$LAB/succ.out" 2>&1
+/Users/cotton/.no-mistakes/evidence/01M3M0EGFKA1R9Q17HGW8D8Z8X/live-lab-inbox-wake.sh: line 28: 11422 Terminated: 15          run FM_GATE_REFUSE_BYPASS=1 "$ROOT/bin/fm-watch-arm.sh" > "$LAB/att.out" 2>&1
+[13:25:08Z] done

@@ -1,0 +1,6 @@
+note filed at 12:56:54Z
+queued 1790600214-9Fty2O
+  do number 1
+  firstmate will pick this up at its next check.
+1790600214	1	check	inbox:1790600214-9Fty2O	check: captain inbox note 1790600214-9Fty2O - do number 1
+primary woke after 12s

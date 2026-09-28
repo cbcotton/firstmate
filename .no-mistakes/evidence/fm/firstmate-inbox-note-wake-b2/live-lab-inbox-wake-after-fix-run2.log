@@ -1,0 +1,14 @@
+[13:26:31Z] FM_HOME=/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.BfnjdL  poll=default(15s)
+[13:26:32Z] handling-successor arm pid=72521 -> watcher: started pid=72540 (beacon fresh)
+[13:26:35Z] Stop-hook arm pid=73470 -> watcher: attached pid=72540 (beacon 0s)
+[13:26:35Z] idling 35s (>2 poll intervals) with nothing queued ...
+[13:27:17Z] Stop-hook arm still blocking (idle, no spurious wake): OK
+[13:27:17Z] filing captain inbox note via bin/fm-inbox.sh note --source pinnace 'do number 1'
+queued 1790602037-A65LXc
+  do number 1
+  firstmate will pick this up at its next check.
+  queue row: 1790602037	1	check	inbox:1790602037-A65LXc	check: captain inbox note 1790602037-A65LXc - do number 1
+[13:27:29Z] Stop-hook arm returned after 12s with:
+  | watcher: attached pid=72540 (beacon 0s)
+  | check: undelivered queued wake: inbox:1790602037-A65LXc
+[13:27:29Z] done
