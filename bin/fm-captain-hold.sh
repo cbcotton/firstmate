@@ -187,9 +187,12 @@
 # one captain call. See "record divergence" beside command_diverged below.
 #
 # `card` stores, prints, or removes a task's decision card at
-# state/<task-id>.decision-card.json. `set` writes its argument verbatim, and
-# `show` prints `null` when no card exists. bin/fm-fleet-snapshot.sh serves the
-# card as hints.decision_card while the task has an open needs-decision.
+# state/<task-id>.decision-card.json. A card is exactly one JSON object: `set`
+# refuses anything else with exit 2, leaving any stored card in place, and
+# otherwise replaces the file atomically with its argument verbatim. `show`
+# prints `null` when no card exists. bin/fm-fleet-snapshot.sh serves the card
+# as hints.decision_card while the task has an open needs-decision, and serves
+# a file that is not one JSON object as null.
 #
 # Resolution records: the block written into the body names this script, the
 # decision digest, and a `Resolution mode:` of answered, released, repaired, or
@@ -969,6 +972,15 @@ apply_pending_retained_artifact() {  # <task-id>
   esac
 }
 
+# Opt-in fleet activity ledger (docs/fleet-ledger.md); off costs one file test.
+# Called right after a new resolution record for the captain's answer is
+# written, so an exact retry, which finds that record already there, adds none.
+record_decided_in_ledger() {  # <task-id>
+  [ ! -e "${FM_CONFIG_OVERRIDE:-$FM_HOME/config}/fleet-ledger" ] \
+    || FM_HOME=$FM_HOME FM_STATE_OVERRIDE=$STATE "$SCRIPT_DIR/fm-fleet-ledger.sh" decided "$1" "$DECISION_TEXT" \
+    || true
+}
+
 close_answered() {  # <task-id> <release-0-or-1>
   if [ "$2" = 1 ]; then
     tasks_axi unhold "$1" >/dev/null
@@ -1052,6 +1064,7 @@ command_answer() {
     [ "$hold_kind" = captain ] \
       || fail "task $id was never held for the captain; nothing to record an answer on"
     write_resolution_record "$id" repaired "$body"
+    record_decided_in_ledger "$id"
     remove_interrupted_answer_stamp "$id"
     task_show "$id" || fail "task $id disappeared while recording the answer"
     show=$TASK_SHOW_OUTPUT
@@ -1087,6 +1100,7 @@ command_answer() {
       return 0
     fi
     write_resolution_record "$id" "$outcome" "$body"
+    record_decided_in_ledger "$id"
     if ! close_answered "$id" "$release"; then
       fail "could not close answered captain-held task $id"
     fi
@@ -1947,11 +1961,20 @@ command_card() {
       fi
       ;;
     set)
-      if [ $# -lt 1 ]; then
+      if [ $# -ne 1 ]; then
         printf 'usage: fm-captain-hold.sh card <task-id> set <options-json>\n' >&2
         exit 2
       fi
-      printf '%s\n' "$1" > "$card_file"
+      if ! printf '%s' "$1" | jq -e -s 'length == 1 and (.[0] | type) == "object"' >/dev/null 2>&1; then
+        printf 'fm-captain-hold: a decision card must be one JSON object\n' >&2
+        exit 2
+      fi
+      local tmp
+      tmp=$(mktemp "$STATE/.$id.decision-card.XXXXXX") || fail "cannot stage the decision card for $id"
+      if ! { printf '%s\n' "$1" > "$tmp" && mv -f -- "$tmp" "$card_file"; }; then
+        rm -f -- "$tmp"
+        fail "cannot record the decision card for $id"
+      fi
       ;;
     clear)
       rm -f "$card_file"

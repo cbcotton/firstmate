@@ -729,6 +729,28 @@ status_line_note() {  # <status-line> -> text after the first colon, trimmed
   fi
   printf '%s' "$n"
 }
+# The tags a worker ends its PR-ready `done:` note with (bin/fm-dod-lib.sh
+# renders the instruction): a `risk=<low|medium|high>` word, then
+# `touches=<phrase>`, which runs to the end of the line. Each reader prints
+# nothing when its tag is absent; a risk word outside those three is no risk.
+status_line_ready_risk() {  # <status-line> -> low, medium, high, or nothing
+  local note
+  note=" $(status_line_note "$1")"
+  note="${note%%[[:space:]]touches=*} "
+  case "$note" in
+    *[[:space:]]risk=low[[:space:]]*) printf 'low' ;;
+    *[[:space:]]risk=medium[[:space:]]*) printf 'medium' ;;
+    *[[:space:]]risk=high[[:space:]]*) printf 'high' ;;
+  esac
+}
+status_line_ready_touches() {  # <status-line> -> the touches phrase, trimmed, or nothing
+  local note
+  note=" $(status_line_note "$1")"
+  case "$note" in *[[:space:]]touches=*) ;; *) return 0 ;; esac
+  note=${note#*[[:space:]]touches=}
+  note=${note#"${note%%[![:space:]]*}"}
+  printf '%s' "${note%"${note##*[![:space:]]}"}"
+}
 _fm_decision_key() {  # <status-line> [<keyless>] -> key slug, or <keyless> (default "default") when no token
   local k unstamped
   _fm_status_unstamped "$1" unstamped

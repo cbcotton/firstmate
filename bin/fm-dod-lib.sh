@@ -316,6 +316,15 @@ Two firstmate-specific rules layer on top of that guidance:
 EOF
 }
 
+# The tags a PR-ready `done:` line ends with, so the fleet ledger's
+# task.pr_ready record can carry the change's risk and what it touches
+# (docs/fleet-ledger.md). bin/fm-classify-lib.sh's ready-line tag readers own
+# the grammar; <assessor> names whose risk judgement the worker reports.
+fm_dod_ready_tags_rule() {  # <assessor>
+  printf '%s\n' "\`{risk}\` is \`low\`, \`medium\`, or \`high\`: $1." \
+    "\`{touches}\` names in a short phrase the sensitive surfaces the change touches, such as auth, a network route, or stored data, or \`none\`; keep it last, because it runs to the end of the line."
+}
+
 # How a worker on a forge=gerrit project publishes, shared by both publishing
 # modes so the one push, the Change-Id rule, and the ready report are written
 # once. gerrit-axi owns the squash mechanics; this names the one call and what
@@ -331,7 +340,8 @@ Publish from this copy with \`gerrit-axi\`, never with \`git push\`:
    Never pass \`--stack\`: a stack of changes is not published from this fleet until it can be watched by its membership pinned when its watch is armed, and the watch follows exactly one change.
 3. Read the record it prints: \`ok\` must be \`true\`, and the one row of its \`changes\` table is your change. Its \`url\` is the change URL; when \`url\` is null, write \`https://<host>/c/<project>/+/<change>\` from your \`origin\` remote's host and that row's \`project\` and \`change\`.
    A failure prints a typed error record instead; fix what it names and publish again, which updates the same change rather than creating another.
-Then append \`done [at=<epoch>]: PR {change url} published for review\` to the status file and stop. You are finished.
+Then append \`done [at=<epoch>]: PR {change url} published for review risk={risk} touches={touches}\` to the status file and stop. You are finished.
+$(fm_dod_ready_tags_rule "your assessment of the change, taking the pipeline's risk assessment when it gave one")
 That \`done:\` is accepted only when the change's current patch set on the server carries this copy's HEAD tree, so commit nothing after publishing; if you must change the work, commit it and publish again before reporting done.
 A \`done:\` whose URL is not the canonical \`https://<host>/c/<project>/+/<number>\` change URL is refused.
 There is no pull request, no \`gh-axi\` call, and no forge CI result to report: a human reviewer approves and submits the change on the server, and firstmate relays that outcome.
@@ -400,7 +410,8 @@ The task is complete only when committed on your branch.
 When it is implemented and committed, push your branch and open a PR with \`gh-axi\` that is ready for review, not a draft.
 Before you report done, read the PR back from the forge and confirm it is not a draft (\`gh-axi pr view <number>\` must print \`draft: no\`, where <number> is the PR number from your PR URL); if it is a draft, mark it ready with \`gh-axi pr ready <number>\`.
 A draft cannot be merged, so a done report on one leaves the merge unasked.
-Then append \`done [at=<epoch>]: PR {url}\` to the status file and stop.
+Then append \`done [at=<epoch>]: PR {url} risk={risk} touches={touches}\` to the status file and stop.
+$(fm_dod_ready_tags_rule "your own assessment of the change")
 That \`done:\` is accepted only when this copy's HEAD - your latest commit - is pushed to your PR branch; the check tests that commit, not merely that a branch moved.
 If you deliberately keep the PR a draft, append \`paused [at=<epoch>]: {why the draft is held}\` instead of done.
 Do NOT run /no-mistakes. The configured merge authority decides whether to merge the PR; firstmate relays the outcome.
@@ -435,7 +446,8 @@ EOF
 
 After /no-mistakes reports CI green (the CI-ready return point - do not wait for it to keep monitoring in the background until merge), read the PR back from the forge and confirm it is not a draft (\`gh-axi pr view <number>\` must print \`draft: no\`, where <number> is the PR number from your PR URL); if it is a draft, mark it ready with \`gh-axi pr ready <number>\`.
 A draft cannot be merged, so a done report on one leaves the merge unasked.
-Then append \`done [at=<epoch>]: PR {url} checks green\` and stop. You are finished.
+Then append \`done [at=<epoch>]: PR {url} checks green risk={risk} touches={touches}\` and stop. You are finished.
+$(fm_dod_ready_tags_rule "the level the pipeline's risk assessment gave the PR")
 That CI-ready \`done:\` is accepted only when this copy's HEAD - your latest commit - is one the /no-mistakes run pushed, so commit nothing after the run; the check tests that commit, not merely that a branch moved.
 If you deliberately keep the PR a draft, append \`paused [at=<epoch>]: {why the draft is held}\` instead of done.
 EOF

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Behavior tests for the fleet activity ledger's new event types: task.validation,
-# task.pr_ready with risk, and task.decided.
+# Behavior tests for the fleet activity ledger's validation, pr_ready risk and
+# touches, and decided records through bin/fm-fleet-ledger.sh's own interface.
+# tests/fm-fleet-ledger.test.sh drives the producers that call it.
 set -u
 
 # shellcheck source=tests/lib.sh
@@ -22,43 +23,56 @@ trap cleanup EXIT
 # Turn the ledger on
 : > "$FM_HOME/config/fleet-ledger"
 
-# Test 1: task.validation event is recorded
-bash "$LEDGER" validation val-task review running
-sleep 0.05
-bash "$LEDGER" capture
-line=$(grep '"task.validation"' "$FM_HOME/state/fleet-ledger.jsonl" | head -1)
-step=$(echo "$line" | jq -r '.step // "MISSING"' 2>/dev/null)
-outcome=$(echo "$line" | jq -r '.outcome // "MISSING"' 2>/dev/null)
-if [ "$step" = "review" ] && [ "$outcome" = "running" ]; then
-  pass "validation event recorded correctly"
-else
-  fail "step=$step outcome=$outcome"
-fi
+rows() {  # <jq filter>
+  jq -c "$1" "$FM_HOME/state/fleet-ledger.jsonl"
+}
 
-# Test 2: task.pr_ready with risk event is recorded
-bash "$LEDGER" pr_ready_risk risk-task "https://github.com/acme/app/pull/42" "medium" "auth,middleware"
-sleep 0.05
-bash "$LEDGER" capture
-line=$(grep '"task.pr_ready"' "$FM_HOME/state/fleet-ledger.jsonl" | grep 'risk-task' | head -1)
-risk=$(echo "$line" | jq -r '.risk // "MISSING"' 2>/dev/null)
-touches=$(echo "$line" | jq -r '.touches // "MISSING"' 2>/dev/null)
-if [ "$risk" = "medium" ] && [ "$touches" = "auth,middleware" ]; then
-  pass "pr_ready risk event recorded correctly"
-else
-  fail "risk=$risk touches=$touches"
-fi
+# Test 1: validation records each changed step outcome once per run
+bash "$LEDGER" validation val-task 01RUNA review running tests running
+bash "$LEDGER" validation val-task 01RUNA review running tests running
+bash "$LEDGER" validation val-task 01RUNA review passed tests running
+bash "$LEDGER" validation val-task 01RUNB review passed
+assert_equals '["01RUNA","review","running"]
+["01RUNA","tests","running"]
+["01RUNA","review","passed"]
+["01RUNB","review","passed"]' \
+  "$(rows 'select(.event == "task.validation" and .task == "val-task") | [.run, .step, .outcome]')" \
+  "validation rows"
+pass "validation records a step outcome only when it changed for that run"
 
-# Test 3: task.decided event is recorded
+# Test 2: bad validation arguments are usage errors that record nothing
+before=$(wc -l < "$FM_HOME/state/fleet-ledger.jsonl")
+for args in "val-task 01RUNA review" "val-task 01RUNA" "val-task 01RUNA review running tests" \
+  "val-task 01RUNA 'review x' running" "../x 01RUNA review running"; do
+  rc=0
+  eval "bash \"\$LEDGER\" validation $args" 2>/dev/null || rc=$?
+  expect_code 2 "$rc" "validation $args"
+done
+assert_equals "$before" "$(wc -l < "$FM_HOME/state/fleet-ledger.jsonl")" "records after refused validation calls"
+pass "validation refuses a missing outcome, an odd pair, a spaced word, and a bad task id"
+
+# Test 3: pr_ready carries the risk and touches of the newest done line naming the PR
+{
+  printf 'working: PR https://github.com/acme/app/pull/42 risk=low touches=not a done line\n'
+  printf 'done [at=1790000000]: PR https://github.com/acme/app/pull/42 checks green risk=medium touches=auth, middleware\n'
+  printf 'done: PR https://github.com/acme/app/pull/43 checks green risk=high touches=another PR\n'
+  printf 'done: PR https://github.com/acme/app/pull/44\n'
+} > "$FM_HOME/state/risk-task.status"
+bash "$LEDGER" pr_ready risk-task "https://github.com/acme/app/pull/42"
+bash "$LEDGER" pr_ready risk-task "https://github.com/acme/app/pull/44"
+bash "$LEDGER" pr_ready risk-task "https://github.com/acme/app/pull/45"
+assert_equals '["https://github.com/acme/app/pull/42","medium","auth, middleware"]
+["https://github.com/acme/app/pull/44",null,null]
+["https://github.com/acme/app/pull/45",null,null]' \
+  "$(rows 'select(.event == "task.pr_ready" and .task == "risk-task") | [.pr, .risk, .touches]')" \
+  "pr_ready risk rows"
+pass "pr_ready records the risk and touches of the newest done line naming the PR, else null"
+
+# Test 4: task.decided event is recorded
 bash "$LEDGER" decided decide-task "go with option A"
-sleep 0.05
-bash "$LEDGER" capture
-line=$(grep '"task.decided"' "$FM_HOME/state/fleet-ledger.jsonl" | head -1)
-answer=$(echo "$line" | jq -r '.answer // "MISSING"' 2>/dev/null)
-if [ "$answer" = "go with option A" ]; then
-  pass "decided event recorded correctly"
-else
-  fail "answer=$answer"
-fi
+answer=$(rows 'select(.event == "task.decided") | .answer')
+assert_equals '"go with option A"' "$answer" "decided answer"
+pass "decided event recorded correctly"
 
 echo "---"
 echo "fm-fleet-ledger new event types complete"
