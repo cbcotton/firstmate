@@ -20,7 +20,7 @@ Every record carries these members:
 | ------- | --------------------------------------------------------- |
 | `v`     | Record format version, currently `1`                      |
 | `ts`    | Unix time in seconds when the record was written          |
-| `event` | One of the five event names below                         |
+| `event` | One of the event names below                              |
 | `task`  | The firstmate task id the record is about                 |
 
 Readers must ignore members and events they do not recognize, so later versions can add them without breaking existing readers.
@@ -31,7 +31,9 @@ Readers must ignore members and events they do not recognize, so later versions 
 | ------------------ | ---------------------------------------------- | ------------ |
 | `task.dispatched`  | `kind`, `project`, `harness`, `model`, `sailor` | A new worker or second mate is launched. A relaunch of an existing task is not recorded. |
 | `task.status`      | `state`, `key`, `text`                         | A complete, nonblank line in the task's status log is captured. |
-| `task.pr_ready`    | `pr`                                           | Firstmate records the task's PR as ready for review. |
+| `task.pr_ready`    | `pr`, plus `risk` and `touches` when written by `pr_ready_risk` | Firstmate records the task's PR as ready for review. |
+| `task.validation`  | `step`, `outcome`                              | `fm-fleet-ledger.sh validation` records a validation step's outcome. |
+| `task.decided`     | `answer`                                       | `fm-fleet-ledger.sh decided` records the captain's answer to a call. |
 | `task.merged`      | `via` (`"pr"` or `"local"`), plus `pr` when `via` is `"pr"` | The task's PR merge is recorded, or its local-only branch landed. |
 | `task.cleaned_up`  | none                                           | The task's worker and local copy were removed. |
 
@@ -39,6 +41,11 @@ Readers must ignore members and events they do not recognize, so later versions 
 
 `task.pr_ready` members: `pr` is the PR's full URL.
 It is written each time firstmate records a PR for the task, so registering a replacement PR, or the same PR again, writes another record; recording the PR again as part of merging it writes none.
+A record written by `fm-fleet-ledger.sh pr_ready_risk` also carries `risk`, a free-form string, and `touches`, the given string verbatim or `null` when omitted.
+
+`task.validation` members: `step` names the validation step and `outcome` its result, both free-form strings.
+`task.decided` members: `answer` is the recorded answer, verbatim.
+No bundled producer writes `task.validation`, `task.decided`, or the `risk`/`touches` form of `task.pr_ready` yet; they are written only when `bin/fm-fleet-ledger.sh` is run with those subcommands.
 
 `task.status` members: `state` is the status line's leading word, such as `working`, `needs-decision`, `blocked`, `paused`, `done`, `failed`, or `resolved`, or `null` when the line has none.
 `key` is the line's `[key=...]` decision key, or `null`.
@@ -64,7 +71,7 @@ Example:
   - lines from workers whose instructions predate this, or that append without running the instruction's full command;
   - lines a remote second mate reports, which reach this home through firstmate's relay;
   - lines written while the immediate record fails, for example when the ledger file cannot be written.
-  Recording `task.pr_ready`, `task.merged`, or `task.cleaned_up` first records that task's pending status lines.
+  Recording any event other than `task.dispatched` or `task.status` first records that task's pending status lines.
 - Captured status lines are delivered at least once unless a write fails or a crash loses unflushed records: an interrupted capture can repeat records, so a reader that must not double-count should tolerate duplicates.
 - A status record can appear just before its task's `task.dispatched` record when the worker writes a status line in the moment between its launch and that record.
 - When a home turns the ledger on, status lines already in a live task's log are recorded on that task's next capture (which may be a worker status command, PR registration, merge, cleanup, or monitor poll); tasks dispatched or cleaned up while the flag was absent have no record of that.

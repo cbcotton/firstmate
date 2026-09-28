@@ -18,6 +18,7 @@
 #   bin/fm-merge-outcome-lib.sh  merged ... pr (a recorded PR merge)
 #   bin/fm-merge-local.sh        merged ... local (a local-only landing)
 #   bin/fm-teardown.sh           cleaned_up
+#   (none yet)                   validation, pr_ready_risk, decided
 #
 # Usage:
 #   fm-fleet-ledger.sh dispatched <task> <kind> <project> <harness> <model> [<sailor>]
@@ -27,6 +28,9 @@
 #   fm-fleet-ledger.sh cleaned_up <task>
 #   fm-fleet-ledger.sh capture
 #   fm-fleet-ledger.sh appended <config> <state>/<task>.status
+#   fm-fleet-ledger.sh validation <task> <step> <outcome>
+#   fm-fleet-ledger.sh pr_ready_risk <task> <url> <risk> [<touches>]
+#   fm-fleet-ledger.sh decided <task> <answer>
 #
 # capture appends one task.status record for every complete (newline-ended)
 # line added to a state/<task>.status log since that task's byte offset in
@@ -40,8 +44,8 @@
 # recording it again. Its arguments name the home, because a worker has no
 # firstmate environment: the flag lives in <config> and the state directory is
 # the status file's directory.
-# pr_ready, merged, and cleaned_up first capture their own task, so its status
-# records precede them. cleaned_up then deletes the task's offset, because teardown
+# pr_ready, pr_ready_risk, merged, validation, decided, and cleaned_up first
+# capture their own task, so its status records precede them. cleaned_up then deletes the task's offset, because teardown
 # retires that status log right after. dispatched deletes any leftover offset
 # so a reused task id starts at byte 0 of its fresh log.
 # Every write holds state/.fleet-ledger.lock.

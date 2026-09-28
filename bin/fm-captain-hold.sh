@@ -35,6 +35,7 @@
 #   fm-captain-hold.sh reconcile list
 #   fm-captain-hold.sh reconcile close <task-id> --evidence-file <path>
 #   fm-captain-hold.sh reconcile note <task-id> --note-file <path>
+#   fm-captain-hold.sh card <task-id> {show | set <options-json> | clear}
 #
 # `hold` places an existing task under an active captain hold, or creates the
 # task first when no work item exists to hold (--title required to create; the
@@ -184,6 +185,11 @@
 #
 # `diverged` is the read-only guard over the seam between the two records of
 # one captain call. See "record divergence" beside command_diverged below.
+#
+# `card` stores, prints, or removes a task's decision card at
+# state/<task-id>.decision-card.json. `set` writes its argument verbatim, and
+# `show` prints `null` when no card exists. bin/fm-fleet-snapshot.sh serves the
+# card as hints.decision_card while the task has an open needs-decision.
 #
 # Resolution records: the block written into the body names this script, the
 # decision digest, and a `Resolution mode:` of answered, released, repaired, or
