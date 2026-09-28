@@ -322,6 +322,20 @@
 #   This is an exec environment boundary, not a sandbox for the pane's startup
 #   shell, credential files, same-user processes, or later shell initialization.
 #   See docs/configuration.md for provider/Git setup and supported limits.
+# Privateer quarantine (config/privateer):
+#   With the flag present, bin/fm-privateer.sh check must pass (its header owns
+#   the list: forbidden files and keys, non-OpenCode harness files, sailor map
+#   and endpoint rules) or every spawn is refused with each violation named. A
+#   spawn is then also refused for a secondmate, a raw launch command, any
+#   harness but opencode, a missing --sailor, or a ship mode other than
+#   local-only, all before any endpoint, worktree, or record exists. Every
+#   Privateer launch clears the environment exactly as config/launch-env-allowlist
+#   does (with that file's names added when it exists) and exports the OpenCode
+#   isolation assignments `fm-privateer.sh launch-env` prints, so a worker's
+#   OpenCode reads no config, login, session, or cache of the captain's own; its
+#   OPENCODE_CONFIG_CONTENT also turns auto-update off and disables sharing.
+#   The sailor sandbox is required by the check, so every Privateer worker runs
+#   inside it. With the flag absent nothing here changes.
 # Claude permission mode (config/claude-permission-mode):
 #   One token selecting the permission flag every claude launch (ship, scout,
 #   secondmate, and relaunch) carries. Absent or `bypass` keeps today's
@@ -2047,7 +2061,7 @@ launch_template() {
       printf '%s' 'codex __MODELFLAG____EFFORTFLAG__--dangerously-bypass-approvals-and-sandbox --disable hooks -c "notify=[\"bash\",\"-c\",\"touch __TURNEND__\"]" "$(__OPINPUT__ encode launch-brief < __BRIEF__)"'
     fi
     ;;
-  opencode) printf '%s' 'OPENCODE_CONFIG_CONTENT='\''{"permission":__OCPERMISSION____OCPROVIDER____EFFORTFLAG__}'\'' __OCSANDBOX__opencode __MODELFLAG__--prompt "$(__OPINPUT__ encode launch-brief < __BRIEF__)"' ;;
+  opencode) printf '%s' 'OPENCODE_CONFIG_CONTENT='\''{"permission":__OCPERMISSION____OCPROVIDER____EFFORTFLAG____OCPRIVATEER__}'\'' __OCSANDBOX__opencode __MODELFLAG__--prompt "$(__OPINPUT__ encode launch-brief < __BRIEF__)"' ;;
   pi | pi-signed)
     printf '%s' '__PIBIN____PITUIMODE____PIRESUME__'
     if [ "$kind" = secondmate ]; then
@@ -2452,6 +2466,47 @@ if [ -n "$SAILOR" ] && [ -e "$CONFIG/sailor-sandbox" ]; then
   }
   SAILOR_SANDBOX=1
   SAILOR_ENDPOINT=$(jq -r --arg s "$SAILOR" '.sailors[$s].endpoint' "$CONFIG/crew-dispatch.json")
+fi
+# Privateer quarantine (header above; docs/configuration.md "Privateer
+# quarantine"). bin/fm-privateer.sh check owns the list of violations; every
+# refusal here lands before any endpoint, worktree, or record exists.
+PRIVATEER=0
+if [ -e "$CONFIG/privateer" ] || [ -L "$CONFIG/privateer" ]; then
+  PRIVATEER=1
+  if ! PRIVATEER_CHECK=$(FM_HOME="$FM_HOME" FM_STATE_OVERRIDE="$STATE" FM_CONFIG_OVERRIDE="$CONFIG" \
+    FM_PROJECTS_OVERRIDE="$PROJECTS" "$SCRIPT_DIR/fm-privateer.sh" check 2>&1); then
+    echo "error: the Privateer quarantine refuses every spawn until this home satisfies it:" >&2
+    printf '%s\n' "$PRIVATEER_CHECK" | sed 's/^/error:   /' >&2
+    exit 1
+  fi
+  if [ "$KIND" = secondmate ]; then
+    echo "error: the Privateer quarantine refuses a secondmate spawn; a Privateer home runs one first mate and its sailors" >&2
+    exit 1
+  fi
+  if [ "$RAW_LAUNCH" != 0 ]; then
+    echo "error: the Privateer quarantine refuses a raw launch command, which it cannot check; spawn with --harness opencode --sailor <name>" >&2
+    exit 1
+  fi
+  if [ "$HARNESS" != opencode ]; then
+    echo "error: the Privateer quarantine refuses harness $HARNESS; only opencode on a named sailor runs in this home" >&2
+    exit 1
+  fi
+  if [ -z "$SAILOR" ]; then
+    echo "error: the Privateer quarantine requires --sailor <name>; without a sailor OpenCode would run on the captain's own providers" >&2
+    exit 1
+  fi
+  if [ "$KIND" = ship ] && [ "$MODE" != local-only ]; then
+    echo "error: the Privateer quarantine refuses delivery mode $MODE; Privateer ships local-only in version 1, and the shared no-mistakes daemon resolves to Claude" >&2
+    exit 1
+  fi
+  # The environment is cleared at the worker's command boundary whether or not
+  # config/launch-env-allowlist exists (its names, already checked, still apply),
+  # and OpenCode's directories are this home's own, for the sandbox paths below
+  # and for the launch.
+  LAUNCH_ENV_ENABLED=1
+  while IFS= read -r privateer_assignment; do
+    [ -z "$privateer_assignment" ] || export "${privateer_assignment?}"
+  done < <(FM_HOME="$FM_HOME" FM_STATE_OVERRIDE="$STATE" "$SCRIPT_DIR/fm-privateer.sh" launch-env)
 fi
 # Worker account pin (header above): resolved before any endpoint, worktree, or
 # record exists. An absent pin selects nothing and leaves every later launch
@@ -5087,6 +5142,10 @@ LAUNCH=${LAUNCH//__OCPROVIDER__/$OCPROVIDER}
 # restricted profile's shell patterns quote their paths.
 OCPERMISSION=${OC_PERMISSION_JSON//\'/\'\\\'\'}
 LAUNCH=${LAUNCH//__OCPERMISSION__/$OCPERMISSION}
+# A Privateer worker's OpenCode never updates itself or shares a session.
+OCPRIVATEER=
+[ "$PRIVATEER" != 1 ] || OCPRIVATEER=',"autoupdate":false,"share":"disabled"'
+LAUNCH=${LAUNCH//__OCPRIVATEER__/$OCPRIVATEER}
 OCSANDBOX=
 if [ "$SAILOR_SANDBOX" = 1 ]; then
   OCSANDBOX=$(sailor_sandbox_prefix) || {
@@ -5220,6 +5279,16 @@ LAUNCH="export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VAL
 # `/bin/sh` starts rather than only inside the command that shell runs.
 if [ "$LAVISH_AXI_HOST_CONFIG_PRESENT" = 1 ]; then
   LAUNCH="export LAVISH_AXI_HOST=$(shell_quote "$LAVISH_AXI_HOST"); $LAUNCH"
+fi
+# A Privateer worker's OpenCode reads and writes only this home's own
+# directories (bin/fm-privateer.sh launch-env), exported inside the cleared
+# environment the floor below establishes.
+if [ "$PRIVATEER" = 1 ]; then
+  PRIVATEER_EXPORTS=
+  while IFS= read -r privateer_assignment; do
+    [ -z "$privateer_assignment" ] || PRIVATEER_EXPORTS="$PRIVATEER_EXPORTS ${privateer_assignment%%=*}=$(shell_quote "${privateer_assignment#*=}")"
+  done < <(FM_HOME="$FM_HOME" FM_STATE_OVERRIDE="$STATE" "$SCRIPT_DIR/fm-privateer.sh" launch-env)
+  LAUNCH="export$PRIVATEER_EXPORTS; $LAUNCH"
 fi
 LAUNCH="export COMPACT_ADVISER_DISABLE=1; $LAUNCH"
 if [ -z "$SPAWN_TRACEPARENT" ] && [ "$RELAUNCH" -eq 1 ]; then

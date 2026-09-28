@@ -11,6 +11,7 @@
 #                 "BACKEND_INVALID: <name> (known: <names>)",
 #                 "STARTUP_MEMORY_BUDGET: invalid config/startup-memory-budget - <reason>",
 #                 "CREW_DISPATCH: invalid config/crew-dispatch.json - <reason>",
+#                 "PRIVATEER: <violation>" (one per line bin/fm-privateer.sh check prints),
 #                 "FLEET_SYNC: <repo>: skipped|recovered|STUCK: <detail>",
 #                 "HOME_SUMMARY: <ledger never published|not republished since
 #                 <stamp>>; <n> failed attempt(s) ... last: <recorded failure>",
@@ -1028,6 +1029,19 @@ EOF
   echo "FMX: X mode on - relay poll armed via state/x-watch.check.sh; 30s watcher cadence in config/x-mode.env"
 }
 
+# The Privateer quarantine has one owner (bin/fm-privateer.sh check); each
+# violation it prints becomes one PRIVATEER line here.
+privateer_validate() {
+  local out
+  [ -e "$CONFIG/privateer" ] || [ -L "$CONFIG/privateer" ] || return 0
+  if out=$(FM_HOME="$FM_HOME" FM_STATE_OVERRIDE="$STATE" FM_CONFIG_OVERRIDE="$CONFIG" \
+    FM_PROJECTS_OVERRIDE="$PROJECTS" "$SCRIPT_DIR/fm-privateer.sh" check 2>&1); then
+    [ "${FM_BOOTSTRAP_VERBOSE_FACTS:-0}" != 1 ] || echo "BOOTSTRAP_INFO: privateer quarantine active config/privateer"
+    return 0
+  fi
+  printf '%s\n' "$out" | sed 's/^/PRIVATEER: /'
+}
+
 crew_dispatch_validate() {
   local file err verified_harnesses typed_key typed_active=false
   file="$CONFIG/crew-dispatch.json"
@@ -1447,6 +1461,7 @@ detect_local_config() {
   if [ "$crew" = cursor ] && ! fm_cursor_resolve_binary >/dev/null 2>&1; then
     echo "MISSING_MANUAL: cursor-agent (instructions: $(manual_install_url cursor-agent))"
   fi
+  privateer_validate
   crew_dispatch_validate
   if [ "${FM_BOOTSTRAP_VERBOSE_FACTS:-0}" = 1 ] \
     && ! fm_backlog_backend_manual "$CONFIG" && fm_tasks_axi_compatible; then
