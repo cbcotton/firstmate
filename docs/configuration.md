@@ -554,6 +554,15 @@ A standing record keeps the reach channel it was written with, so adding or remo
 The flag is a home-local choice and is not inherited by secondmate homes.
 How the first mate treats a note the pinnace queued is owned by the `afk` skill and `AGENTS.md` section 8, and the server itself lives in the crowsnest project.
 
+### Phone mirror (Cast Off and Make Fast)
+
+`/castoff` (Cast Off) turns on the phone mirror and `/makefast` (Make Fast) turns it off; neither is tied to `/afk`, and neither is the away-mode return signal.
+While it is on, each turn's final message from the first mate also reaches the pinnace chat, in order with the replies to the captain's phone notes, and the first mate keeps its replies extra concise.
+The harness's turn-end hook records the message from the turn's final assistant text, never tool output or the captain's own prompts, stamped as a turn the captain started or one fleet machinery started.
+Messages are capped at 8000 characters with the head and tail kept, stay owner-only under `state/inbox/.mate/`, and reach the phone only through `bin/fm-inbox.sh receipts` and the pinnace server.
+Only Claude and Cursor primaries record; other harnesses mirror nothing.
+`bin/fm-castoff.sh` owns the flag and the hook writer, and `bin/fm-inbox.sh` owns the record and how it is read.
+
 ## Trace context propagation (config/trace-context / FM_TRACE_CONTEXT)
 
 The optional local, gitignored `config/trace-context` presence flag enables default-off native W3C trace-context propagation.

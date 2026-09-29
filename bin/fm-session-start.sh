@@ -46,7 +46,8 @@
 #   6. fleet digest   - a compact data/backlog.md identity/metadata listing,
 #                       every state/*.meta, a bounded state/*.status tail,
 #                       the away posture (state/.afk-contract and the legacy
-#                       state/.afk daemon flag), and a cheap per-task
+#                       state/.afk daemon flag) with the phone mirror's flag
+#                       (state/.castoff, bin/fm-castoff.sh), and a cheap per-task
 #                       endpoint-liveness read:
 #                       read-only, always runs.
 #   7. network checks - the result of the deferred network stage started back at
@@ -898,6 +899,12 @@ elif [ -e "$STATE/.afk" ]; then
   fi
 else
   printf 'absent\n'
+fi
+# The phone mirror is presentation, not a posture, but its concise-reply rule
+# must survive a restart, so its flag is reported beside the posture.
+if [ -f "$STATE/.castoff" ]; then
+  printf 'phone mirror: %s - load /castoff; every final message is also read on the phone, so keep replies extra concise.\n' \
+    "$("$SCRIPT_DIR/fm-castoff.sh" status 2>/dev/null || printf on)"
 fi
 
 # Public commitments made through the myfirstmate relay. A promise to reply in a

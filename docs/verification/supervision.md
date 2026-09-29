@@ -711,6 +711,25 @@ Deterministic entry point:
 tests/fm-host-mirror.test.sh
 ```
 
+### Phone mirror writers
+
+This supports the phone mirror (`bin/fm-castoff.sh`, [configuration.md](../configuration.md#phone-mirror-cast-off-and-make-fast)): with the mirror on, the tracked Claude registrations record the turn's final message as a captain turn, never the captain's prompt, and Claude's Stop-hook rewake is stamped operational.
+It was measured on 2026-09-29 on macOS 26.6 arm64 with Claude Code 2.1.284 (`haiku`) in a disposable lab primary on a private tmux socket; cursor-agent was not installed, so the Cursor writer is proven only by the shared payload fields above.
+
+```text
+$ FM_CASTOFF_LIVE_E2E=1 tests/fm-castoff-live-e2e.test.sh
+ok - claude 2.1.284 (Claude Code): a turn the harness started itself was stamped operational
+ok - claude 2.1.284 (Claude Code): the tracked registrations mirrored the final message, stamped captain, and not the prompt
+absent - cursor is not installed, so its phone-mirror writer was not checked
+ok - castoff live: 1 harness(es) proved their writers; absent: cursor
+```
+
+Deterministic entry point:
+
+```sh
+tests/fm-castoff.test.sh
+```
+
 ### Attended posture
 
 This supports [Postures](../supervision-host.md#postures) and [Captain outcomes](../supervision-host.md#captain-outcomes): on a Claude primary the attended engine keeps routine outcomes off main, a captain outcome reaches main once and waits in the drain until acknowledged, a fresh captain outcome is never hidden behind a routine backlog, and the first drain after a return does not replay the away window.
