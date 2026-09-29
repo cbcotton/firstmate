@@ -1,0 +1,2 @@
+ok - Gitea pulls PR URLs are recognized in backlog links and the status-log fallback
+exit=

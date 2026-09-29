@@ -1,0 +1,7 @@
+ok - ledger delivery carries the report pointer, the failed verb, and each new terminal line
+ok - pr= requires the recorded PR or a ready-signal terminal line, whatever its stamp or risk tags, and never a scout
+actionable: child outcome needs parent report: child=child state=failed (missing or unreadable parent binding .fm-secondmate-parent)
+ok - relative local parent homes fail closed
+actionable: inactive terminal outcome needs parent report: child=child state=failed (missing or unreadable parent binding .fm-secondmate-parent)
+ok - a secondmate home with no parent binding names the missing binding instead of failing quietly
+exit=

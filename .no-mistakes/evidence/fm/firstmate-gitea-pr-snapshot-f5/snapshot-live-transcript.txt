@@ -1,0 +1,7 @@
+=== BASE 77ce092 ===
+snapshot exit=0
+{"backlog":[{"id":"gitea-done","pr_url":null},{"id":"github-done","pr_url":"https://github.com/acme/widgets/pull/7"},{"id":"nearmiss-done","pr_url":null}],"tasks":[{"id":"gitea-task","pr":{"url":null,"source":"absent","head":null}},{"id":"github-task","pr":{"url":"https://github.com/acme/widgets/pull/7","source":"status_event","head":null}},{"id":"nearmiss-task","pr":{"url":null,"source":"absent","head":null}}]}
+
+=== CHANGE 99609a7 ===
+snapshot exit=0
+{"backlog":[{"id":"gitea-done","pr_url":"https://gitea.example.com/acme/widgets/pulls/12"},{"id":"github-done","pr_url":"https://github.com/acme/widgets/pull/7"},{"id":"nearmiss-done","pr_url":null}],"tasks":[{"id":"gitea-task","pr":{"url":"https://gitea.example.com/acme/widgets/pulls/12","source":"status_event","head":null}},{"id":"github-task","pr":{"url":"https://github.com/acme/widgets/pull/7","source":"status_event","head":null}},{"id":"nearmiss-task","pr":{"url":null,"source":"absent","head":null}}]}
