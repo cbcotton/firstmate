@@ -100,10 +100,13 @@
 # a reply recorded during this turn, that is after the newest mirrored message
 # and at or after --since, the turn's start (the turn already answered a phone
 # note with those words); without --since no reply counts as this turn's.
-# When an update's body equals a reply recorded during this turn after the
-# record, the record becomes a removal marker instead (removed=1, empty body,
+# When an update's body equals a reply recorded during this turn, that is
+# after every other mirrored message and at or after --since, the record becomes a removal marker instead (removed=1, empty body,
 # a fresh rev, pruned like any record), the outcome is `duplicate <reply id>`,
 # and the phone drops that message, since the reply already carries the words.
+# Reply dedupe is limited to those exact matches, after whitespace
+# normalisation, with replies recorded in the same turn; any other overlap
+# between a reply and a mirrored message is a known limitation.
 # An empty body is refused. A mirrored message is the first mate
 # speaking, never the captain: it is never announced and appends no wake.
 # Past MATE_KEEP + 100 records, the oldest are pruned down to MATE_KEEP.
@@ -825,7 +828,7 @@ if same:
     if recorded == text:
         print("replay %d" % seq)
         sys.exit(0)
-    reply = turn_reply(seq)
+    reply = turn_reply(max((r[4] for r in records if r[1] != path), default=0))
     if reply is None:
         Path(capped_path).write_text(text, encoding="utf-8")
         print("update %d %s" % (seq, path.name))

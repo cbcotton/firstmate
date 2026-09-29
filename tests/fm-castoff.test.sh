@@ -288,6 +288,42 @@ test_final_message_repeating_the_turns_reply_removes_the_interim() {
   pass "castoff: a final message repeating the turn's phone reply removes the interim message, served once"
 }
 
+# A turn that answers a phone note first, then ends with a different interim
+# message, then (after the guard blocks) ends with the reply's words, leaves no
+# mirrored message, and a reader past the interim receives the removal once.
+test_reply_before_the_interim_removes_it() {
+  local home page cursor
+  home=$(make_home reply-first)
+  mkdir -p "$home/state/inbox"
+  printf 'id=1700000000-phone\nat=2026-01-01T00:00:00Z\nsource=pinnace\nannounce_marker=1\n--\nmerged yet?\n' \
+    > "$home/state/inbox/1700000000-phone.note"
+  as_session "$home" "$SAY"'
+    say captain "ship it" p1
+  ' || fail "a writer failed"
+  FM_HOME="$home" "$INBOX" reply 1700000000-phone "Aye, merged." >/dev/null || fail "reply failed"
+  as_session "$home" '
+    printf "%s" "{\"hook_event_name\":\"Stop\",\"prompt_id\":\"p1\",\"stop_hook_active\":false,\"last_assistant_message\":\"interim reply before the guard blocked\"}" \
+      | FM_ROOT_OVERRIDE="$PRIMARY_ROOT" "$CASTOFF" hook claude
+  ' || fail "a writer failed"
+  page=$(FM_HOME="$home" "$INBOX" receipts) || fail "receipts failed"
+  cursor=$(printf '%s' "$page" | jq -r .reply_cursor)
+  assert_equals "000000000002" "$cursor" "the reader has read the reply and the interim message"
+  as_session "$home" '
+    printf "%s" "{\"hook_event_name\":\"Stop\",\"prompt_id\":\"p1\",\"stop_hook_active\":true,\"last_assistant_message\":\"Aye, merged.\"}" \
+      | FM_ROOT_OVERRIDE="$PRIMARY_ROOT" "$CASTOFF" hook claude
+  ' || fail "a writer failed"
+  assert_equals "" "$(mirrored "$home")" "the turn must leave no mirrored message beside its earlier reply"
+  page=$(FM_HOME="$home" "$INBOX" receipts --after "$cursor") || fail "receipts --after failed"
+  assert_equals '[{"cursor":"000000000002","removed":true,"body":null}]' \
+    "$(printf '%s' "$page" | jq -c '[.mate[] | {cursor, removed, body}]')" \
+    "a reader past the interim message must receive its removal"
+  assert_equals "0" "$(printf '%s' "$page" | jq '.replies | length')" "the reply is not served again"
+  cursor=$(printf '%s' "$page" | jq -r .reply_cursor)
+  page=$(FM_HOME="$home" "$INBOX" receipts --after "$cursor") || fail "receipts --after failed"
+  assert_equals "0" "$(printf '%s' "$page" | jq '.mate | length')" "the removal must be served exactly once"
+  pass "castoff: a reply earlier in the turn removes an interim message the final message replaces with its words"
+}
+
 # Cursor may deliver afterAgentResponse more than once for one generation:
 # only the last text stands, as one message.
 test_repeated_cursor_response_is_one_message() {
@@ -388,6 +424,7 @@ test_foreign_unowned_and_crewmate_writes_nothing
 test_turns_are_stamped_captain_or_operational
 test_repeats_and_later_replies_under_one_id
 test_final_message_repeating_the_turns_reply_removes_the_interim
+test_reply_before_the_interim_removes_it
 test_repeated_cursor_response_is_one_message
 test_earlier_replies_never_suppress_a_final_message
 test_make_fast_turn_is_not_mirrored
