@@ -54,7 +54,8 @@
 # the session's socket) and the session's egress proxy runs: XDG_CONFIG_HOME,
 # XDG_DATA_HOME, XDG_STATE_HOME, and XDG_CACHE_HOME under
 # state/privateer/opencode/, so the captain's own OpenCode config, logins,
-# sessions, and cache are invisible; OPENCODE_DISABLE_AUTOUPDATE=1; HTTP_PROXY,
+# sessions, and cache are invisible; OPENCODE_DISABLE_AUTOUPDATE=1;
+# TREEHOUSE_ROOT naming this home's own worktree pool; HTTP_PROXY,
 # HTTPS_PROXY, http_proxy, and https_proxy naming the egress proxy; and
 # GIT_SSH_COMMAND, which tunnels Git over SSH through it. The first mate
 # receives the same assignments from start.
@@ -91,28 +92,39 @@
 # The sandbox holds the tmux server itself, so every pane and every command
 # started in the session inherits it: the first mate, each worker and its pane
 # shell, and anything the first mate asks tmux to run. Everything inside may
-# write only to this home, this checkout's .opencode/ scratch, the worktree
-# pool under ~/.treehouse, firstmate's per-task temp roots under /tmp/fm-*, and
-# the server's own socket, and never to this home's egress directory, config/,
-# or bin/, or to the Git config or hooks of this checkout, of any clone under
-# projects/, or of any linked worktree or submodule of those (git dirs under
-# .git/worktrees/<name>/ and .git/modules/<path>/, whose commondir is denied
-# too), nor write any .git entry inside a clone, the checkout's own .git, the
-# projects directory, any clone's directory, or any directory between this
-# home and the checkout's git dir, so nothing inside can plant what later runs
-# outside the sandbox, not even by moving a directory aside and back. Clones
-# under projects/ are therefore added, moved, and removed outside the session.
-# It may connect only to the egress proxy, the DNS resolver, and that socket; and may signal
-# only processes inside the same sandbox, so it can neither stop the proxy nor
-# rewrite its record. A client that ignores the proxy variables therefore
-# reaches nothing remote at all. macOS cannot apply a second sandbox inside
-# the first, so a Privateer worker runs in this session sandbox rather than a
-# per-task sailor sandbox. One session sandbox therefore covers the first mate
-# and every worker alike, so a worker can still write what the first mate's own
-# fm-spawn and fm-permission-grant write from inside it: the task records
-# state/<id>.meta and the grant ledger state/permission-grants.jsonl. As
-# bin/fm-sandbox-exec.sh states, the sandbox is not a boundary against
-# same-user system services that start programs outside it.
+# write only to this home, this checkout's .opencode/ scratch, firstmate's
+# per-task temp roots under /tmp/fm-*, and the server's own socket. Workers'
+# copies live in this home's own Treehouse pool, state/privateer/treehouse,
+# which launch-env names as TREEHOUSE_ROOT, so treehouse creates and hands out
+# slots there; the shared pool under ~/.treehouse, and every other home's
+# slots, are out of reach. Nothing inside may write this home's egress
+# directory, config/, or bin/; the Git config or hooks of this checkout, of
+# any clone under projects/, or of any linked worktree or submodule of those
+# (git dirs under .git/worktrees/<name>/ and .git/modules/<path>/); the git
+# dir or commondir of a linked worktree that lives outside this home's pool;
+# any .git entry inside a clone, or the checkout's own .git; or the projects
+# directory, any clone's directory, or any directory between this home and the
+# checkout's git dir, so nothing can be moved aside, changed, and moved back.
+# It may connect only to the egress proxy, the DNS resolver, and that socket,
+# so a client that ignores the proxy variables reaches nothing remote at all,
+# and may signal only processes inside the same sandbox, so it can neither
+# stop the proxy nor rewrite its record.
+#
+# Remaining limits, by design:
+#   - macOS cannot apply a second sandbox inside the first, so one session
+#     sandbox covers the first mate and every worker alike, in place of a
+#     per-task sailor sandbox;
+#   - a worker can therefore still write what the first mate's own fm-spawn
+#     and fm-permission-grant write from inside it: the task records
+#     state/<id>.meta and the grant ledger state/permission-grants.jsonl;
+#   - the per-task temp roots under /tmp/fm-*, and the user's own temporary
+#     directory ($TMPDIR), are namespaces shared by every home on this
+#     machine;
+#   - clones under projects/ are added, moved, and removed outside the
+#     session, and a worktree the session creates in its own pool is meant
+#     for use only inside it;
+#   - as bin/fm-sandbox-exec.sh states, the sandbox is not a boundary against
+#     same-user system services that start programs outside it.
 #
 # attach attaches this terminal to the running session. stop refuses while any
 # task record (state/<id>.meta) exists, because a running worker's copy would
@@ -140,6 +152,7 @@ DISPATCH="$CONFIG/crew-dispatch.json"
 SESSION=privateer
 OPENCODE_ROOT="$STATE/privateer/opencode"
 EGRESS="$STATE/privateer/egress"
+POOL="$STATE/privateer/treehouse"
 FORBIDDEN_NAME_RE='^(ANTHROPIC_[A-Za-z0-9_]*|CLAUDE_[A-Za-z0-9_]*|CLAUDECODE)$'
 
 usage() {
@@ -346,6 +359,7 @@ cmd_launch_env() {
   printf 'XDG_STATE_HOME=%s\n' "$OPENCODE_ROOT/state"
   printf 'XDG_CACHE_HOME=%s\n' "$OPENCODE_ROOT/cache"
   printf 'OPENCODE_DISABLE_AUTOUPDATE=1\n'
+  printf 'TREEHOUSE_ROOT=%s\n' "$POOL"
   printf 'HTTP_PROXY=%s\nHTTPS_PROXY=%s\nhttp_proxy=%s\nhttps_proxy=%s\n' "$proxy" "$proxy" "$proxy" "$proxy"
   printf "GIT_SSH_COMMAND=ssh -o ProxyCommand='/usr/bin/nc -X connect -x 127.0.0.1:%s %%h %%p'\n" "$port"
 }
@@ -499,7 +513,7 @@ deny_entries() {
 
 cmd_start() {
   local line sailor model check provider config socket socket_path primary port
-  local name value launch home_real root_real egress_real root_git projects_real git_meta
+  local name value launch home_real root_real egress_real root_git projects_real git_meta pool_real wt_git
   local -a env_args session_env sandbox_args
   env_args=()
   session_env=()
@@ -533,7 +547,7 @@ cmd_start() {
   config=$(jq -cn --argjson provider "$provider" --arg model "$sailor/$model" \
     '{autoupdate: false, share: "disabled", model: $model, permission: {"*": "allow"}, provider: $provider}') ||
     die "the first mate's OpenCode configuration could not be composed"
-  mkdir -p "$OPENCODE_ROOT/config" "$OPENCODE_ROOT/data" "$OPENCODE_ROOT/state" "$OPENCODE_ROOT/cache" ||
+  mkdir -p "$OPENCODE_ROOT/config" "$OPENCODE_ROOT/data" "$OPENCODE_ROOT/state" "$OPENCODE_ROOT/cache" "$POOL" ||
     die "cannot create $OPENCODE_ROOT"
   # The allowlist: the launcher's own values, captured once, and nothing else.
   for name in HOME PATH USER LOGNAME SHELL TERM COLORTERM LANG LC_ALL LC_CTYPE TMPDIR TMP TEMP TMUX_TMPDIR; do
@@ -546,6 +560,7 @@ cmd_start() {
   port=$(start_egress_proxy) ||
     refuse "the Privateer egress proxy could not bind a loopback port; nothing was started"
   egress_real=$(cd "$EGRESS" && pwd -P) || die "cannot resolve $EGRESS"
+  pool_real=$(cd "$POOL" && pwd -P) || die "cannot resolve $POOL"
   session_env=("${env_args[@]}")
   while IFS= read -r line; do
     [ -z "$line" ] || session_env+=("$line")
@@ -561,14 +576,13 @@ cmd_start() {
   [ -d "${socket_path%/*}" ] || mkdir -m 700 "${socket_path%/*}" 2>/dev/null || true
   sandbox_args=(run --write "$home_real" --deny-write "$egress_real" --write-prefix /tmp/fm- --write-prefix "$socket_path"
     --write /dev/ptmx --unix-socket "$socket_path" --connect "http://127.0.0.1:$port" --confine-signals)
-  [ -z "${HOME:-}" ] || sandbox_args+=(--write "$HOME/.treehouse")
   # Nothing inside may plant what runs outside the sandbox: this home's config
   # and scripts, or any Git config or hook of this checkout, of a clone under
   # projects/, or of a worker's worktree.
   sandbox_args+=(--deny-write "$home_real/config" --deny-write "$home_real/bin")
   # The directory entries leading to each git dir are denied too, so none can
   # be moved aside, written, and moved back.
-  git_meta='($|/(worktrees/[^/]+/|modules/.+/)?(hooks(/|$)|config|commondir))'
+  git_meta='($|/(worktrees/[^/]+/|modules/.+/)?(hooks(/|$)|config))'
   root_git=$(cd "$FM_ROOT" && cd "$(git rev-parse --git-common-dir 2>/dev/null)" 2>/dev/null && pwd -P) || root_git=
   if [ -n "$root_git" ]; then
     sandbox_args+=(--deny-write-regex "^$(regex_quote "$root_git")$git_meta")
@@ -580,6 +594,17 @@ cmd_start() {
       --deny-write-regex "^$(regex_quote "$projects_real")/[^/]+/(.+/)?\.git$git_meta")
     deny_entries "$projects_real"
   fi
+  # A linked worktree that lives outside this home's pool is used outside the
+  # session, so its git dir can be neither redirected nor swapped; the pool's
+  # own worktrees are created inside the session and used only there.
+  for wt_git in "$root_git"/worktrees/*/ "${projects_real:-/nonexistent}"/*/.git/worktrees/*/; do
+    [ -d "$wt_git" ] || continue
+    wt_git=${wt_git%/}
+    case "$(cat "$wt_git/gitdir" 2>/dev/null)" in
+      "$pool_real"/*) ;;
+      *) sandbox_args+=(--deny-write-regex "^$(regex_quote "$wt_git")(\$|/commondir\$)") ;;
+    esac
+  done
   case "$root_real" in
     "$home_real" | "$home_real"/*) ;;
     *) sandbox_args+=(--write "$root_real/.opencode") ;;

@@ -327,6 +327,7 @@ XDG_DATA_HOME=$home/state/privateer/opencode/data
 XDG_STATE_HOME=$home/state/privateer/opencode/state
 XDG_CACHE_HOME=$home/state/privateer/opencode/cache
 OPENCODE_DISABLE_AUTOUPDATE=1
+TREEHOUSE_ROOT=$home/state/privateer/treehouse
 HTTP_PROXY=http://127.0.0.1:18080
 HTTPS_PROXY=http://127.0.0.1:18080
 http_proxy=http://127.0.0.1:18080
@@ -439,9 +440,9 @@ test_start_passes_only_the_allowlist() {
   (subpath \"$home_real/state/privateer/egress\")
   (subpath \"$home_real/config\")
   (subpath \"$home_real/bin\")
-  (regex #\"^$(rq "$root_real")/\\.git(\$|/(worktrees/[^/]+/|modules/.+/)?(hooks(/|\$)|config|commondir))\")
+  (regex #\"^$(rq "$root_real")/\\.git(\$|/(worktrees/[^/]+/|modules/.+/)?(hooks(/|\$)|config))\")
   (regex #\"^$(rq "$home_real")/projects/[^/]+\$\")
-  (regex #\"^$(rq "$home_real")/projects/[^/]+/(.+/)?\\.git(\$|/(worktrees/[^/]+/|modules/.+/)?(hooks(/|\$)|config|commondir))\")
+  (regex #\"^$(rq "$home_real")/projects/[^/]+/(.+/)?\\.git(\$|/(worktrees/[^/]+/|modules/.+/)?(hooks(/|\$)|config))\")
   (regex #\"^$(rq "$home_real")/projects\$\")
 )" "$(sed -n '/^(deny file-write\*$/,/^)$/p' "$profile")" \
     "the sandbox must take back only the egress record, the home's config and scripts, and every Git config and hook, so every worker's OpenCode directories stay writable"
@@ -636,7 +637,7 @@ serve_dir() {
 }
 
 test_session_sandbox_holds_every_command() {
-  local dir home root out status spid opid sport oport port pid socket probe alive wtbase wtgit proj
+  local dir home root out status spid opid sport oport port pid socket probe alive wtbase wtgit proj shared treehouse_line captain
   if ! "$ROOT/bin/fm-sandbox-exec.sh" available || ! command -v tmux >/dev/null 2>&1; then
     pass "session sandbox checks not run: sandbox-exec or tmux is not available on this machine"
     return 0
@@ -666,6 +667,15 @@ test_session_sandbox_holds_every_command() {
   git -C "$proj" worktree add -q -b pv-probe "$wtbase/wt"
   wtgit=$(git -C "$wtbase/wt" rev-parse --path-format=absolute --git-dir)
   mkdir -p "$home/bin"
+  # Another home's slot in the shared Treehouse pool under the captain's HOME,
+  # which sits outside every path the session may write.
+  captain=$(mktemp -d /tmp/pv-captain.XXXXXX)
+  captain=$(cd "$captain" && pwd -P)
+  fm_git_init_commit "$dir/other"
+  shared="$captain/.treehouse/other/slot"
+  mkdir -p "${shared%/*}"
+  git -C "$dir/other" worktree add -q -b other-slot "$shared"
+  if command -v treehouse >/dev/null 2>&1; then treehouse_line=treehouse=in-pool; else treehouse_line=treehouse=absent; fi
   # A command the first mate starts through tmux, as a worker's pane is: it
   # tries the other server directly and through the proxy, writes where a
   # worker's OpenCode keeps its data, tries to plant Git config, hooks, home
@@ -679,7 +689,7 @@ mkdir -p "\$XDG_DATA_HOME/opencode" && : > "\$XDG_DATA_HOME/opencode/probe"
 echo "write=\$?" >> '$probe.window.tmp'
 planted=
 for t in '$proj/.git/hooks/post-checkout' '$proj/.git/config' '$wtgit/config.worktree' '$wtgit/hooks/post-checkout' \
-  '$wtgit/commondir' '$home/config/probe' '$home/bin/probe'; do
+  '$wtgit/commondir' '$home/config/probe' '$home/bin/probe' '$shared/.git' '$shared/README' "\$HOME/.treehouse/probe"; do
   ( : >> "\$t" ) 2>/dev/null && planted="\$planted \$t"
 done
 mv '$proj/.git' '$proj/.git.aside' 2>/dev/null && planted="\$planted rename:$proj/.git"
@@ -700,6 +710,18 @@ git -C '$proj' config core.hooksPath /tmp/elsewhere 2>/dev/null && echo "gitconf
 echo "status=\$?" >> '$probe.window.tmp'
 git -C '$wtbase/wt' -c user.name=probe -c user.email=probe@example.test commit -q --allow-empty -m probe >/dev/null 2>&1
 echo "commit=\$?" >> '$probe.window.tmp'
+git -C '$proj' worktree add -q -b pv-slot "\$TREEHOUSE_ROOT/pool/slot" >/dev/null 2>&1 &&
+  echo work > "\$TREEHOUSE_ROOT/pool/slot/work.txt" &&
+  git -C "\$TREEHOUSE_ROOT/pool/slot" add work.txt &&
+  git -C "\$TREEHOUSE_ROOT/pool/slot" -c user.name=probe -c user.email=probe@example.test commit -q -m work >/dev/null 2>&1
+echo "slot=\$?" >> '$probe.window.tmp'
+if command -v treehouse >/dev/null 2>&1; then
+  got=\$(cd '$proj' && treehouse get --lease --no-fetch 2>/dev/null)
+  pool=\$(cd "\$TREEHOUSE_ROOT" && pwd -P)
+  case "\$got" in "\$pool"/* | "\$TREEHOUSE_ROOT"/*) echo "treehouse=in-pool" ;; *) echo "treehouse=failed:\$got" ;; esac >> '$probe.window.tmp'
+else
+  echo "treehouse=absent" >> '$probe.window.tmp'
+fi
 mv '$probe.window.tmp' '$probe.window'
 SH
   # The first mate: it starts that window, then tries to stop the proxy and to
@@ -715,7 +737,7 @@ mv '$probe.primary.tmp' '$probe.primary'
 exec sleep 60
 SH
   chmod +x "$dir/window" "$dir/primary"
-  out=$(FM_TEST_SEAM=1 FM_PRIVATEER_PRIMARY="$dir/primary" FM_HOME="$home" FM_ROOT_OVERRIDE="$root" "$PRIVATEER" start 2>&1)
+  out=$(HOME="$captain" FM_TEST_SEAM=1 FM_PRIVATEER_PRIMARY="$dir/primary" FM_HOME="$home" FM_ROOT_OVERRIDE="$root" "$PRIVATEER" start 2>&1)
   status=$?
   socket=$(printf '%s\n' "$out" | sed -n 's/.*on tmux socket \([^ ]*\).*/\1/p' | head -1)
   port=$(cat "$home/state/privateer/egress/port" 2>/dev/null)
@@ -725,7 +747,7 @@ SH
   FM_HOME="$home" FM_ROOT_OVERRIDE="$root" "$PRIVATEER" stop >/dev/null 2>&1 || { [ -z "$socket" ] || tmux -L "$socket" kill-server 2>/dev/null; }
   kill "$spid" "$opid" 2>/dev/null
   git -C "$proj" worktree remove --force "$wtbase/wt" 2>/dev/null
-  rm -rf "$wtbase"
+  rm -rf "$wtbase" "$captain"
   expect_code 0 "$status" "the real session must start: $out"
   assert_equals "direct=7
 proxied=403
@@ -733,8 +755,10 @@ write=0
 planted=none
 gitconfig=refused
 status=0
-commit=0" "$(cat "$probe.window" 2>/dev/null)" \
-    "a command started through tmux must reach nothing directly, be refused by the proxy for an unlisted host, write the worker's OpenCode data, plant no Git config, hook, home config, or script, and still write its status and commit in its own copy"
+commit=0
+slot=0
+$treehouse_line" "$(cat "$probe.window" 2>/dev/null)" \
+    "a command started through tmux must reach nothing directly, be refused by the proxy for an unlisted host, write the worker's OpenCode data, plant no Git config, hook, home config, script, or shared-pool slot, still write its status and commit in its own copy, and create and commit in a slot of the home's own pool"
   case "$(cat "$probe.primary" 2>/dev/null)" in
     "kill=0"* | *"rewrite=0") fail "the first mate stopped or rewrote the egress proxy: $(cat "$probe.primary" 2>/dev/null)" ;;
     "kill="*) ;;
@@ -742,11 +766,11 @@ commit=0" "$(cat "$probe.window" 2>/dev/null)" \
   esac
   assert_equals "HTTP/1.0 200 OK" "$alive" "the proxy must still serve the sailor after the first mate's attempt to stop it"
   assert_equals "refused GET 127.0.0.1:$oport
-allowed GET 127.0.0.1:$sport" "$(jq -r '"\(.verdict) \(.method) \(.dest)"' "$home/state/privateer/egress/log")" \
+allowed GET 127.0.0.1:$sport" "$(jq -r --arg o "127.0.0.1:$oport" --arg s "127.0.0.1:$sport" 'select(.dest == $o or .dest == $s) | "\(.verdict) \(.method) \(.dest)"' "$home/state/privateer/egress/log")" \
     "the proxy must log the refused host and the sailor request"
   [ -n "$pid" ] && ! kill -0 "$pid" 2>/dev/null || fail "stop must stop the egress proxy"
   [ "$port" != 1 ] || fail "the first mate rewrote the proxy's port"
-  pass "in the real sandboxed session, a command started through tmux reaches nothing but the proxy and plants nothing that runs outside, a worker still commits in its own copy, and the first mate cannot stop or rewrite the proxy"
+  pass "in the real sandboxed session, a command started through tmux reaches nothing but the proxy and plants nothing that runs outside, a worker still commits in its own copy and in a new slot of the home's own pool, and the first mate cannot stop or rewrite the proxy"
 }
 
 # --- spawn ------------------------------------------------------------------
@@ -878,7 +902,7 @@ test_spawn_allows_a_local_only_sailor_with_a_cleared_environment() {
   # The worker command sits inside the floor's single-quoted `sh -c` string,
   # where every single quote reads as '\''.
   oc="$HOME_DIR/state/privateer/opencode"
-  assert_contains "$launch" "export XDG_CONFIG_HOME=$(sq "$oc/config") XDG_DATA_HOME=$(sq "$oc/data") XDG_STATE_HOME=$(sq "$oc/state") XDG_CACHE_HOME=$(sq "$oc/cache") OPENCODE_DISABLE_AUTOUPDATE=$(sq 1) HTTP_PROXY=$(sq http://127.0.0.1:18080) HTTPS_PROXY=$(sq http://127.0.0.1:18080) http_proxy=$(sq http://127.0.0.1:18080) https_proxy=$(sq http://127.0.0.1:18080) GIT_SSH_COMMAND=" \
+  assert_contains "$launch" "export XDG_CONFIG_HOME=$(sq "$oc/config") XDG_DATA_HOME=$(sq "$oc/data") XDG_STATE_HOME=$(sq "$oc/state") XDG_CACHE_HOME=$(sq "$oc/cache") OPENCODE_DISABLE_AUTOUPDATE=$(sq 1) TREEHOUSE_ROOT=$(sq "$HOME_DIR/state/privateer/treehouse") HTTP_PROXY=$(sq http://127.0.0.1:18080) HTTPS_PROXY=$(sq http://127.0.0.1:18080) http_proxy=$(sq http://127.0.0.1:18080) https_proxy=$(sq http://127.0.0.1:18080) GIT_SSH_COMMAND=" \
     "the launch must isolate the worker's OpenCode inside the home and route it through the egress proxy"
   assert_contains "$launch" ",\"autoupdate\":false,\"share\":\"disabled\"}'\\'' opencode " \
     "the worker's OpenCode config must turn auto-update off and disable sharing"

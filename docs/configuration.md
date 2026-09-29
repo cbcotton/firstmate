@@ -939,17 +939,25 @@ When the session has already ended, for example because the first mate's window 
 The first mate and every worker receive `HTTP_PROXY`, `HTTPS_PROXY`, and a `GIT_SSH_COMMAND` that tunnels Git over SSH through the proxy.
 
 The sandbox holds the session's whole tmux server, so every pane and every command started in the session inherits it: the first mate, each worker and its pane shell, and anything the first mate asks tmux to run.
-Everything inside can write only to the home, the checkout's `.opencode/` scratch, the worktree pool, firstmate's per-task temp roots, and the server's own socket.
-It can never write the home's egress directory, `config/`, or `bin/`, or the Git config or hooks of the checkout, of any clone under `projects/`, or of any linked worktree or submodule of those, and it can neither redirect a worktree's `commondir` nor rename, replace, or create any `.git` entry in the checkout or in a clone.
+Everything inside can write only to the home, the checkout's `.opencode/` scratch, firstmate's per-task temp roots, and the server's own socket.
+Workers' copies live in the home's own Treehouse pool, `state/privateer/treehouse`, which the session names as `TREEHOUSE_ROOT`, so `treehouse` creates and hands out slots there and the shared pool under `~/.treehouse`, with every other home's slots, is out of reach.
+It can never write the home's egress directory, `config/`, or `bin/`, or the Git config or hooks of the checkout, of any clone under `projects/`, or of any linked worktree or submodule of those.
+It can neither rename, replace, or create any `.git` entry in the checkout or in a clone, nor redirect the git dir or `commondir` of a linked worktree that lives outside the home's pool.
 It also cannot write the `projects/` directory entry, any clone's directory entry, or any directory between the home and the checkout's git dir, so nothing can be moved aside, changed, and moved back.
-Nothing inside can therefore plant what later runs outside the sandbox, and clones under `projects/` are added, moved, and removed outside the session.
 It can connect only to the egress proxy, the DNS resolver, and that socket, so a client that ignores the proxy variables reaches nothing remote at all.
 It can signal only processes inside the same sandbox, so nothing in the session can stop the proxy, and the egress directory's port and process record are out of its reach.
-macOS cannot apply one sandbox inside another, so a Privateer worker runs in this session sandbox, with the session's write reach, instead of the per-task [sailor sandbox](#sailor-sandbox-configsailor-sandbox).
-One session sandbox covers the first mate and every worker alike, so a worker can still write the two records the first mate's own spawn and grant commands write from inside it: the task records `state/<id>.meta` and the grant ledger `state/permission-grants.jsonl`.
-A spawn is therefore refused unless it runs inside the home's Privateer session with its proxy running, so a worker can never land in an unsandboxed tmux server.
-The sandbox is not a boundary against same-user system services that start programs outside it, as `bin/fm-sandbox-exec.sh` states.
-Version 1 has honest limits: `sandbox-exec` is required, so Privateer runs on macOS only; `python3` is required for the proxy; a first mate whose checkout is not inside its home cannot update that checkout from inside its session; and Git over SSH needs a key file, because no agent socket enters the environment.
+A spawn is refused unless it runs inside the home's Privateer session with its proxy running, so a worker can never land in an unsandboxed tmux server.
+
+Version 1 has these remaining limits:
+
+- `sandbox-exec` is required, so Privateer runs on macOS only, and `python3` is required for the proxy.
+- macOS cannot apply one sandbox inside another, so one session sandbox covers the first mate and every worker alike, in place of the per-task [sailor sandbox](#sailor-sandbox-configsailor-sandbox).
+- A worker can therefore still write the two records the first mate's own spawn and grant commands write from inside that sandbox: the task records `state/<id>.meta` and the grant ledger `state/permission-grants.jsonl`.
+- The per-task temp roots under `/tmp/fm-`, and the user's own temporary directory (`$TMPDIR`), are namespaces shared by every home on the machine.
+- Clones under `projects/` are added, moved, and removed from outside the session, and a worktree the session creates in its own pool is meant for use only inside it.
+- The sandbox is not a boundary against same-user system services that start programs outside it, as `bin/fm-sandbox-exec.sh` states.
+- A first mate whose checkout is not inside its home cannot update that checkout from inside its session.
+- Git over SSH needs a key file, because no agent socket enters the environment.
 
 ### Egress audit
 
