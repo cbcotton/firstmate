@@ -429,12 +429,12 @@ assert_equals "000000000004" "$(printf '%s' "$after" | cursors mate)" \
 pass "replies and mirrored messages share one sequence and one receipts cursor"
 
 # A mirrored message is recorded once: the same id and text replay, a
-# different text under the same id is a new message, and an empty body or a
-# missing turn is refused.
+# different text under the same id updates the message at its cursor, and an
+# empty body or a missing turn is refused.
 assert_equals "replay 2" "$(mate "$home" "mirrored one" --id p1 --turn captain)" \
   "the same id and text replays the recorded message"
-assert_equals "created 5" "$(mate "$home" "a later final reply" --id p1 --turn captain)" \
-  "a different text under the same id is a new message"
+assert_equals "updated 2" "$(mate "$home" "a later final reply" --id p1 --turn captain)" \
+  "a different text under the same id updates the message at its cursor"
 set +e
 empty_out=$(mate "$home" "$(printf ' \n\t ')" --turn captain 2>&1)
 empty_code=$?
@@ -445,9 +445,29 @@ expect_code 1 "$empty_code" "an empty mirrored message is refused"
 assert_contains "$empty_out" "refusing to record an empty message" "the refusal names the empty message"
 expect_code 1 "$noturn_code" "a mirrored message without a turn stamp is refused"
 assert_contains "$noturn_out" "usage: fm-inbox.sh mate" "the refusal shows the usage"
-assert_equals "3" "$(find "$home/state/inbox/.mate" -maxdepth 1 -type f ! -name '.*' | wc -l | tr -d ' ')" \
-  "replays and refusals record nothing"
-pass "a mirrored message replays by id and text, and an empty or unstamped one is refused"
+assert_equals "2" "$(find "$home/state/inbox/.mate" -maxdepth 1 -type f ! -name '.*' | wc -l | tr -d ' ')" \
+  "replays, updates, and refusals add no record"
+pass "a mirrored message replays by id and text, updates by id, and an empty or unstamped one is refused"
+
+# A reader already past an updated message's cursor receives it once more, at
+# its original cursor, and then not again.
+page=$(run_inbox "$home" receipts --after 000000000004) || fail "receipts past the updated cursor failed"
+assert_equals "000000000002" "$(printf '%s' "$page" | cursors mate)" \
+  "the updated message is served again at its original cursor"
+assert_equals "a later final reply" "$(printf '%s' "$page" | json_get mate 0 body)" \
+  "the updated message carries its new body"
+assert_equals "0" "$(printf '%s' "$page" | json_len replies)" "no reply is served twice"
+cursor=$(printf '%s' "$page" | json_get reply_cursor)
+assert_equals "000000000005" "$cursor" "the receipts cursor moves to the update"
+page=$(run_inbox "$home" receipts --after "$cursor") || fail "receipts past the update failed"
+assert_equals "0" "$(printf '%s' "$page" | json_len mate)" "the update is served exactly once"
+assert_equals "000000000002 000000000004" "$(run_inbox "$home" receipts | cursors mate)" \
+  "a full read still holds one message per cursor"
+seed_note "$home" 1700000000-third
+run_inbox "$home" reply 1700000000-third "answer three" >/dev/null || fail "third reply failed"
+assert_equals "000000000006" "$(run_inbox "$home" receipts --after "$cursor" | cursors replies)" \
+  "a reply after an update takes the sequence after the update"
+pass "an updated mirrored message reaches a reader past its cursor exactly once"
 
 # The turn that answered a phone note with a reply and ends with the same
 # words is one message, not two; different words stay two messages.
@@ -455,18 +475,33 @@ home=$(make_home mate-duplicate)
 seed_note "$home" 1700000000-phone
 seed_note "$home" 1700000000-later
 mate "$home" "an earlier turn" --id p0 --turn captain >/dev/null || fail "seed mirrored message failed"
+since=$(date +%s)
 run_inbox "$home" reply 1700000000-phone "Aye, the fix is merged." >/dev/null || fail "reply failed"
-dup=$(mate "$home" "$(printf '  Aye, the fix\nis merged.  ')" --id p1 --turn captain --json) \
-  || fail "a duplicate mirrored message should succeed"
-assert_equals "duplicate" "$(printf '%s' "$dup" | json_get outcome)" \
-  "a final message equal to the same turn's reply is a duplicate"
-assert_equals "1700000000-phone" "$(printf '%s' "$dup" | json_get reply)" \
-  "the duplicate names the reply it repeats"
-assert_equals "created 3" "$(mate "$home" "Aye, the fix is merged. The next one is under way." --id p1 --turn captain)" \
+assert_equals "duplicate 1700000000-phone" \
+  "$(mate "$home" "$(printf '  Aye, the fix\nis merged.  ')" --id p1 --since "$since" --turn captain)" \
+  "a final message equal to the same turn's reply is a duplicate of that reply"
+assert_equals "created 3" "$(mate "$home" "Aye, the fix is merged. The next one is under way." --id p1 --since "$since" --turn captain)" \
   "a final message with different words is recorded beside the reply"
-assert_equals "created 4" "$(mate "$home" "Aye, the fix is merged." --id p2 --turn captain)" \
+assert_equals "created 4" "$(mate "$home" "Aye, the fix is merged." --id p2 --since "$since" --turn captain)" \
   "a reply recorded before the newest mirrored message belongs to an earlier turn"
 pass "a final message repeating the same turn's phone reply is recorded once, as the reply"
+
+# A reply recorded before the turn started never suppresses its final message:
+# not on the first Cast Off, with no mirrored message yet, and not after a
+# Make Fast then Cast Off, with replies recorded while the mirror was off.
+home=$(make_home mate-earlier-turn)
+seed_note "$home" 1700000000-old
+seed_note "$home" 1700000000-off
+run_inbox "$home" reply 1700000000-old "Done." >/dev/null || fail "old reply failed"
+later=$(( $(date +%s) + 5 ))
+assert_equals "created 2" "$(mate "$home" "Done." --id p1 --since "$later" --turn captain)" \
+  "a reply from before the first Cast Off does not suppress a final message"
+run_inbox "$home" reply 1700000000-off "On it." >/dev/null || fail "reply while off failed"
+assert_equals "created 4" "$(mate "$home" "On it." --id p2 --since "$later" --turn captain)" \
+  "a reply recorded while the mirror was off does not suppress a final message"
+assert_equals "created 5" "$(printf 'On it.' | run_inbox "$home" mate --id p3 --turn captain -)" \
+  "without a turn start no reply counts as this turn's"
+pass "a final message equal to a reply from before its turn is still mirrored"
 
 # Long messages keep their head and tail inside the 8000-character cap, the
 # records are owner-only, and no mirrored message ever wakes firstmate.

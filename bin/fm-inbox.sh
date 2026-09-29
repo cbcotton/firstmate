@@ -24,7 +24,7 @@
 #   fm-inbox.sh note [--request-id <id>] [--source <token>] [--meta <key>=<value>]... [--json] -   (body from stdin)
 #   fm-inbox.sh announce [--json] <id>
 #   fm-inbox.sh reply [--json] <id> <text>... | reply [--json] <id> -
-#   fm-inbox.sh mate [--id <id>] --turn captain|operational [--json] -   (body from stdin)
+#   fm-inbox.sh mate [--id <id>] [--since <epoch>] --turn captain|operational -   (body from stdin)
 #   fm-inbox.sh receipts [--after <cursor>] [--all-pending] [--all-handled] [--all-replies] [--all-mate]
 #   fm-inbox.sh ready
 #   fm-inbox.sh say  [<file.wav>]       (default: audio on stdin)
@@ -65,12 +65,15 @@
 # enqueue again.
 # `receipts` is the bounded JSON view of pending and handled notes, their
 # acknowledgement, announcement, any recorded reply, and the mirrored messages
-# (mate[]: cursor, at, id, turn, body). Default bounds omit
+# (mate[]: cursor, rev, at, id, turn, body). Default bounds omit
 # rather than implying the first page is everything; omitted[] names the
 # surface and how to reveal it, the same convention as fm-bearings-snapshot.sh.
-# replies[] and mate[] share one cursor space: --after filters both, and when
-# either list is cut by its bound, neither list returns anything past the cut,
-# so reply_cursor (the newest cursor returned) never skips an unread entry.
+# replies[] and mate[] share one cursor space. A row's rev is the number it
+# was last written under: a reply's is its cursor, and a mirrored message's is
+# its cursor until an update gives it a fresh one. --after filters both lists
+# by rev, and when either list is cut by its bound, neither list returns
+# anything past the cut, so reply_cursor (the newest rev returned) never skips
+# an unread entry, and an updated message is served again once at its cursor.
 # `reply` is how the primary publishes its actual answer against a note id.
 # Each reply is stamped with a durable per-home sequence, so the receipts cursor
 # is a strict total order and two replies recorded in the same second are both
@@ -78,16 +81,22 @@
 # `mate` records one mirrored final message of a first-mate turn while the
 # phone mirror is on. Its only writer is bin/fm-castoff.sh's turn-end hook, so
 # the body comes from stdin and never from the model or a process argument.
-# A record is $INBOX/.mate/<12-digit seq> holding seq=, at=, id= (the turn's
-# prompt or generation id, possibly empty), turn=captain|operational, `--`, and
-# the body verbatim, capped at MATE_CAP characters with head and tail kept
-# around a truncation note. Its seq comes from the reply sequence under the
-# same lock, so replies and mirrored messages form one strict order that one
-# receipts cursor covers. Outcomes: `created`; `replay` when a record with the
-# same non-empty id already holds the same capped body; `duplicate` when the
-# body equals, after whitespace normalisation, a reply recorded after the
-# newest mirrored message (the turn already answered a phone note with those
-# words). An empty body is refused. A mirrored message is the first mate
+# A record is $INBOX/.mate/<12-digit seq> holding seq=, rev=, at=, id= (the
+# turn's prompt or generation id, possibly empty), turn=captain|operational,
+# `--`, and the body verbatim, capped at MATE_CAP characters with head and tail
+# kept around a truncation note. Its seq and rev come from the reply sequence
+# under the same lock, so replies and mirrored messages form one strict order
+# that one receipts cursor covers. Outcomes: `created <seq>`; `replay <seq>`
+# when the record with the same non-empty id already holds the same capped
+# body; `updated <seq>` when it holds a different one. A changed body at an
+# existing cursor is an update, not a new message: the record keeps its seq,
+# takes the new body and a fresh rev, so only a turn's last final message
+# stands and the phone redraws that one message rather than adding another.
+# `duplicate <reply id>` when the body equals, after whitespace normalisation,
+# a reply recorded during this turn, that is after the newest mirrored message
+# and at or after --since, the turn's start (the turn already answered a phone
+# note with those words); without --since no reply counts as this turn's.
+# An empty body is refused. A mirrored message is the first mate
 # speaking, never the captain: it is never announced and appends no wake.
 # Past MATE_KEEP + 100 records, the oldest are pruned down to MATE_KEEP.
 # `ready` is the read-only primary-readiness projection (lock, wake-consumer
@@ -646,7 +655,7 @@ next_reply_seq() {
   recorded=$(find "${dirs[@]}" -maxdepth 1 -type f ! -name '.*' -exec awk '
     FNR == 1 { head = 1 }
     /^--$/ { head = 0 }
-    head && /^seq=[0-9]+$/ { v = substr($0, 5) + 0; if (v > max) max = v }
+    head && /^(seq|rev)=[0-9]+$/ { v = substr($0, 5) + 0; if (v > max) max = v }
     END { print max + 0 }' {} + 2>/dev/null | sort -n | tail -n 1)
   case "$recorded" in
     ''|*[!0-9]*) recorded=0 ;;
@@ -726,15 +735,17 @@ PY
 }
 
 # Decide what one mirrored message becomes, under REPLY_SEQ_LOCK: print
-# `empty`, `replay <seq>`, `duplicate <reply id>`, or `new` after writing the
-# capped body to <capped-file> and pruning the oldest records past the bound.
-mate_decide() {  # <body-file> <capped-file> <id>
-  python3 - "$MATE" "$REPLIES" "$1" "$2" "$3" "$MATE_CAP" "$MATE_KEEP" <<'PY'
-import sys
+# `empty`, `replay <seq>`, `update <seq> <name>`, `duplicate <reply id>`, or
+# `new`. A new or updated body is written capped to <capped-file>, and a new
+# one first prunes the oldest records past the bound.
+mate_decide() {  # <body-file> <capped-file> <id> <since-epoch>
+  python3 - "$MATE" "$REPLIES" "$1" "$2" "$3" "$MATE_CAP" "$MATE_KEEP" "$4" <<'PY'
+import sys, time
 from pathlib import Path
 
 mate_dir, replies_dir, body_path, capped_path, mate_id = sys.argv[1:6]
 cap, keep = int(sys.argv[6]), int(sys.argv[7])
+since = sys.argv[8]
 
 def parse(path):
     try:
@@ -748,7 +759,9 @@ def parse(path):
     raw = meta.get("seq") or ""
     if not (raw.isascii() and raw.isdigit()):
         return None
-    return int(raw), meta, body[:-1] if body.endswith("\n") else body
+    rev = meta.get("rev") or ""
+    rev = int(rev) if rev.isascii() and rev.isdigit() else int(raw)
+    return int(raw), meta, body[:-1] if body.endswith("\n") else body, rev
 
 def note(n):
     return "\n[mirror truncated: %d characters omitted]\n" % n
@@ -779,26 +792,35 @@ for path in Path(mate_dir).iterdir():
     rec = parse(path)
     if rec is None:
         continue
-    records.append((rec[0], path, rec[1], rec[2]))
+    records.append((rec[0], path, rec[1], rec[2], rec[3]))
 records.sort(key=lambda r: r[0])
-for seq, _, meta, recorded in records:
-    if mate_id and meta.get("id") == mate_id and recorded == text:
+same = [r for r in records if mate_id and r[2].get("id") == mate_id]
+if same:
+    seq, path, _, recorded, _ = same[-1]
+    if recorded == text:
         print("replay %d" % seq)
-        sys.exit(0)
+    else:
+        Path(capped_path).write_text(text, encoding="utf-8")
+        print("update %d %s" % (seq, path.name))
+    sys.exit(0)
 
-newest_mate = records[-1][0] if records else 0
-folder = Path(replies_dir)
-for path in sorted(folder.iterdir()) if folder.is_dir() else []:
-    if path.name.startswith(".") or not path.is_file():
-        continue
-    rec = parse(path)
-    if rec is not None and rec[0] > newest_mate and normal(rec[2]) == normal(body):
-        print("duplicate %s" % (rec[1].get("id") or path.name))
-        sys.exit(0)
+if since.isascii() and since.isdigit():
+    turn_start = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(int(since)))
+    newest_mate = max((r[4] for r in records), default=0)
+    folder = Path(replies_dir)
+    for path in sorted(folder.iterdir()) if folder.is_dir() else []:
+        if path.name.startswith(".") or not path.is_file():
+            continue
+        rec = parse(path)
+        if (rec is not None and rec[0] > newest_mate
+                and (rec[1].get("at") or "") >= turn_start
+                and normal(rec[2]) == normal(body)):
+            print("duplicate %s" % (rec[1].get("id") or path.name))
+            sys.exit(0)
 
 Path(capped_path).write_text(text, encoding="utf-8")
 if len(records) + 1 > keep + 100:
-    for _, path, _, _ in records[:len(records) + 1 - keep]:
+    for _, path, _, _, _ in records[:len(records) + 1 - keep]:
         try:
             path.unlink()
         except FileNotFoundError:
@@ -807,16 +829,39 @@ print("new")
 PY
 }
 
+# Write one mirrored record at <name> by rename, under REPLY_SEQ_LOCK.
+mate_write() {  # <name> <seq> <rev> <id> <turn> <capped-file>
+  local staging
+  staging=$(mktemp "$MATE/.staging-XXXXXX") || return 1
+  {
+    printf 'seq=%s\n' "$2"
+    printf 'rev=%s\n' "$3"
+    printf 'at=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    printf 'id=%s\n' "$4"
+    printf 'turn=%s\n' "$5"
+    printf -- '--\n'
+    cat "$6"
+    printf '\n'
+  } >"$staging" && mv "$staging" "$MATE/$1" && return 0
+  rm -f "$staging"
+  return 1
+}
+
 cmd_mate() {
-  local json=0 id="" turn="" body capped decision seq name staging rc=0 outcome ref
-  local usage="usage: fm-inbox.sh mate [--id <id>] --turn captain|operational [--json] -   (body from stdin)"
+  local id="" turn="" since="" body capped decision seq rev name outcome ref
+  local usage="usage: fm-inbox.sh mate [--id <id>] [--since <epoch>] --turn captain|operational -   (body from stdin)"
   while [ "$#" -gt 0 ]; do
     case "$1" in
-      --json) json=1; shift ;;
       --id)
         [ "$#" -ge 2 ] || die "$usage"
         id=$2
         valid_request_id "$id" || die "invalid mate id (use 1-128 characters: A-Za-z0-9._:-)"
+        shift 2
+        ;;
+      --since)
+        [ "$#" -ge 2 ] || die "$usage"
+        since=$2
+        case "$since" in ''|*[!0-9]*) die "$usage" ;; esac
         shift 2
         ;;
       --turn)
@@ -841,7 +886,7 @@ cmd_mate() {
   cat >"$body"
   load_wake_lib || die "the reply sequence needs $FM_ROOT/bin/fm-wake-lib.sh"
   fm_lock_acquire_wait "$REPLY_SEQ_LOCK" || die "could not claim the reply sequence"
-  if ! decision=$(mate_decide "$body" "$capped" "$id"); then
+  if ! decision=$(mate_decide "$body" "$capped" "$id" "$since"); then
     fm_lock_release "$REPLY_SEQ_LOCK"
     die "could not read the mirrored messages"
   fi
@@ -850,50 +895,32 @@ cmd_mate() {
       fm_lock_release "$REPLY_SEQ_LOCK"
       die "refusing to record an empty message"
       ;;
-    new)
-      if ! seq=$(next_reply_seq); then
+    new|update\ *)
+      if ! rev=$(next_reply_seq); then
         fm_lock_release "$REPLY_SEQ_LOCK"
         die "could not claim the reply sequence"
       fi
-      name=$(printf '%012d' "$seq")
-      staging=$(mktemp "$MATE/.staging-XXXXXX")
-      {
-        printf 'seq=%s\n' "$seq"
-        printf 'at=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-        printf 'id=%s\n' "$id"
-        printf 'turn=%s\n' "$turn"
-        printf -- '--\n'
-        cat "$capped"
-        printf '\n'
-      } >"$staging" && mv "$staging" "$MATE/$name" || rc=$?
-      fm_lock_release "$REPLY_SEQ_LOCK"
-      if [ "$rc" -ne 0 ]; then
-        rm -f "$staging"
+      if [ "$decision" = new ]; then
+        seq=$rev
+        name=$(printf '%012d' "$seq")
+        outcome=created
+      else
+        read -r _ seq name <<<"$decision"
+        outcome=updated
+      fi
+      if ! mate_write "$name" "$seq" "$rev" "$id" "$turn" "$capped"; then
+        fm_lock_release "$REPLY_SEQ_LOCK"
         die "could not record the mirrored message"
       fi
-      decision="created $seq"
+      fm_lock_release "$REPLY_SEQ_LOCK"
+      decision="$outcome $seq"
       ;;
     *)
       fm_lock_release "$REPLY_SEQ_LOCK"
       ;;
   esac
   read -r outcome ref <<<"$decision"
-  if [ "$json" -eq 1 ]; then
-    python3 - "$outcome" "$ref" "$id" "$turn" "$MATE" <<'PY'
-import json, sys
-outcome, ref, mate_id, turn, mate_dir = sys.argv[1:6]
-record = {"schema": "fm-inbox-mate.v1", "outcome": outcome, "id": mate_id or None, "turn": turn}
-if outcome == "duplicate":
-    record["reply"] = ref
-else:
-    record["cursor"] = "%012d" % int(ref)
-    record["path"] = "%s/%012d" % (mate_dir, int(ref))
-json.dump(record, sys.stdout, separators=(",", ":"))
-sys.stdout.write("\n")
-PY
-  else
-    printf '%s %s\n' "$outcome" "$ref"
-  fi
+  printf '%s %s\n' "$outcome" "$ref"
 }
 
 cmd_receipts() {
@@ -1049,7 +1076,9 @@ for group in (pending_all, handled_all):
 replies_all.sort(key=lambda r: r["cursor"])
 
 # Mirrored first-mate messages share the reply sequence, so the same cursor
-# orders them; one without a valid sequence or turn is malformed.
+# orders them; one without a valid sequence or turn is malformed. A reply's rev
+# is its cursor; an updated message's rev is newer than its cursor, and rev is
+# the order a reader receives them in.
 malformed_mate = []
 mate_all = []
 if Path(mate_dir).is_dir():
@@ -1065,35 +1094,44 @@ if Path(mate_dir).is_dir():
         if not (raw_seq.isascii() and raw_seq.isdigit() and valid_turn):
             malformed_mate.append(path.name)
             continue
+        raw_rev = meta.get("rev") or raw_seq
+        if not (raw_rev.isascii() and raw_rev.isdigit()):
+            raw_rev = raw_seq
         mate_all.append({
             "cursor": "%012d" % int(raw_seq),
+            "rev": "%012d" % int(raw_rev),
             "at": meta.get("at"),
             "id": meta.get("id") or None,
             "turn": meta["turn"],
             "body": body,
         })
-mate_all.sort(key=lambda r: r["cursor"])
+
+def rev(row):
+    return row.get("rev", row["cursor"])
+
+mate_all.sort(key=rev)
 
 if after:
-    replies_all = [r for r in replies_all if r["cursor"] > after]
-    mate_all = [r for r in mate_all if r["cursor"] > after]
+    replies_all = [r for r in replies_all if rev(r) > after]
+    mate_all = [r for r in mate_all if rev(r) > after]
 
 replies, replies_omitted = bound_list(replies_all, replies_bound, all_replies)
 mate, mate_omitted = bound_list(mate_all, mate_bound, all_mate)
 # A list cut by its bound is complete only through its last row, so nothing
 # past the lowest such cut is returned in either list: the next --after page
 # then starts where the unread entries do.
-cuts = [rows[-1]["cursor"] for rows, cut in ((replies, replies_omitted), (mate, mate_omitted))
+cuts = [rev(rows[-1]) for rows, cut in ((replies, replies_omitted), (mate, mate_omitted))
         if cut and rows]
 if cuts:
     limit = min(cuts)
-    kept = [r for r in replies if r["cursor"] <= limit]
+    kept = [r for r in replies if rev(r) <= limit]
     replies_omitted += len(replies) - len(kept)
     replies = kept
-    kept = [r for r in mate if r["cursor"] <= limit]
+    kept = [r for r in mate if rev(r) <= limit]
     mate_omitted += len(mate) - len(kept)
     mate = kept
-reply_cursor = max([r["cursor"] for r in replies + mate], default=(after or ""))
+reply_cursor = max([rev(r) for r in replies + mate], default=(after or ""))
+mate.sort(key=lambda r: r["cursor"])
 
 omitted = []
 if pending_omitted:

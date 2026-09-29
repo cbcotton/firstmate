@@ -65,6 +65,14 @@ SAY='say() {  # <captain|main> <text> [<id>]
 
 mode_of() { stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1"; }
 
+# "<cursor>|<turn>|<body>" per mirrored message, in order.
+mirrored_at() {  # <home>
+  FM_HOME="$1" "$INBOX" receipts --all-mate 2>/dev/null \
+    | python3 -c 'import json,sys
+for r in json.load(sys.stdin)["mate"]:
+    print("%s|%s|%s" % (r["cursor"], r["turn"], r["body"]))'
+}
+
 # "<turn>|<body>" per mirrored message, in order.
 mirrored() {  # <home>
   FM_HOME="$1" "$INBOX" receipts --all-mate 2>/dev/null \
@@ -220,21 +228,71 @@ captain|unstamped answer" "$(mirrored "$home")" "each turn must be stamped by ho
   pass "castoff: typed turns are stamped captain, and operational input, rewakes, and this home's doorbells operational"
 }
 
+# A turn-end guard that blocks a Claude Stop sends the same turn back to work
+# with no new prompt, so the turn ends twice under one prompt id: only its last
+# final message stands, at the first one's cursor.
 test_repeats_and_later_replies_under_one_id() {
   local home
   home=$(make_home repeats)
   as_session "$home" "$SAY"'
     say captain "ship it" p1
-    say main "interim reply before the guard blocked" p1
-    say main "the real final answer" p1
+    printf "%s" "{\"hook_event_name\":\"Stop\",\"prompt_id\":\"p1\",\"stop_hook_active\":false,\"last_assistant_message\":\"interim reply before the guard blocked\"}" \
+      | FM_ROOT_OVERRIDE="$PRIMARY_ROOT" "$CASTOFF" hook claude
+    printf "%s" "{\"hook_event_name\":\"Stop\",\"prompt_id\":\"p1\",\"stop_hook_active\":true,\"last_assistant_message\":\"the real final answer\"}" \
+      | FM_ROOT_OVERRIDE="$PRIMARY_ROOT" "$CASTOFF" hook claude
     say main "the real final answer" p1
     say main "an id the record would refuse" "bad id/with space"
   ' || fail "a writer failed"
-  assert_equals "captain|interim reply before the guard blocked
-captain|the real final answer
-captain|an id the record would refuse" "$(mirrored "$home")" \
-    "a different reply under the same id must be mirrored, an identical repeat once, and a refused id must not lose the message"
-  pass "castoff: a later different reply under one id is mirrored, an identical repeat once, and an unusable id is dropped, not the message"
+  assert_equals "000000000001|captain|the real final answer
+000000000003|captain|an id the record would refuse" "$(mirrored_at "$home")" \
+    "a guard-blocked Stop must leave one record with the last final message at the first cursor, and a refused id must not lose the message"
+  pass "castoff: a guard-blocked turn end leaves one message, the last, at its first cursor, and an unusable id is dropped, not the message"
+}
+
+# Cursor may deliver afterAgentResponse more than once for one generation:
+# only the last text stands, as one message.
+test_repeated_cursor_response_is_one_message() {
+  local home
+  home=$(make_home cursor-repeats)
+  CURSOR_PROMPT=$(cursor_cmd beforeSubmitPrompt) CURSOR_RESPONSE=$(cursor_cmd afterAgentResponse) \
+  as_session "$home" '
+    run() { printf "%s" "$2" | env CURSOR_PROJECT_DIR="$PRIMARY_ROOT" bash -c "cd \"$PRIMARY_ROOT\" && $1"; }
+    run "$CURSOR_PROMPT" "{\"hook_event_name\":\"beforeSubmitPrompt\",\"generation_id\":\"g1\",\"prompt\":\"status?\",\"cursor_version\":\"x\"}"
+    run "$CURSOR_RESPONSE" "{\"hook_event_name\":\"afterAgentResponse\",\"generation_id\":\"g1\",\"text\":\"first text\",\"cursor_version\":\"x\"}"
+    run "$CURSOR_RESPONSE" "{\"hook_event_name\":\"afterAgentResponse\",\"generation_id\":\"g1\",\"text\":\"the last text\",\"cursor_version\":\"x\"}"
+  ' || fail "a tracked castoff hook failed"
+  assert_equals "000000000001|captain|the last text" "$(mirrored_at "$home")" \
+    "a repeated afterAgentResponse for one generation must leave one message with the last text"
+  pass "castoff: a repeated Cursor response for one generation is one message, the last"
+}
+
+# Replies recorded before a turn began, before the first Cast Off or while the
+# mirror was off, never suppress the turn's final message.
+test_earlier_replies_never_suppress_a_final_message() {
+  local home
+  home=$(make_home earlier-replies 0)
+  old_reply() {  # <home> <note id> <text>
+    mkdir -p "$1/state/inbox"
+    printf 'id=%s\nat=2026-01-01T00:00:00Z\nsource=pinnace\nannounce_marker=1\n--\nfrom the phone\n' "$2" \
+      > "$1/state/inbox/$2.note"
+    FM_HOME="$1" "$INBOX" reply "$2" "$3" >/dev/null || fail "reply to $2 failed"
+    sed -i.bak 's/^at=.*/at=2020-01-01T00:00:00Z/' "$1/state/inbox/.replies/$2" && rm -f "$1/state/inbox/.replies/$2.bak"
+  }
+  old_reply "$home" 1700000000-before "Done."
+  FM_HOME="$home" "$CASTOFF" on >/dev/null
+  as_session "$home" "$SAY"'
+    say captain "anything left?" p1; say main "Done." p1
+  ' || fail "a writer failed"
+  FM_HOME="$home" "$CASTOFF" off >/dev/null
+  old_reply "$home" 1700000000-while-off "On it."
+  FM_HOME="$home" "$CASTOFF" on >/dev/null
+  as_session "$home" "$SAY"'
+    say captain "take the next one" p2; say main "On it." p2
+  ' || fail "a writer failed"
+  assert_equals "captain|Done.
+captain|On it." "$(mirrored "$home")" \
+    "a final message equal to a reply from before its turn must still be mirrored"
+  pass "castoff: replies from before the first Cast Off or from while the mirror was off never suppress a final message"
 }
 
 # The turn that runs Make Fast ends with the flag gone, so its own reply is
@@ -290,5 +348,7 @@ test_home_with_the_mirror_off_is_untouched
 test_foreign_unowned_and_crewmate_writes_nothing
 test_turns_are_stamped_captain_or_operational
 test_repeats_and_later_replies_under_one_id
+test_repeated_cursor_response_is_one_message
+test_earlier_replies_never_suppress_a_final_message
 test_make_fast_turn_is_not_mirrored
 test_dialog_text_never_enters_process_arguments

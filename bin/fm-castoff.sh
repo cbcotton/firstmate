@@ -22,17 +22,20 @@
 # fleet lock, so a crewmate worktree and a read-only second session write
 # nothing.
 # A submitted prompt is never recorded; it only stamps the turn in
-# $STATE/.castoff-turn (two lines, the id then the class; owner-only, by
-# rename): class
+# $STATE/.castoff-turn (three lines, the id, the class, and the epoch it was
+# submitted; owner-only, by rename): class
 # `operational` for fleet machinery (bin/fm-turn-dialog-lib.sh) or a
 # record-backed operational doorbell whose record sits in this home
 # (bin/fm-operational-input.sh), `captain` otherwise.
 # A final message goes on stdin to `bin/fm-inbox.sh mate`, which owns the
-# record, its cap, its order beside note replies, and its dedupe. Its class is
-# the stamp recorded under the same id, else `captain`: the one mirrored turn
-# with no stamp is the turn that turned the mirror on, whose prompt arrived
-# before the flag. The turn that turns it off ends with the flag gone and is
-# not mirrored.
+# record, its cap, its order beside note replies, and its dedupe. Its class and
+# turn start are the stamp recorded under the same id, else `captain` and the
+# flag's at=: the one mirrored turn with no stamp is the turn that turned the
+# mirror on, whose prompt arrived before the flag. The turn start bounds the
+# dedupe to the replies of this turn. A turn that ends more than once (a
+# turn-end guard that sent it back to work) leaves its last final message in
+# place of the earlier one. The turn that turns it off ends with the flag gone
+# and is not mirrored.
 #
 # Usage:
 #   fm-castoff.sh on
@@ -135,20 +138,20 @@ prompt_class() {  # <text>
   fi
 }
 
-# The class stamped for turn <id>, else captain.
-turn_class() {  # <id>
-  local id='' class=''
+# "<class> <start epoch>" stamped for turn <id>, else captain and the flag's at=.
+turn_stamp() {  # <id>
+  local id='' class='' at=''
   if [ -f "$TURN" ]; then
-    { IFS= read -r id; IFS= read -r class; } < "$TURN" 2>/dev/null || true
-    if [ "$id" = "$1" ]; then
-      case "$class" in captain|operational) printf '%s' "$class"; return 0 ;; esac
-    fi
+    { IFS= read -r id; IFS= read -r class; IFS= read -r at; } < "$TURN" 2>/dev/null || true
   fi
-  printf 'captain'
+  [ "$id" = "$1" ] || { class=; at=; }
+  case "$class" in captain|operational) ;; *) class=captain ;; esac
+  case "$at" in ''|*[!0-9]*) at=$(flag_at) ;; esac
+  printf '%s %s' "$class" "$at"
 }
 
 cmd_hook() {
-  local payload parsed tag id text class
+  local payload parsed tag id text class since
   command -v jq >/dev/null 2>&1 || return 0
   payload=$(cat 2>/dev/null || true)
   [ -n "$payload" ] || return 0
@@ -167,15 +170,16 @@ cmd_hook() {
   text=$(printf '%s\n' "$parsed" | sed '1,2d')
   fm_turn_dialog_writer_in_scope "$FM_ROOT" "$STATE" || return 0
   if [ "$tag" = captain ]; then
-    publish "$TURN" "$(printf '%s\n%s' "$id" "$(prompt_class "$text")")" || true
+    publish "$TURN" "$(printf '%s\n%s\n%s' "$id" "$(prompt_class "$text")" "$(date +%s)")" || true
     return 0
   fi
-  class=$(turn_class "$id")
+  read -r class since <<<"$(turn_stamp "$id")"
   # An id the record would refuse (fm-inbox.sh's request-id rule) must not
   # cost the message itself: it is recorded without one.
   case "$id" in .*|*[!A-Za-z0-9._:-]*) id= ;; esac
   [ "${#id}" -le 128 ] || id=
   set -- --turn "$class"
+  [ -z "$since" ] || set -- --since "$since" "$@"
   [ -z "$id" ] || set -- --id "$id" "$@"
   printf '%s' "$text" | FM_HOME="$FM_HOME" FM_STATE_OVERRIDE="$STATE" \
     "$SCRIPT_DIR/fm-inbox.sh" mate "$@" - >/dev/null 2>&1 || true
