@@ -770,7 +770,9 @@ $treehouse_line" "$(cat "$probe.window" 2>/dev/null)" \
   assert_equals "refused GET 127.0.0.1:$oport
 allowed GET 127.0.0.1:$sport" "$(jq -r --arg o "127.0.0.1:$oport" --arg s "127.0.0.1:$sport" 'select(.dest == $o or .dest == $s) | "\(.verdict) \(.method) \(.dest)"' "$home/state/privateer/egress/log")" \
     "the proxy must log the refused host and the sailor request"
-  [ -n "$pid" ] && ! kill -0 "$pid" 2>/dev/null || fail "stop must stop the egress proxy"
+  if [ -z "$pid" ] || kill -0 "$pid" 2>/dev/null; then
+    fail "stop must stop the egress proxy"
+  fi
   [ "$port" != 1 ] || fail "the first mate rewrote the proxy's port"
   pass "in the real sandboxed session, a command started through tmux reaches nothing but the proxy and plants nothing that runs outside, a worker still commits in its own copy and in a new slot of the home's own pool, and the first mate cannot stop or rewrite the proxy"
 }
