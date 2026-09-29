@@ -390,7 +390,7 @@ test_start_refuses_without_a_first_mate_line() {
 }
 
 test_start_passes_only_the_allowlist() {
-  local dir home root out status envlog profile home_real root_real port
+  local dir home root out status envlog profile home_real root_real port tmp_real
   dir="$TMP_ROOT/start"
   home=$(make_home start)
   root="$dir/root"
@@ -451,8 +451,9 @@ test_start_passes_only_the_allowlist() {
   assert_grep '(deny signal)' "$profile" "the sandbox must deny signals outside itself"
   assert_grep '(allow signal (target same-sandbox))' "$profile" "the sandbox must allow signals within itself"
   assert_grep "(subpath \"$root_real/.opencode\")" "$profile" "the sandbox must allow OpenCode's scratch in the checkout"
-  assert_grep '(regex #"^/private/tmp/fm-")' "$profile" "the sandbox must allow firstmate's per-task temp roots"
-  assert_grep '(allow network-outbound (remote unix-socket (path-literal "/private/tmp/tmux-' "$profile" "the sandbox must allow the session's own tmux socket"
+  tmp_real=$(cd /tmp && pwd -P)
+  assert_grep "(regex #\"^$(rq "$tmp_real")/fm-\")" "$profile" "the sandbox must allow firstmate's per-task temp roots"
+  assert_grep "(allow network-outbound (remote unix-socket (path-literal \"$(cd "${TMUX_TMPDIR:-/tmp}" && pwd -P)/tmux-" "$profile" "the sandbox must allow the session's own tmux socket"
   assert_grep 'new-session -d -s privateer -n firstmate -c '"$root_real" "$dir/tmux.log" "tmux must start the first mate in the checkout"
   assert_grep "set-option -g update-environment " "$dir/tmux.log" "the server must copy no variable from an attaching client"
   # The proxy start launched allows exactly the sailor and the forge.
