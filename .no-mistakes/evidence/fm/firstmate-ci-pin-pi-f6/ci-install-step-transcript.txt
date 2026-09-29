@@ -1,0 +1,8 @@
+/tmp/fm-pipin.iBYH/g0.87.1/lib -> ./
+└── @earendil-works/pi-coding-agent@0.87.1
+
+root=/tmp/fm-pipin.iBYH/g0.87.1/lib/node_modules
+/tmp/fm-pipin.iBYH/g0.99.1/lib -> ./
+└── @earendil-works/pi-coding-agent@0.99.1
+
+root=/tmp/fm-pipin.iBYH/g0.99.1/lib/node_modules
