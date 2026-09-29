@@ -439,8 +439,10 @@ test_start_passes_only_the_allowlist() {
   (subpath \"$home_real/state/privateer/egress\")
   (subpath \"$home_real/config\")
   (subpath \"$home_real/bin\")
-  (regex #\"^$(rq "$root_real")/\\.git(\$|/(worktrees/[^/]+/)?(hooks(/|\$)|config|commondir))\")
-  (regex #\"^$(rq "$home_real")/projects/[^/]+/\\.git(\$|/(worktrees/[^/]+/)?(hooks(/|\$)|config|commondir))\")
+  (regex #\"^$(rq "$root_real")/\\.git(\$|/(worktrees/[^/]+/|modules/.+/)?(hooks(/|\$)|config|commondir))\")
+  (regex #\"^$(rq "$home_real")/projects/[^/]+\$\")
+  (regex #\"^$(rq "$home_real")/projects/[^/]+/(.+/)?\\.git(\$|/(worktrees/[^/]+/|modules/.+/)?(hooks(/|\$)|config|commondir))\")
+  (regex #\"^$(rq "$home_real")/projects\$\")
 )" "$(sed -n '/^(deny file-write\*$/,/^)$/p' "$profile")" \
     "the sandbox must take back only the egress record, the home's config and scripts, and every Git config and hook, so every worker's OpenCode directories stay writable"
   assert_grep '(deny signal)' "$profile" "the sandbox must deny signals outside itself"
@@ -641,8 +643,12 @@ test_session_sandbox_holds_every_command() {
   fi
   dir="$TMP_ROOT/real-session"
   home=$(make_home real-session)
-  root="$dir/root"
-  fm_git_init_commit "$root"
+  # The checkout is a linked worktree nested below the home, so its .git is a
+  # gitfile and directories stand between the home and it.
+  fm_git_init_commit "$dir/rootmain"
+  root="$home/nest/checkout"
+  mkdir -p "$home/nest"
+  git -C "$dir/rootmain" worktree add -q -b pv-root "$root"
   mkdir -p "$dir/sailor/v1" "$dir/other"
   printf '{"data":[{"id":"coder"}]}\n' > "$dir/sailor/v1/models"
   printf 'reached\n' > "$dir/other/index.html"
@@ -677,6 +683,15 @@ for t in '$proj/.git/hooks/post-checkout' '$proj/.git/config' '$wtgit/config.wor
   ( : >> "\$t" ) 2>/dev/null && planted="\$planted \$t"
 done
 mv '$proj/.git' '$proj/.git.aside' 2>/dev/null && planted="\$planted rename:$proj/.git"
+mv '$proj' '$home/moved' 2>/dev/null && planted="\$planted move:$proj" &&
+  ( : >> '$home/moved/.git/hooks/post-checkout' ) 2>/dev/null && planted="\$planted hook:$home/moved"
+mv '$home/projects' '$home/projects.aside' 2>/dev/null && planted="\$planted move:$home/projects"
+mkdir -p '$proj/.git/modules/sub' && ( : >> '$proj/.git/modules/sub/config' ) 2>/dev/null &&
+  planted="\$planted submodule:$proj/.git/modules/sub/config"
+mkdir -p '$proj/sub' && ( printf 'gitdir: %s\\n' '$home/state' > '$proj/sub/.git' ) 2>/dev/null &&
+  planted="\$planted gitfile:$proj/sub/.git"
+( printf 'gitdir: %s\\n' '$home/state' > '$root/.git' ) 2>/dev/null && planted="\$planted gitfile:$root/.git"
+mv '$home/nest' '$home/nest.aside' 2>/dev/null && planted="\$planted move:$home/nest"
 mkdir -p '$home/projects/planted' && ( printf 'gitdir: %s\\n' '$home/state' > '$home/projects/planted/.git' ) 2>/dev/null &&
   planted="\$planted gitfile:$home/projects/planted/.git"
 echo "planted=\${planted:-none}" >> '$probe.window.tmp'

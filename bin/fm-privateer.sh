@@ -95,12 +95,14 @@
 # pool under ~/.treehouse, firstmate's per-task temp roots under /tmp/fm-*, and
 # the server's own socket, and never to this home's egress directory, config/,
 # or bin/, or to the Git config or hooks of this checkout, of any clone under
-# projects/, or of any worktree of those (its git dir under
-# .git/worktrees/<name>/, whose commondir is denied too), nor rename, replace,
-# or create the git dir entry of this checkout or of any projects/<p>, so
-# nothing inside can plant what later runs outside the sandbox; a new clone under projects/ is therefore made outside the
-# session. It may connect
-# only to the egress proxy, the DNS resolver, and that socket; and may signal
+# projects/, or of any linked worktree or submodule of those (git dirs under
+# .git/worktrees/<name>/ and .git/modules/<path>/, whose commondir is denied
+# too), nor write any .git entry inside a clone, the checkout's own .git, the
+# projects directory, any clone's directory, or any directory between this
+# home and the checkout's git dir, so nothing inside can plant what later runs
+# outside the sandbox, not even by moving a directory aside and back. Clones
+# under projects/ are therefore added, moved, and removed outside the session.
+# It may connect only to the egress proxy, the DNS resolver, and that socket; and may signal
 # only processes inside the same sandbox, so it can neither stop the proxy nor
 # rewrite its record. A client that ignores the proxy variables therefore
 # reaches nothing remote at all. macOS cannot apply a second sandbox inside
@@ -479,9 +481,25 @@ start_egress_proxy() {
   return 1
 }
 
+# deny_entries <path>: deny writes to <path> and to each directory entry above
+# it up to, but not including, this home, so none can be renamed or created;
+# a path outside the home needs nothing. Uses cmd_start's home_real and
+# sandbox_args.
+deny_entries() {
+  local p=$1
+  while :; do
+    case "$p" in
+      "$home_real"/*) ;;
+      *) return 0 ;;
+    esac
+    sandbox_args+=(--deny-write-regex "^$(regex_quote "$p")\$")
+    p=${p%/*}
+  done
+}
+
 cmd_start() {
   local line sailor model check provider config socket socket_path primary port
-  local name value launch home_real root_real egress_real root_git projects_real
+  local name value launch home_real root_real egress_real root_git projects_real git_meta
   local -a env_args session_env sandbox_args
   env_args=()
   session_env=()
@@ -548,10 +566,19 @@ cmd_start() {
   # and scripts, or any Git config or hook of this checkout, of a clone under
   # projects/, or of a worker's worktree.
   sandbox_args+=(--deny-write "$home_real/config" --deny-write "$home_real/bin")
+  # The directory entries leading to each git dir are denied too, so none can
+  # be moved aside, written, and moved back.
+  git_meta='($|/(worktrees/[^/]+/|modules/.+/)?(hooks(/|$)|config|commondir))'
   root_git=$(cd "$FM_ROOT" && cd "$(git rev-parse --git-common-dir 2>/dev/null)" 2>/dev/null && pwd -P) || root_git=
-  [ -z "$root_git" ] || sandbox_args+=(--deny-write-regex "^$(regex_quote "$root_git")(\$|/(worktrees/[^/]+/)?(hooks(/|\$)|config|commondir))")
+  if [ -n "$root_git" ]; then
+    sandbox_args+=(--deny-write-regex "^$(regex_quote "$root_git")$git_meta")
+    deny_entries "$root_git"
+  fi
+  deny_entries "$root_real/.git"
   if projects_real=$(cd "$PROJECTS" 2>/dev/null && pwd -P); then
-    sandbox_args+=(--deny-write-regex "^$(regex_quote "$projects_real")/[^/]+/\.git(\$|/(worktrees/[^/]+/)?(hooks(/|\$)|config|commondir))")
+    sandbox_args+=(--deny-write-regex "^$(regex_quote "$projects_real")/[^/]+\$"
+      --deny-write-regex "^$(regex_quote "$projects_real")/[^/]+/(.+/)?\.git$git_meta")
+    deny_entries "$projects_real"
   fi
   case "$root_real" in
     "$home_real" | "$home_real"/*) ;;
