@@ -942,7 +942,7 @@ The sandbox holds the session's whole tmux server, so every pane and every comma
 Everything inside can write only to the home, the checkout's `.opencode/` scratch, firstmate's per-task temp roots, and the server's own socket.
 Workers' copies live in the home's own Treehouse pool, `state/privateer/treehouse`, which the session names as `TREEHOUSE_ROOT`, so `treehouse` creates and hands out slots there and the shared pool under `~/.treehouse`, with every other home's slots, is out of reach.
 It can never write the home's egress directory, `config/`, or `bin/`, or the Git config or hooks of the checkout, of any clone under `projects/`, or of any linked worktree or submodule of those.
-It can neither rename, replace, or create any `.git` entry in the checkout or in a clone, nor redirect the git dir or `commondir` of a linked worktree that lives outside the home's pool.
+It can neither rename, replace, or create any `.git` entry in the checkout or in a clone, nor redirect or relabel the git dir, `commondir`, or `gitdir` of a linked worktree that lives outside the home's pool.
 It also cannot write the `projects/` directory entry, any clone's directory entry, or any directory between the home and the checkout's git dir, so nothing can be moved aside, changed, and moved back.
 It can connect only to the egress proxy, the DNS resolver, and that socket, so a client that ignores the proxy variables reaches nothing remote at all.
 It can signal only processes inside the same sandbox, so nothing in the session can stop the proxy, and the egress directory's port and process record are out of its reach.

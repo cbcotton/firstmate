@@ -101,7 +101,8 @@
 # directory, config/, or bin/; the Git config or hooks of this checkout, of
 # any clone under projects/, or of any linked worktree or submodule of those
 # (git dirs under .git/worktrees/<name>/ and .git/modules/<path>/); the git
-# dir or commondir of a linked worktree that lives outside this home's pool;
+# dir, commondir, or gitdir of a linked worktree that lives outside this
+# home's pool, so none can be redirected or relabeled as a pool worktree;
 # any .git entry inside a clone, or the checkout's own .git; or the projects
 # directory, any clone's directory, or any directory between this home and the
 # checkout's git dir, so nothing can be moved aside, changed, and moved back.
@@ -602,7 +603,7 @@ cmd_start() {
     wt_git=${wt_git%/}
     case "$(cat "$wt_git/gitdir" 2>/dev/null)" in
       "$pool_real"/*) ;;
-      *) sandbox_args+=(--deny-write-regex "^$(regex_quote "$wt_git")(\$|/commondir\$)") ;;
+      *) sandbox_args+=(--deny-write-regex "^$(regex_quote "$wt_git")(\$|/(commondir|gitdir)\$)") ;;
     esac
   done
   case "$root_real" in

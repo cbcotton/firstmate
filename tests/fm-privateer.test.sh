@@ -396,6 +396,7 @@ test_start_passes_only_the_allowlist() {
   root="$dir/root"
   fm_git_init_commit "$root"
   git -C "$root" remote add origin https://token@Forge.example.test:3000/captain/firstmate.git
+  git -C "$root" worktree add -q -b side "$dir/side"
   make_launcher_fakebin "$dir" >/dev/null
   make_stub_primary "$dir" >/dev/null
   out=$(run_launcher "$dir" "$home" "$root" start)
@@ -444,6 +445,7 @@ test_start_passes_only_the_allowlist() {
   (regex #\"^$(rq "$home_real")/projects/[^/]+\$\")
   (regex #\"^$(rq "$home_real")/projects/[^/]+/(.+/)?\\.git(\$|/(worktrees/[^/]+/|modules/.+/)?(hooks(/|\$)|config))\")
   (regex #\"^$(rq "$home_real")/projects\$\")
+  (regex #\"^$(rq "$root_real")/\\.git/worktrees/side(\$|/(commondir|gitdir)\$)\")
 )" "$(sed -n '/^(deny file-write\*$/,/^)$/p' "$profile")" \
     "the sandbox must take back only the egress record, the home's config and scripts, and every Git config and hook, so every worker's OpenCode directories stay writable"
   assert_grep '(deny signal)' "$profile" "the sandbox must deny signals outside itself"
@@ -689,7 +691,7 @@ mkdir -p "\$XDG_DATA_HOME/opencode" && : > "\$XDG_DATA_HOME/opencode/probe"
 echo "write=\$?" >> '$probe.window.tmp'
 planted=
 for t in '$proj/.git/hooks/post-checkout' '$proj/.git/config' '$wtgit/config.worktree' '$wtgit/hooks/post-checkout' \
-  '$wtgit/commondir' '$home/config/probe' '$home/bin/probe' '$shared/.git' '$shared/README' "\$HOME/.treehouse/probe"; do
+  '$wtgit/commondir' '$wtgit/gitdir' '$home/config/probe' '$home/bin/probe' '$shared/.git' '$shared/README' "\$HOME/.treehouse/probe"; do
   ( : >> "\$t" ) 2>/dev/null && planted="\$planted \$t"
 done
 mv '$proj/.git' '$proj/.git.aside' 2>/dev/null && planted="\$planted rename:$proj/.git"
