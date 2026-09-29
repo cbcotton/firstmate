@@ -24,7 +24,8 @@
 #   fm-inbox.sh note [--request-id <id>] [--source <token>] [--meta <key>=<value>]... [--json] -   (body from stdin)
 #   fm-inbox.sh announce [--json] <id>
 #   fm-inbox.sh reply [--json] <id> <text>... | reply [--json] <id> -
-#   fm-inbox.sh receipts [--after <cursor>] [--all-pending] [--all-handled] [--all-replies]
+#   fm-inbox.sh mate [--id <id>] --turn captain|operational [--json] -   (body from stdin)
+#   fm-inbox.sh receipts [--after <cursor>] [--all-pending] [--all-handled] [--all-replies] [--all-mate]
 #   fm-inbox.sh ready
 #   fm-inbox.sh say  [<file.wav>]       (default: audio on stdin)
 #   fm-inbox.sh status
@@ -63,13 +64,32 @@
 # tell it from a genuine failure (exit 1, nothing saved) and repair rather than
 # enqueue again.
 # `receipts` is the bounded JSON view of pending and handled notes, their
-# acknowledgement, announcement, and any recorded reply. Default bounds omit
+# acknowledgement, announcement, any recorded reply, and the mirrored messages
+# (mate[]: cursor, at, id, turn, body). Default bounds omit
 # rather than implying the first page is everything; omitted[] names the
 # surface and how to reveal it, the same convention as fm-bearings-snapshot.sh.
+# replies[] and mate[] share one cursor space: --after filters both, and when
+# either list is cut by its bound, neither list returns anything past the cut,
+# so reply_cursor (the newest cursor returned) never skips an unread entry.
 # `reply` is how the primary publishes its actual answer against a note id.
 # Each reply is stamped with a durable per-home sequence, so the receipts cursor
 # is a strict total order and two replies recorded in the same second are both
 # readable. One reply per note: a second one is refused.
+# `mate` records one mirrored final message of a first-mate turn while the
+# phone mirror is on. Its only writer is bin/fm-castoff.sh's turn-end hook, so
+# the body comes from stdin and never from the model or a process argument.
+# A record is $INBOX/.mate/<12-digit seq> holding seq=, at=, id= (the turn's
+# prompt or generation id, possibly empty), turn=captain|operational, `--`, and
+# the body verbatim, capped at MATE_CAP characters with head and tail kept
+# around a truncation note. Its seq comes from the reply sequence under the
+# same lock, so replies and mirrored messages form one strict order that one
+# receipts cursor covers. Outcomes: `created`; `replay` when a record with the
+# same non-empty id already holds the same capped body; `duplicate` when the
+# body equals, after whitespace normalisation, a reply recorded after the
+# newest mirrored message (the turn already answered a phone note with those
+# words). An empty body is refused. A mirrored message is the first mate
+# speaking, never the captain: it is never announced and appends no wake.
+# Past MATE_KEEP + 100 records, the oldest are pruned down to MATE_KEEP.
 # `ready` is the read-only primary-readiness projection (lock, wake-consumer
 # health, away posture, observation time). It never acquires the session lock
 # and never infers liveness from a lock file, a session, or a pane.
@@ -89,18 +109,18 @@
 # An absent profile means the call uses whatever credentials are already in the
 # environment, which is also what FM_INBOX_PROFILE= (empty) forces.
 #
-# `note`, `announce`, `reply`, `receipts`, `ready`, `status`, `list` and `drain`
-# need NO configuration at all, because they make no model call. The voice
+# `note`, `announce`, `reply`, `mate`, `receipts`, `ready`, `status`, `list` and
+# `drain` need NO configuration at all, because they make no model call. The voice
 # handover depends on `note`, so it keeps working in a home that has configured
-# nothing. `--json` / `receipts` / `ready` require python3, which a firstmate
-# home already uses for other tools.
+# nothing. `--json` / `mate` / `receipts` / `ready` require python3, which a
+# firstmate home already uses for other tools.
 #
 # Environment:
 #   FM_HOME              operational home whose state/ and data/ are used.
 #
 # PRIVACY: `say` sends your audio and `ask` sends your question to Bedrock.
-# `note`, `announce`, `reply`, `receipts`, `ready`, `status`, `list` and `drain`
-# make no network call at all.
+# `note`, `announce`, `reply`, `mate`, `receipts`, `ready`, `status`, `list` and
+# `drain` make no network call at all.
 #
 # `note` is also the queueing half of the spoken interface: when the voice agent
 # in bin/fm-voice-relay.py hands real work over to firstmate, it runs this
@@ -166,8 +186,8 @@ ASK_MODEL="${FM_INBOX_ASK_MODEL:-}"
 PROFILE="${FM_INBOX_PROFILE-$(read_setting inbox-profile)}"
 
 # Resolved only by the subcommands that make a model call, so note, announce,
-# reply, receipts, ready, status, list and drain keep working in a home that
-# has configured nothing.
+# reply, mate, receipts, ready, status, list and drain keep working in a home
+# that has configured nothing.
 need_region() {
   [ -n "$REGION" ] || REGION=$(require_setting inbox-region FM_INBOX_REGION "AWS region")
 }
@@ -204,12 +224,17 @@ aws_call() {
 REQUESTS="$INBOX/.requests"
 ANNOUNCED_DIR="$INBOX/.announced"
 REPLIES="$INBOX/.replies"
+MATE="$INBOX/.mate"
 
 REPLY_SEQ_LOCK="$INBOX/.replies.lock"
 
 RECEIPTS_PENDING_BOUND=20
 RECEIPTS_HANDLED_BOUND=20
 RECEIPTS_REPLIES_BOUND=20
+RECEIPTS_MATE_BOUND=20
+
+MATE_CAP=8000
+MATE_KEEP=500
 
 load_wake_lib() {
   local lib="$FM_ROOT/bin/fm-wake-lib.sh"
@@ -602,18 +627,23 @@ cmd_announce() {
   die "note $id is saved at $path but firstmate was NOT woken"
 }
 
-# Claim the next reply sequence. The caller holds REPLY_SEQ_LOCK across the
-# claim AND the record write, so a reply a reader can see implies every lower
-# sequence is already readable: the cursor stays a strict total order.
-# The claim is above both the counter and every recorded reply, and the counter
-# is replaced by rename, so a torn or lost counter can never move it backwards.
+# Claim the next reply sequence, shared by replies and mirrored messages. The
+# caller holds REPLY_SEQ_LOCK across the claim AND the record write, so a record
+# a reader can see implies every lower sequence is already readable: the cursor
+# stays a strict total order. The claim is above both the counter and every
+# recorded reply and mirrored message, and the counter is replaced by rename,
+# so a torn or lost counter can never move it backwards.
 next_reply_seq() {
-  local seq_file="$REPLIES/.seq" seq recorded tmp
+  local seq_file="$REPLIES/.seq" seq recorded tmp dir
+  local -a dirs=()
   seq=$(cat "$seq_file" 2>/dev/null || printf '0')
   case "$seq" in
     ''|*[!0-9]*) seq=0 ;;
   esac
-  recorded=$(find "$REPLIES" -maxdepth 1 -type f ! -name '.*' -exec awk '
+  for dir in "$REPLIES" "$MATE"; do
+    [ ! -d "$dir" ] || dirs+=("$dir")
+  done
+  recorded=$(find "${dirs[@]}" -maxdepth 1 -type f ! -name '.*' -exec awk '
     FNR == 1 { head = 1 }
     /^--$/ { head = 0 }
     head && /^seq=[0-9]+$/ { v = substr($0, 5) + 0; if (v > max) max = v }
@@ -695,28 +725,200 @@ PY
   fi
 }
 
+# Decide what one mirrored message becomes, under REPLY_SEQ_LOCK: print
+# `empty`, `replay <seq>`, `duplicate <reply id>`, or `new` after writing the
+# capped body to <capped-file> and pruning the oldest records past the bound.
+mate_decide() {  # <body-file> <capped-file> <id>
+  python3 - "$MATE" "$REPLIES" "$1" "$2" "$3" "$MATE_CAP" "$MATE_KEEP" <<'PY'
+import sys
+from pathlib import Path
+
+mate_dir, replies_dir, body_path, capped_path, mate_id = sys.argv[1:6]
+cap, keep = int(sys.argv[6]), int(sys.argv[7])
+
+def parse(path):
+    try:
+        text = Path(path).read_bytes().decode("utf-8", errors="replace")
+    except (FileNotFoundError, IsADirectoryError):
+        return None
+    headers, sep, body = text.partition("\n--\n")
+    if not sep:
+        return None
+    meta = dict(line.split("=", 1) for line in headers.splitlines() if "=" in line)
+    raw = meta.get("seq") or ""
+    if not (raw.isascii() and raw.isdigit()):
+        return None
+    return int(raw), meta, body[:-1] if body.endswith("\n") else body
+
+def note(n):
+    return "\n[mirror truncated: %d characters omitted]\n" % n
+
+# The host mirror's head-and-tail cap (bin/fm-host-mirror.sh): the note counts
+# within the cap, so a capped body is exactly `cap` characters long.
+def capped(text):
+    if len(text) <= cap:
+        return text
+    keep_chars = cap - len(note(len(text) - cap + len(note(len(text) - cap))))
+    head = (keep_chars + 1) // 2
+    tail = keep_chars // 2
+    return text[:head] + note(len(text) - keep_chars) + text[len(text) - tail:]
+
+def normal(text):
+    return " ".join(text.split())
+
+body = Path(body_path).read_bytes().decode("utf-8", errors="replace")
+if not body.strip():
+    print("empty")
+    sys.exit(0)
+text = capped(body)
+
+records = []
+for path in Path(mate_dir).iterdir():
+    if path.name.startswith(".") or not path.is_file():
+        continue
+    rec = parse(path)
+    if rec is None:
+        continue
+    records.append((rec[0], path, rec[1], rec[2]))
+records.sort(key=lambda r: r[0])
+for seq, _, meta, recorded in records:
+    if mate_id and meta.get("id") == mate_id and recorded == text:
+        print("replay %d" % seq)
+        sys.exit(0)
+
+newest_mate = records[-1][0] if records else 0
+folder = Path(replies_dir)
+for path in sorted(folder.iterdir()) if folder.is_dir() else []:
+    if path.name.startswith(".") or not path.is_file():
+        continue
+    rec = parse(path)
+    if rec is not None and rec[0] > newest_mate and normal(rec[2]) == normal(body):
+        print("duplicate %s" % (rec[1].get("id") or path.name))
+        sys.exit(0)
+
+Path(capped_path).write_text(text, encoding="utf-8")
+if len(records) + 1 > keep + 100:
+    for _, path, _, _ in records[:len(records) + 1 - keep]:
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            pass
+print("new")
+PY
+}
+
+cmd_mate() {
+  local json=0 id="" turn="" body capped decision seq name staging rc=0 outcome ref
+  local usage="usage: fm-inbox.sh mate [--id <id>] --turn captain|operational [--json] -   (body from stdin)"
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --json) json=1; shift ;;
+      --id)
+        [ "$#" -ge 2 ] || die "$usage"
+        id=$2
+        valid_request_id "$id" || die "invalid mate id (use 1-128 characters: A-Za-z0-9._:-)"
+        shift 2
+        ;;
+      --turn)
+        [ "$#" -ge 2 ] || die "$usage"
+        turn=$2
+        shift 2
+        ;;
+      *) break ;;
+    esac
+  done
+  { [ "$#" -eq 1 ] && [ "$1" = - ]; } || die "$usage"
+  case "$turn" in
+    captain|operational) ;;
+    *) die "$usage" ;;
+  esac
+  need_python
+  mkdir -p "$REPLIES" "$MATE"
+  body=$(mktemp "$MATE/.body-XXXXXX")
+  capped=$(mktemp "$MATE/.capped-XXXXXX")
+  # shellcheck disable=SC2064 # the paths are fixed now; expand them now.
+  trap "rm -f '$body' '$capped'" EXIT
+  cat >"$body"
+  load_wake_lib || die "the reply sequence needs $FM_ROOT/bin/fm-wake-lib.sh"
+  fm_lock_acquire_wait "$REPLY_SEQ_LOCK" || die "could not claim the reply sequence"
+  if ! decision=$(mate_decide "$body" "$capped" "$id"); then
+    fm_lock_release "$REPLY_SEQ_LOCK"
+    die "could not read the mirrored messages"
+  fi
+  case "$decision" in
+    empty)
+      fm_lock_release "$REPLY_SEQ_LOCK"
+      die "refusing to record an empty message"
+      ;;
+    new)
+      if ! seq=$(next_reply_seq); then
+        fm_lock_release "$REPLY_SEQ_LOCK"
+        die "could not claim the reply sequence"
+      fi
+      name=$(printf '%012d' "$seq")
+      staging=$(mktemp "$MATE/.staging-XXXXXX")
+      {
+        printf 'seq=%s\n' "$seq"
+        printf 'at=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        printf 'id=%s\n' "$id"
+        printf 'turn=%s\n' "$turn"
+        printf -- '--\n'
+        cat "$capped"
+        printf '\n'
+      } >"$staging" && mv "$staging" "$MATE/$name" || rc=$?
+      fm_lock_release "$REPLY_SEQ_LOCK"
+      if [ "$rc" -ne 0 ]; then
+        rm -f "$staging"
+        die "could not record the mirrored message"
+      fi
+      decision="created $seq"
+      ;;
+    *)
+      fm_lock_release "$REPLY_SEQ_LOCK"
+      ;;
+  esac
+  read -r outcome ref <<<"$decision"
+  if [ "$json" -eq 1 ]; then
+    python3 - "$outcome" "$ref" "$id" "$turn" "$MATE" <<'PY'
+import json, sys
+outcome, ref, mate_id, turn, mate_dir = sys.argv[1:6]
+record = {"schema": "fm-inbox-mate.v1", "outcome": outcome, "id": mate_id or None, "turn": turn}
+if outcome == "duplicate":
+    record["reply"] = ref
+else:
+    record["cursor"] = "%012d" % int(ref)
+    record["path"] = "%s/%012d" % (mate_dir, int(ref))
+json.dump(record, sys.stdout, separators=(",", ":"))
+sys.stdout.write("\n")
+PY
+  else
+    printf '%s %s\n' "$outcome" "$ref"
+  fi
+}
+
 cmd_receipts() {
-  local after="" all_pending=0 all_handled=0 all_replies=0
+  local after="" all_pending=0 all_handled=0 all_replies=0 all_mate=0
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --after)
-        [ "$#" -ge 2 ] || die "usage: fm-inbox.sh receipts [--after <cursor>] [--all-pending] [--all-handled] [--all-replies]"
+        [ "$#" -ge 2 ] || die "usage: fm-inbox.sh receipts [--after <cursor>] [--all-pending] [--all-handled] [--all-replies] [--all-mate]"
         after=$2
         shift 2
         ;;
       --all-pending) all_pending=1; shift ;;
       --all-handled) all_handled=1; shift ;;
       --all-replies) all_replies=1; shift ;;
-      -h|--help) die "usage: fm-inbox.sh receipts [--after <cursor>] [--all-pending] [--all-handled] [--all-replies]" ;;
+      --all-mate) all_mate=1; shift ;;
+      -h|--help) die "usage: fm-inbox.sh receipts [--after <cursor>] [--all-pending] [--all-handled] [--all-replies] [--all-mate]" ;;
       --*) die "unknown option for receipts: $1" ;;
-      *) die "usage: fm-inbox.sh receipts [--after <cursor>] [--all-pending] [--all-handled] [--all-replies]" ;;
+      *) die "usage: fm-inbox.sh receipts [--after <cursor>] [--all-pending] [--all-handled] [--all-replies] [--all-mate]" ;;
     esac
   done
   need_python
   python3 - "$INBOX" "$ANNOUNCED_DIR" "$REPLIES" "$FM_HOME" \
     "$RECEIPTS_PENDING_BOUND" "$RECEIPTS_HANDLED_BOUND" "$RECEIPTS_REPLIES_BOUND" \
     "$all_pending" "$all_handled" "$all_replies" "$after" \
-    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" <<'PY'
+    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$MATE" "$RECEIPTS_MATE_BOUND" "$all_mate" <<'PY'
 import json, os, sys
 from pathlib import Path
 
@@ -729,6 +931,9 @@ all_handled = sys.argv[9] == "1"
 all_replies = sys.argv[10] == "1"
 after = sys.argv[11]
 generated = sys.argv[12]
+mate_dir = sys.argv[13]
+mate_bound = int(sys.argv[14])
+all_mate = sys.argv[15] == "1"
 
 # A record that vanishes between listing and reading - drain --ack moving a
 # note to handled/ - is skipped, and undecodable bytes are replaced, so one bad
@@ -843,11 +1048,52 @@ for group in (pending_all, handled_all):
             replies_all.append(note["reply"])
 replies_all.sort(key=lambda r: r["cursor"])
 
+# Mirrored first-mate messages share the reply sequence, so the same cursor
+# orders them; one without a valid sequence or turn is malformed.
+malformed_mate = []
+mate_all = []
+if Path(mate_dir).is_dir():
+    for path in Path(mate_dir).iterdir():
+        if path.name.startswith(".") or not path.is_file():
+            continue
+        record = parse_record(path)
+        if record is None:
+            continue
+        meta, body = record
+        raw_seq = meta.get("seq") or ""
+        valid_turn = meta.get("turn") in ("captain", "operational")
+        if not (raw_seq.isascii() and raw_seq.isdigit() and valid_turn):
+            malformed_mate.append(path.name)
+            continue
+        mate_all.append({
+            "cursor": "%012d" % int(raw_seq),
+            "at": meta.get("at"),
+            "id": meta.get("id") or None,
+            "turn": meta["turn"],
+            "body": body,
+        })
+mate_all.sort(key=lambda r: r["cursor"])
+
 if after:
     replies_all = [r for r in replies_all if r["cursor"] > after]
+    mate_all = [r for r in mate_all if r["cursor"] > after]
 
 replies, replies_omitted = bound_list(replies_all, replies_bound, all_replies)
-reply_cursor = replies[-1]["cursor"] if replies else (after or "")
+mate, mate_omitted = bound_list(mate_all, mate_bound, all_mate)
+# A list cut by its bound is complete only through its last row, so nothing
+# past the lowest such cut is returned in either list: the next --after page
+# then starts where the unread entries do.
+cuts = [rows[-1]["cursor"] for rows, cut in ((replies, replies_omitted), (mate, mate_omitted))
+        if cut and rows]
+if cuts:
+    limit = min(cuts)
+    kept = [r for r in replies if r["cursor"] <= limit]
+    replies_omitted += len(replies) - len(kept)
+    replies = kept
+    kept = [r for r in mate if r["cursor"] <= limit]
+    mate_omitted += len(mate) - len(kept)
+    mate = kept
+reply_cursor = max([r["cursor"] for r in replies + mate], default=(after or ""))
 
 omitted = []
 if pending_omitted:
@@ -865,11 +1111,22 @@ if replies_omitted:
         "surface": "replies omitted by bound: %d" % replies_omitted,
         "reveal": "pass --all-replies",
     })
+if mate_omitted:
+    omitted.append({
+        "surface": "mirrored messages omitted by bound: %d" % mate_omitted,
+        "reveal": "pass --all-mate",
+    })
 if malformed_replies:
     omitted.append({
         "surface": "malformed replies without a valid sequence: %d (%s)"
             % (len(malformed_replies), ", ".join(sorted(malformed_replies))),
         "reveal": "inspect %s" % replies_dir,
+    })
+if malformed_mate:
+    omitted.append({
+        "surface": "malformed mirrored messages without a valid sequence or turn: %d (%s)"
+            % (len(malformed_mate), ", ".join(sorted(malformed_mate))),
+        "reveal": "inspect %s" % mate_dir,
     })
 
 home_label = "/".join(Path(home).parts[-2:]) if home else home
@@ -880,6 +1137,7 @@ json.dump({
     "pending": pending,
     "handled": handled,
     "replies": replies,
+    "mate": mate,
     "reply_cursor": reply_cursor,
     "omitted": omitted,
 }, sys.stdout, separators=(",", ":"))
@@ -1183,6 +1441,7 @@ case "${1:-}" in
   note)     shift; cmd_note "$@" ;;
   announce) shift; cmd_announce "$@" ;;
   reply)    shift; cmd_reply "$@" ;;
+  mate)     shift; cmd_mate "$@" ;;
   receipts) shift; cmd_receipts "$@" ;;
   ready)    shift; cmd_ready "$@" ;;
   say)      shift; cmd_say "$@" ;;
