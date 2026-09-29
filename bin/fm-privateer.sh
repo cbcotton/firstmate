@@ -42,7 +42,11 @@
 #     address, an IPv6 loopback or unique-local address, or a name ending in
 #     .local or .ts.net;
 #   - a non-empty config/privateer must read <sailor>/<model> with that model
-#     listed for that sailor.
+#     listed for that sailor;
+#   - the origin of this checkout and of every clone under projects/ (https,
+#     http, ssh, and scp forms) must not be on a host that is, or is under,
+#     anthropic.com, claude.ai, or claude.com; the egress proxy never allows
+#     such a host either.
 #
 # launch-env prints the isolation assignments, one NAME=value per line, for
 # bin/fm-spawn.sh to export into every Privateer worker launch, and refuses
@@ -87,21 +91,32 @@
 # The sandbox holds the tmux server itself, so every pane and every command
 # started in the session inherits it: the first mate, each worker and its pane
 # shell, and anything the first mate asks tmux to run. Everything inside may
-# write only to this home (never its egress directory), this checkout's
-# .opencode/ scratch, the worktree pool under ~/.treehouse, firstmate's
-# per-task temp roots under /tmp/fm-*, and the server's own socket; may connect
+# write only to this home, this checkout's .opencode/ scratch, the worktree
+# pool under ~/.treehouse, firstmate's per-task temp roots under /tmp/fm-*, and
+# the server's own socket, and never to this home's egress directory, config/,
+# or bin/, or to the Git config or hooks of this checkout, of any clone under
+# projects/, or of any worktree of those (its git dir under
+# .git/worktrees/<name>/), so nothing inside can plant what later runs outside
+# the sandbox; a new clone under projects/ is therefore made outside the
+# session. It may connect
 # only to the egress proxy, the DNS resolver, and that socket; and may signal
 # only processes inside the same sandbox, so it can neither stop the proxy nor
 # rewrite its record. A client that ignores the proxy variables therefore
 # reaches nothing remote at all. macOS cannot apply a second sandbox inside
 # the first, so a Privateer worker runs in this session sandbox rather than a
-# per-task sailor sandbox. As bin/fm-sandbox-exec.sh states, the sandbox is not
-# a boundary against same-user system services that start programs outside it.
+# per-task sailor sandbox. One session sandbox therefore covers the first mate
+# and every worker alike, so a worker can still write what the first mate's own
+# fm-spawn and fm-permission-grant write from inside it: the task records
+# state/<id>.meta and the grant ledger state/permission-grants.jsonl. As
+# bin/fm-sandbox-exec.sh states, the sandbox is not a boundary against
+# same-user system services that start programs outside it.
 #
 # attach attaches this terminal to the running session. stop refuses while any
 # task record (state/<id>.meta) exists, because a running worker's copy would
 # be orphaned, and otherwise stops this home's watcher and the whole server,
-# and then the egress proxy.
+# and then the egress proxy. When the session has already ended, stop still
+# stops the watcher and any egress proxy left behind and says so, and refuses
+# only when there was no proxy to stop.
 #
 # Environment: FM_HOME, FM_STATE_OVERRIDE, FM_CONFIG_OVERRIDE, and
 # FM_PROJECTS_OVERRIDE resolve the home exactly as the other bin/ scripts do. With FM_TEST_SEAM=1, FM_PRIVATEER_PRIMARY names a command to launch in
@@ -141,6 +156,10 @@ refuse() {
 
 active() {
   [ -e "$FLAG" ] || [ -L "$FLAG" ]
+}
+
+regex_quote() {
+  printf '%s' "$1" | sed 's/[][\.^$*+?(){}|]/\\&/g'
 }
 
 shell_quote() {
@@ -305,6 +324,7 @@ cmd_check() {
     env_file_violations
     allowlist_violations
     dispatch_violations
+    forge_violations
   )
   [ -n "$out" ] || return 0
   printf '%s\n' "$out"
@@ -347,42 +367,69 @@ session_running() {  # <socket-name>
   tmux -L "$1" has-session -t "$SESSION" 2>/dev/null
 }
 
-# egress_allowlist: the egress proxy's destinations, one `<host>:<port>` per
-# line: every sailor endpoint, and the forge origin of this checkout and of
-# every clone under projects/. A forge URL's userinfo (the part of its
-# authority before the last @) is its login, not its host.
-egress_allowlist() {
+# forge_origins: one `<host>:<port>\t<repo>` line per forge origin: the origin
+# of this checkout and of every clone under projects/. A forge URL's userinfo
+# (the part of its authority before the last @) is its login, not its host.
+forge_origins() {
   local repo url rest authority hostport
+  for repo in "$FM_ROOT" "$PROJECTS"/*/; do
+    [ -d "$repo" ] || continue
+    url=$(git -C "$repo" remote get-url origin 2>/dev/null) || continue
+    hostport=
+    case "$url" in
+      https://* | http://*)
+        rest=${url#*://}
+        authority=${rest%%[/?#]*}
+        hostport=$(url_hostport "${url%%://*}://${authority##*@}${rest#"$authority"}") || hostport=
+        ;;
+      ssh://*)
+        hostport=${url#ssh://}
+        hostport=${hostport%%/*}
+        hostport=${hostport##*@}
+        case "$hostport" in
+          *:*) ;;
+          ?*) hostport=$hostport:22 ;;
+        esac
+        ;;
+      /* | file://*) ;;
+      *@*:* | *:*/*)
+        hostport=${url%%:*}
+        hostport=${hostport##*@}
+        [ -z "$hostport" ] || hostport=$hostport:22
+        ;;
+    esac
+    [ -z "$hostport" ] || printf '%s\t%s\n' "$(printf '%s' "$hostport" | tr '[:upper:]' '[:lower:]')" "${repo%/}"
+  done
+}
+
+# anthropic_host <host:port>: whether the host is, or is under, anthropic.com,
+# claude.ai, or claude.com.
+anthropic_host() {
+  case "${1%:*}" in
+    anthropic.com | *.anthropic.com | claude.ai | *.claude.ai | claude.com | *.claude.com) return 0 ;;
+  esac
+  return 1
+}
+
+forge_violations() {
+  local dest repo
+  forge_origins | while IFS=$'\t' read -r dest repo; do
+    ! anthropic_host "$dest" || echo "the origin of $repo is on $dest, an Anthropic or Claude host"
+  done
+}
+
+# egress_allowlist: the egress proxy's destinations, one `<host>:<port>` per
+# line: every sailor endpoint, and every forge origin that is not an Anthropic
+# or Claude host.
+egress_allowlist() {
+  local url dest
   {
     jq -r '(.sailors // {}) | to_entries[] | .value.endpoint? // empty' "$DISPATCH" 2>/dev/null |
       while IFS= read -r url; do url_hostport "$url" || true; done
-    for repo in "$FM_ROOT" "$PROJECTS"/*/; do
-      [ -d "$repo" ] || continue
-      url=$(git -C "$repo" remote get-url origin 2>/dev/null) || continue
-      case "$url" in
-        https://* | http://*)
-          rest=${url#*://}
-          authority=${rest%%[/?#]*}
-          url_hostport "${url%%://*}://${authority##*@}${rest#"$authority"}" || true
-          ;;
-        ssh://*)
-          hostport=${url#ssh://}
-          hostport=${hostport%%/*}
-          hostport=${hostport##*@}
-          case "$hostport" in
-            *:*) printf '%s:%s\n' "${hostport%:*}" "${hostport##*:}" ;;
-            ?*) printf '%s:22\n' "$hostport" ;;
-          esac
-          ;;
-        /* | file://*) ;;
-        *@*:* | *:*/*)
-          hostport=${url%%:*}
-          hostport=${hostport##*@}
-          [ -z "$hostport" ] || printf '%s:22\n' "$hostport"
-          ;;
-      esac
-    done
-  } | tr '[:upper:]' '[:lower:]' | LC_ALL=C sort -u
+    forge_origins | cut -f1
+  } | tr '[:upper:]' '[:lower:]' | LC_ALL=C sort -u | while IFS= read -r dest; do
+    anthropic_host "$dest" || printf '%s\n' "$dest"
+  done
 }
 
 # stop_egress_proxy: stop the proxy this home last started, if it still runs.
@@ -431,7 +478,7 @@ start_egress_proxy() {
 
 cmd_start() {
   local line sailor model check provider config socket socket_path primary port
-  local name value launch home_real root_real egress_real
+  local name value launch home_real root_real egress_real root_git projects_real
   local -a env_args session_env sandbox_args
   env_args=()
   session_env=()
@@ -494,6 +541,15 @@ cmd_start() {
   sandbox_args=(run --write "$home_real" --deny-write "$egress_real" --write-prefix /tmp/fm- --write-prefix "$socket_path"
     --write /dev/ptmx --unix-socket "$socket_path" --connect "http://127.0.0.1:$port" --confine-signals)
   [ -z "${HOME:-}" ] || sandbox_args+=(--write "$HOME/.treehouse")
+  # Nothing inside may plant what runs outside the sandbox: this home's config
+  # and scripts, or any Git config or hook of this checkout, of a clone under
+  # projects/, or of a worker's worktree.
+  sandbox_args+=(--deny-write "$home_real/config" --deny-write "$home_real/bin")
+  root_git=$(cd "$FM_ROOT" && cd "$(git rev-parse --git-common-dir 2>/dev/null)" 2>/dev/null && pwd -P) || root_git=
+  [ -z "$root_git" ] || sandbox_args+=(--deny-write-regex "^$(regex_quote "$root_git")/(worktrees/[^/]+/)?(hooks(/|\$)|config)")
+  if projects_real=$(cd "$PROJECTS" 2>/dev/null && pwd -P); then
+    sandbox_args+=(--deny-write-regex "^$(regex_quote "$projects_real")/[^/]+/\.git/(worktrees/[^/]+/)?(hooks(/|\$)|config)")
+  fi
   case "$root_real" in
     "$home_real" | "$home_real"/*) ;;
     *) sandbox_args+=(--write "$root_real/.opencode") ;;
@@ -531,7 +587,13 @@ cmd_stop() {
   active || refuse "config/privateer is absent; this launcher stops only a Privateer home"
   command -v tmux >/dev/null 2>&1 || refuse "tmux is required"
   socket=$(socket_name)
-  session_running "$socket" || refuse "the Privateer session is not running"
+  if ! session_running "$socket"; then
+    FM_HOME="$FM_HOME" FM_STATE_OVERRIDE="$STATE" "$SCRIPT_DIR/fm-watch-arm.sh" --stop >/dev/null 2>&1 || true
+    [ -e "$EGRESS/pid" ] || refuse "the Privateer session is not running, and no egress proxy was left behind"
+    stop_egress_proxy
+    echo "privateer: the session on tmux socket $socket had already ended; stopped its watcher and its egress proxy"
+    return 0
+  fi
   for meta in "$STATE"/*.meta; do
     [ -f "$meta" ] || continue
     meta=${meta##*/}

@@ -915,6 +915,7 @@ With the flag present, bootstrap reports each violation as `PRIVATEER: <violatio
 - `config/sailor-sandbox` must exist, so a sailor under the `restricted` profile may launch; a Privateer worker then runs inside the session sandbox described below.
 - `.env` must set no Relay pairing token, no typed-resolution key, no `FM_INBOX_*` or `FM_VOICE_*` override, and no `ANTHROPIC_*`, `CLAUDE_*`, or `CLAUDECODE` line, and `config/launch-env-allowlist` must list none of the Anthropic or Claude names.
 - `config/crew-dispatch.json` must exist, declare no `sailor_fallback`, give every profile the `opencode` harness and a sailor, and give every sailor a private endpoint: localhost, a loopback, RFC 1918, or tailnet (100.64/10) address, an IPv6 loopback or unique-local address, or a name ending in `.local` or `.ts.net`.
+- The origin of the checkout and of every clone under `projects/`, in https, http, ssh, or scp form, must not be on a host that is, or is under, `anthropic.com`, `claude.ai`, or `claude.com`, and the egress proxy never allows such a host.
 - An endpoint's host is read from its authority, which ends at the first `/`, `?`, or `#`; an authority carrying userinfo or a backslash is refused, so no endpoint can hide a public host behind a private-looking suffix.
 
 A spawn in a Privateer home is also refused for a secondmate, a raw launch command, any harness but `opencode`, a missing `--sailor`, or a ship mode other than `local-only`.
@@ -934,13 +935,16 @@ Auto-update is off, session sharing is disabled, and the first mate's configurat
 Every connection leaves through the launcher's egress proxy, `bin/fm-privateer-proxy.py`, which `start` runs as its own process on a loopback port, outside the session and outside its sandbox.
 It allows exactly the endpoint of every sailor in the sailor map and the forge origin of the checkout and of every clone under `projects/`, each by host and port, refuses everything else, and logs every allowed and refused destination to `state/privateer/egress/log`.
 `start` refuses, and starts nothing, if the proxy cannot bind, and `stop` stops it after the tmux server.
+When the session has already ended, for example because the first mate's window closed, `stop` still stops the watcher and the proxy left behind and says so, so no proxy outlives its session.
 The first mate and every worker receive `HTTP_PROXY`, `HTTPS_PROXY`, and a `GIT_SSH_COMMAND` that tunnels Git over SSH through the proxy.
 
 The sandbox holds the session's whole tmux server, so every pane and every command started in the session inherits it: the first mate, each worker and its pane shell, and anything the first mate asks tmux to run.
-Everything inside can write only to the home (never its egress directory), the checkout's `.opencode/` scratch, the worktree pool, firstmate's per-task temp roots, and the server's own socket.
+Everything inside can write only to the home, the checkout's `.opencode/` scratch, the worktree pool, firstmate's per-task temp roots, and the server's own socket.
+It can never write the home's egress directory, `config/`, or `bin/`, or the Git config or hooks of the checkout, of any clone under `projects/`, or of any worktree of those, so nothing inside can plant what later runs outside the sandbox; clone a new project into `projects/` outside the session.
 It can connect only to the egress proxy, the DNS resolver, and that socket, so a client that ignores the proxy variables reaches nothing remote at all.
 It can signal only processes inside the same sandbox, so nothing in the session can stop the proxy, and the egress directory's port and process record are out of its reach.
 macOS cannot apply one sandbox inside another, so a Privateer worker runs in this session sandbox, with the session's write reach, instead of the per-task [sailor sandbox](#sailor-sandbox-configsailor-sandbox).
+One session sandbox covers the first mate and every worker alike, so a worker can still write the two records the first mate's own spawn and grant commands write from inside it: the task records `state/<id>.meta` and the grant ledger `state/permission-grants.jsonl`.
 A spawn is therefore refused unless it runs inside the home's Privateer session with its proxy running, so a worker can never land in an unsandboxed tmux server.
 The sandbox is not a boundary against same-user system services that start programs outside it, as `bin/fm-sandbox-exec.sh` states.
 Version 1 has honest limits: `sandbox-exec` is required, so Privateer runs on macOS only; `python3` is required for the proxy; a first mate whose checkout is not inside its home cannot update that checkout from inside its session; and Git over SSH needs a key file, because no agent socket enters the environment.
@@ -955,7 +959,8 @@ It then fails on a session whose model requests did not pass through the egress 
 ### Setting up a home
 
 Create the home with `config/privateer` naming the first mate's sailor and model, `config/crew-harness` holding `opencode`, `config/sailor-sandbox`, and a `config/crew-dispatch.json` naming only local sailors and no `sailor_fallback`; `config/opencode-permission-profile` set to `restricted` is the agreed posture for its sailors.
-Run the launcher from a checkout cloned inside the home, or point `FM_HOME` at the home from another checkout; a checkout inside the home is simpler, because its first mate may then update it and OpenCode's scratch stays inside the home.
+Run the launcher from a checkout cloned into its own directory inside the home, or point `FM_HOME` at the home from another checkout; a checkout inside the home is simpler, because its first mate may then update its files, though never its Git config or hooks, and OpenCode's scratch stays inside the home.
+A checkout that is the home itself cannot update its `bin/` from inside the session.
 A project the home shares with a Claude-orchestrated home takes its own ship-branch prefix in this home's `data/projects.md`.
 The flag is not inherited, because a Privateer home spawns no secondmate.
 

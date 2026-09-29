@@ -15,6 +15,8 @@
 #   --write <dir>            allow writes anywhere under <dir>
 #   --deny-write <path>      deny writes to <path> and everything under it, even
 #                            inside a --write directory or $TMPDIR
+#   --deny-write-regex <re>  deny writes to every path the Seatbelt regex <re>
+#                            matches, as --deny-write does
 #   --write-prefix <prefix>  allow writes to every path that starts with <prefix>,
 #                            even inside a --deny-write path
 #   --connect <endpoint>     allow outbound TCP to <endpoint>, a URL or host:port
@@ -26,7 +28,7 @@
 # writes are allowed back in three layers, in this order:
 #   1. the caller's temporary directory ($TMPDIR, physical path), /dev/null, the
 #      terminal, the process's own file descriptors, and every --write directory;
-#   2. every --deny-write path is denied again;
+#   2. every --deny-write path and --deny-write-regex match is denied again;
 #   3. every --write-prefix path is allowed again, so a caller can deny a whole
 #      directory and still expose the exact files it names.
 # Outbound connections are allowed back only to each --connect endpoint, the
@@ -118,6 +120,7 @@ endpoint_rule() {
 WRITES=()
 PREFIXES=()
 DENIES=()
+DENY_REGEXES=()
 CONNECTS=()
 SOCKETS=()
 CONFINE_SIGNALS=0
@@ -125,12 +128,18 @@ CONFINE_SIGNALS=0
 parse_options() {
   while [ "$#" -gt 0 ]; do
     case "$1" in
-      --write | --write-prefix | --deny-write | --connect | --unix-socket)
+      --write | --write-prefix | --deny-write | --deny-write-regex | --connect | --unix-socket)
         [ "$#" -ge 2 ] || die "$1 requires a value"
         case "$1" in
           --write) safe_path "$2" "$1"; WRITES+=("$(physical "$2")") ;;
           --write-prefix) safe_path "$2" "$1"; PREFIXES+=("$(physical "$2")") ;;
           --deny-write) safe_path "$2" "$1"; DENIES+=("$(physical "$2")") ;;
+          --deny-write-regex)
+            case "$2" in
+              '' | *\"* | *[[:cntrl:]]*) die "$1 must be a non-empty regex without quotes or control characters: '$2'" ;;
+            esac
+            DENY_REGEXES+=("$2")
+            ;;
           --connect) endpoint_rule "$2" >/dev/null; CONNECTS+=("$2") ;;
           --unix-socket) safe_path "$2" "$1"; SOCKETS+=("$(physical "$2")") ;;
         esac
@@ -159,9 +168,10 @@ render_profile() {
   printf '  (subpath "%s")\n' "$tmp"
   for p in "${WRITES[@]+"${WRITES[@]}"}"; do printf '  (subpath "%s")\n' "$p"; done
   printf '%s\n' '  (literal "/dev/null")' '  (regex #"^/dev/tty")' '  (regex #"^/dev/fd/"))'
-  if [ "${#DENIES[@]}" -gt 0 ]; then
+  if [ "${#DENIES[@]}" -gt 0 ] || [ "${#DENY_REGEXES[@]}" -gt 0 ]; then
     printf '%s\n' '(deny file-write*'
-    for p in "${DENIES[@]}"; do printf '  (subpath "%s")\n' "$p"; done
+    for p in "${DENIES[@]+"${DENIES[@]}"}"; do printf '  (subpath "%s")\n' "$p"; done
+    for p in "${DENY_REGEXES[@]+"${DENY_REGEXES[@]}"}"; do printf '  (regex #"%s")\n' "$p"; done
     printf '%s\n' ')'
   fi
   if [ "${#PREFIXES[@]}" -gt 0 ]; then

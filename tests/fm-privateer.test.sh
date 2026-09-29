@@ -37,6 +37,11 @@ make_home() {
   printf '%s\n' "$home"
 }
 
+# rq <text>: <text> as a Seatbelt regex literal.
+rq() {
+  printf '%s' "$1" | sed 's/[][\.^$*+?(){}|]/\\&/g'
+}
+
 # wait_for_file <path>: up to five seconds for <path> to exist.
 wait_for_file() {
   local _
@@ -215,6 +220,31 @@ test_check_names_every_violation() {
   assert_contains "$out" "sailor stoker has endpoint 'http://stoker.example.com:8000/v1', which is not on this machine or the local network" "the public endpoint violation is missing"
   assert_contains "$out" "config/privateer names tiller/other, but config/crew-dispatch.json lists no such sailor and model" "the first mate line violation is missing"
   pass "check names every forbidden file, key, Bedrock side channel, harness, profile, fallback, endpoint, and first mate line"
+}
+
+test_check_refuses_anthropic_forges() {
+  local home root out status
+  home=$(make_home forges)
+  root="$TMP_ROOT/forges/root"
+  fm_git_init_commit "$root"
+  git -C "$root" remote add origin https://token@API.Anthropic.com/captain/firstmate.git
+  fm_git_init_commit "$home/projects/ssh"
+  git -C "$home/projects/ssh" remote add origin ssh://git@claude.ai:2222/captain/ssh.git
+  fm_git_init_commit "$home/projects/scp"
+  git -C "$home/projects/scp" remote add origin git@code.claude.com:captain/scp.git
+  fm_git_init_commit "$home/projects/fine"
+  git -C "$home/projects/fine" remote add origin https://github.com/captain/fine.git
+  fm_git_init_commit "$home/projects/lookalike"
+  git -C "$home/projects/lookalike" remote add origin https://notanthropic.com/captain/lookalike.git
+  out=$(FM_HOME="$home" FM_ROOT_OVERRIDE="$root" "$PRIVATEER" check 2>&1)
+  status=$?
+  expect_code 1 "$status" "check must refuse an Anthropic or Claude forge origin"
+  assert_contains "$out" "the origin of $root is on api.anthropic.com:443, an Anthropic or Claude host" "the checkout's https origin must be refused"
+  assert_contains "$out" "the origin of $home/projects/ssh is on claude.ai:2222, an Anthropic or Claude host" "an ssh origin must be refused"
+  assert_contains "$out" "the origin of $home/projects/scp is on code.claude.com:22, an Anthropic or Claude host" "an scp origin must be refused"
+  assert_not_contains "$out" "github.com" "an ordinary forge is not a violation"
+  assert_not_contains "$out" "notanthropic.com" "a host that only ends in the same letters is not a violation"
+  pass "check refuses a checkout or clone whose origin is on an Anthropic or Claude host, in https, ssh, and scp form"
 }
 
 test_check_requires_the_dispatch_file() {
@@ -398,8 +428,12 @@ test_start_passes_only_the_allowlist() {
   assert_grep "(subpath \"$home_real\")" "$profile" "the sandbox must allow writes to the home"
   assert_equals "(deny file-write*
   (subpath \"$home_real/state/privateer/egress\")
+  (subpath \"$home_real/config\")
+  (subpath \"$home_real/bin\")
+  (regex #\"^$(rq "$root_real")/\\.git/(worktrees/[^/]+/)?(hooks(/|\$)|config)\")
+  (regex #\"^$(rq "$home_real")/projects/[^/]+/\\.git/(worktrees/[^/]+/)?(hooks(/|\$)|config)\")
 )" "$(sed -n '/^(deny file-write\*$/,/^)$/p' "$profile")" \
-    "the egress record must be the only write the sandbox takes back from the home, so every worker's OpenCode directories stay writable"
+    "the sandbox must take back only the egress record, the home's config and scripts, and every Git config and hook, so every worker's OpenCode directories stay writable"
   assert_grep '(deny signal)' "$profile" "the sandbox must deny signals outside itself"
   assert_grep '(allow signal (target same-sandbox))' "$profile" "the sandbox must allow signals within itself"
   assert_grep "(subpath \"$root_real/.opencode\")" "$profile" "the sandbox must allow OpenCode's scratch in the checkout"
@@ -536,6 +570,32 @@ test_stop_refuses_with_work_in_flight_and_stops_an_idle_session() {
   pass "stop refuses while task records exist and stops the idle session otherwise"
 }
 
+test_stop_cleans_up_after_a_session_that_ended() {
+  local dir home root out status port
+  dir="$TMP_ROOT/stop-ended"
+  home=$(make_home stop-ended)
+  root="$dir/root"
+  fm_git_init_commit "$root"
+  make_launcher_fakebin "$dir" >/dev/null
+  make_stub_primary "$dir" >/dev/null
+  out=$(run_launcher "$dir" "$home" "$root" start)
+  expect_code 0 "$?" "start must succeed: $out"
+  port=$(cat "$home/state/privateer/egress/port")
+  # The first mate's window closed and took the server with it.
+  xargs kill < "$dir/tmux-pids" 2>/dev/null
+  rm -f "$dir/tmux-running" "$dir/tmux-pids"
+  out=$(run_launcher "$dir" "$home" "$root" stop)
+  status=$?
+  expect_code 0 "$status" "stop must clean up after an ended session: $out"
+  assert_contains "$out" "had already ended; stopped its watcher and its egress proxy" "stop must say what it stopped"
+  [ ! -e "$home/state/privateer/egress/pid" ] && [ ! -e "$home/state/privateer/egress/port" ] || fail "stop must retire the proxy's record"
+  ! proxy_request "$port" 'CONNECT 127.0.0.1:11234 HTTP/1.1' | grep -q HTTP || fail "no egress proxy may outlive its session"
+  out=$(run_launcher "$dir" "$home" "$root" stop)
+  expect_code 1 "$?" "a second stop has nothing left to stop"
+  assert_contains "$out" "the Privateer session is not running, and no egress proxy was left behind" "the refusal must say nothing was left"
+  pass "stop still stops the watcher and the egress proxy when the session has already ended"
+}
+
 test_attach_refuses_without_a_session() {
   local dir home root out status
   dir="$TMP_ROOT/attach"
@@ -565,7 +625,7 @@ serve_dir() {
 }
 
 test_session_sandbox_holds_every_command() {
-  local dir home root out status spid opid sport oport port pid socket probe alive
+  local dir home root out status spid opid sport oport port pid socket probe alive wtbase wtgit proj
   if ! "$ROOT/bin/fm-sandbox-exec.sh" available || ! command -v tmux >/dev/null 2>&1; then
     pass "session sandbox checks not run: sandbox-exec or tmux is not available on this machine"
     return 0
@@ -583,9 +643,18 @@ test_session_sandbox_holds_every_command() {
   jq -n --arg e "http://127.0.0.1:$sport/v1" '{sailors: {tiller: {title: "Tiller", endpoint: $e, status: "live", models: ["coder"]}}, default: {harness: "opencode", sailor: "tiller", model: "coder"}}' \
     > "$home/config/crew-dispatch.json"
   probe="$home/state/probe"
+  # A clone under projects/ with a worker's worktree in firstmate's per-task
+  # temp roots, and the home's own scripts directory.
+  proj="$home/projects/proj"
+  fm_git_init_commit "$proj"
+  wtbase=$(mktemp -d /tmp/fm-privateer-test.XXXXXX)
+  git -C "$proj" worktree add -q -b pv-probe "$wtbase/wt"
+  wtgit=$(git -C "$wtbase/wt" rev-parse --path-format=absolute --git-dir)
+  mkdir -p "$home/bin"
   # A command the first mate starts through tmux, as a worker's pane is: it
-  # tries the other server directly and through the proxy, and writes where a
-  # worker's OpenCode keeps its data.
+  # tries the other server directly and through the proxy, writes where a
+  # worker's OpenCode keeps its data, tries to plant Git config, hooks, home
+  # config, and scripts, and writes its status and commits in its own copy.
   cat > "$dir/window" <<SH
 #!/bin/sh
 /usr/bin/curl --noproxy '*' -sS -m 3 -o /dev/null http://127.0.0.1:$oport/ 2>/dev/null
@@ -593,6 +662,17 @@ echo "direct=\$?" > '$probe.window.tmp'
 echo "proxied=\$(/usr/bin/curl -sS -m 3 -o /dev/null -w '%{http_code}' http://127.0.0.1:$oport/ 2>/dev/null)" >> '$probe.window.tmp'
 mkdir -p "\$XDG_DATA_HOME/opencode" && : > "\$XDG_DATA_HOME/opencode/probe"
 echo "write=\$?" >> '$probe.window.tmp'
+planted=
+for t in '$proj/.git/hooks/post-checkout' '$proj/.git/config' '$wtgit/config.worktree' '$wtgit/hooks/post-checkout' \
+  '$home/config/probe' '$home/bin/probe'; do
+  ( : >> "\$t" ) 2>/dev/null && planted="\$planted \$t"
+done
+echo "planted=\${planted:-none}" >> '$probe.window.tmp'
+git -C '$proj' config core.hooksPath /tmp/elsewhere 2>/dev/null && echo "gitconfig=written" >> '$probe.window.tmp' || echo "gitconfig=refused" >> '$probe.window.tmp'
+: > "\$FM_HOME/state/pv-probe.status"
+echo "status=\$?" >> '$probe.window.tmp'
+git -C '$wtbase/wt' -c user.name=probe -c user.email=probe@example.test commit -q --allow-empty -m probe >/dev/null 2>&1
+echo "commit=\$?" >> '$probe.window.tmp'
 mv '$probe.window.tmp' '$probe.window'
 SH
   # The first mate: it starts that window, then tries to stop the proxy and to
@@ -617,11 +697,17 @@ SH
   alive=$(proxy_request "$port" "GET http://127.0.0.1:$sport/v1/models HTTP/1.1")
   FM_HOME="$home" FM_ROOT_OVERRIDE="$root" "$PRIVATEER" stop >/dev/null 2>&1 || { [ -z "$socket" ] || tmux -L "$socket" kill-server 2>/dev/null; }
   kill "$spid" "$opid" 2>/dev/null
+  git -C "$proj" worktree remove --force "$wtbase/wt" 2>/dev/null
+  rm -rf "$wtbase"
   expect_code 0 "$status" "the real session must start: $out"
   assert_equals "direct=7
 proxied=403
-write=0" "$(cat "$probe.window" 2>/dev/null)" \
-    "a command started through tmux must reach nothing directly, be refused by the proxy for an unlisted host, and write the worker's OpenCode data"
+write=0
+planted=none
+gitconfig=refused
+status=0
+commit=0" "$(cat "$probe.window" 2>/dev/null)" \
+    "a command started through tmux must reach nothing directly, be refused by the proxy for an unlisted host, write the worker's OpenCode data, plant no Git config, hook, home config, or script, and still write its status and commit in its own copy"
   case "$(cat "$probe.primary" 2>/dev/null)" in
     "kill=0"* | *"rewrite=0") fail "the first mate stopped or rewrote the egress proxy: $(cat "$probe.primary" 2>/dev/null)" ;;
     "kill="*) ;;
@@ -633,7 +719,7 @@ allowed GET 127.0.0.1:$sport" "$(jq -r '"\(.verdict) \(.method) \(.dest)"' "$hom
     "the proxy must log the refused host and the sailor request"
   [ -n "$pid" ] && ! kill -0 "$pid" 2>/dev/null || fail "stop must stop the egress proxy"
   [ "$port" != 1 ] || fail "the first mate rewrote the proxy's port"
-  pass "in the real sandboxed session, a command started through tmux reaches nothing but the proxy, and the first mate cannot stop or rewrite it"
+  pass "in the real sandboxed session, a command started through tmux reaches nothing but the proxy and plants nothing that runs outside, a worker still commits in its own copy, and the first mate cannot stop or rewrite the proxy"
 }
 
 # --- spawn ------------------------------------------------------------------
@@ -798,6 +884,7 @@ test_check_is_silent_without_the_flag
 test_check_passes_a_clean_home
 test_check_names_every_violation
 test_check_requires_the_dispatch_file
+test_check_refuses_anthropic_forges
 test_endpoint_rule
 test_launch_env_lives_inside_the_home
 test_start_refuses_without_the_flag
@@ -809,6 +896,7 @@ test_proxy_forwards_only_allowed_destinations
 test_session_sandbox_holds_every_command
 test_start_refuses_while_running
 test_stop_refuses_with_work_in_flight_and_stops_an_idle_session
+test_stop_cleans_up_after_a_session_that_ended
 test_attach_refuses_without_a_session
 test_spawn_refuses_a_claude_harness
 test_spawn_refuses_pipeline_and_pr_delivery
