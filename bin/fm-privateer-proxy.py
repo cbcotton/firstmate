@@ -95,18 +95,26 @@ def connect(dest):
 
 
 def relay(a, b):
+    """Copy bytes both ways until both sides have closed; one side's end of
+    stream is passed on as a half-close, so a reply still arrives."""
     a.settimeout(None)
     b.settimeout(None)
-    socks = [a, b]
-    while True:
-        ready, _, _ = select.select(socks, [], [], 600)
-        if not ready:
-            return
-        for s in ready:
-            data = s.recv(65536)
-            if not data:
+    peer = {a: b, b: a}
+    live = [a, b]
+    try:
+        while live:
+            ready, _, _ = select.select(live, [], [], 600)
+            if not ready:
                 return
-            (b if s is a else a).sendall(data)
+            for s in ready:
+                data = s.recv(65536)
+                if data:
+                    peer[s].sendall(data)
+                else:
+                    live.remove(s)
+                    peer[s].shutdown(socket.SHUT_WR)
+    except OSError:
+        return
 
 
 class Handler(socketserver.BaseRequestHandler):

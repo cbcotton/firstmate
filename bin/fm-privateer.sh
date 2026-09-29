@@ -45,54 +45,63 @@
 #     listed for that sailor.
 #
 # launch-env prints the isolation assignments, one NAME=value per line, for
-# the first mate and for bin/fm-spawn.sh to export into every Privateer worker
-# launch: XDG_CONFIG_HOME, XDG_DATA_HOME, XDG_STATE_HOME, and XDG_CACHE_HOME
-# under state/privateer/opencode/, so the captain's own OpenCode config, logins,
-# sessions, and cache are invisible; OPENCODE_DISABLE_AUTOUPDATE=1;
-# HTTP_PROXY, HTTPS_PROXY, http_proxy, and https_proxy naming the running
-# egress proxy; and GIT_SSH_COMMAND, which tunnels Git over SSH through it. It
-# refuses (exit 1) while no egress proxy runs for this home.
+# bin/fm-spawn.sh to export into every Privateer worker launch, and refuses
+# (exit 1) unless it runs inside this home's Privateer session (its TMUX names
+# the session's socket) and the session's egress proxy runs: XDG_CONFIG_HOME,
+# XDG_DATA_HOME, XDG_STATE_HOME, and XDG_CACHE_HOME under
+# state/privateer/opencode/, so the captain's own OpenCode config, logins,
+# sessions, and cache are invisible; OPENCODE_DISABLE_AUTOUPDATE=1; HTTP_PROXY,
+# HTTPS_PROXY, http_proxy, and https_proxy naming the egress proxy; and
+# GIT_SSH_COMMAND, which tunnels Git over SSH through it. The first mate
+# receives the same assignments from start.
 #
 # The egress proxy (bin/fm-privateer-proxy.py) is the session's only way out.
-# It listens on a loopback port, writes that port to
-# state/privateer/egress/port, logs every allowed and refused destination to
-# state/privateer/egress/log, and allows exactly: every sailor endpoint in
-# config/crew-dispatch.json, and the origin of this checkout and of every clone
-# under projects/ (the forge: the URL's host and port, 443 for https, 80 for
-# http, 22 for ssh). The first mate and every Privateer worker run inside
-# bin/fm-sandbox-exec.sh with that loopback port as their only allowed
-# connection besides the DNS resolver and local sockets, so nothing else remote
-# is reachable, whether or not a client honours the proxy variables.
+# start runs it as its own process, outside the session and its sandbox; it
+# listens on a loopback port, writes that port to state/privateer/egress/port
+# and its process id to state/privateer/egress/pid, logs every allowed and
+# refused destination to state/privateer/egress/log, and allows exactly: every
+# sailor endpoint in config/crew-dispatch.json, and the origin of this checkout
+# and of every clone under projects/ (the forge: the URL's host and port, 443
+# for https, 80 for http, 22 for ssh).
 #
 # start refuses without config/privateer, on any check violation, without a
 # first-mate line in config/privateer, and while the session already runs. It
-# probes the first mate's sailor with bin/fm-sailor.sh check, then starts a
-# dedicated tmux server (socket fm-privateer-<home hash>) whose session
-# `privateer` runs the egress proxy in window `egress`, refusing and stopping
-# the server if the proxy cannot bind, and the OpenCode primary in window
-# `firstmate`, in this checkout with FM_HOME set to this home. The server, and
-# again the primary itself, start from an empty environment plus exactly: HOME
-# PATH USER LOGNAME SHELL TERM COLORTERM LANG LC_ALL LC_CTYPE TMPDIR TMP TEMP
-# TMUX_TMPDIR as the launcher saw them, and FM_HOME; the primary adds the
-# launch-env assignments above and OPENCODE_CONFIG_CONTENT, which pins the
-# model to the first mate's sailor as the only provider, allows every tool as a
-# secondmate primary is allowed, turns auto-update off, and disables sharing.
-# The primary also keeps the TMUX and TMUX_PANE names its own server sets. No
-# ANTHROPIC_*, CLAUDE_*, or CLAUDECODE variable can reach the tree, because
-# nothing outside that list does; the server copies no variable from a later
-# attaching client either. A worker pane's login shell may still read the
-# captain's shell profile, so bin/fm-spawn.sh clears the environment again at
-# each worker's command boundary.
-# The primary's sandbox lets it write only to this home (never its egress
-# directory), this checkout's .opencode/ scratch, the worktree pool under
-# ~/.treehouse, and firstmate's per-task temp roots under /tmp/fm-*, and
-# connect only to the egress proxy, the DNS resolver, and its own tmux server
-# socket.
+# probes the first mate's sailor with bin/fm-sailor.sh check, starts the egress
+# proxy, refusing and starting nothing else if the proxy cannot bind, then
+# starts a dedicated tmux server (socket fm-privateer-<home hash>) inside
+# bin/fm-sandbox-exec.sh, whose session `privateer` runs the OpenCode primary
+# in window `firstmate`, in this checkout with FM_HOME set to this home. The
+# server, and again the primary itself, start from an empty environment plus
+# exactly: HOME PATH USER LOGNAME SHELL TERM COLORTERM LANG LC_ALL LC_CTYPE
+# TMPDIR TMP TEMP TMUX_TMPDIR as the launcher saw them, FM_HOME, and the
+# launch-env assignments above; the primary adds OPENCODE_CONFIG_CONTENT, which
+# pins the model to the first mate's sailor as the only provider, allows every
+# tool as a secondmate primary is allowed, turns auto-update off, and disables
+# sharing. The primary also keeps the TMUX and TMUX_PANE names its own server
+# sets. No ANTHROPIC_*, CLAUDE_*, or CLAUDECODE variable can reach the tree,
+# because nothing outside that list does; the server copies no variable from a
+# later attaching client either. A worker pane's login shell may still read
+# the captain's shell profile, so bin/fm-spawn.sh clears the environment again
+# at each worker's command boundary.
+#
+# The sandbox holds the tmux server itself, so every pane and every command
+# started in the session inherits it: the first mate, each worker and its pane
+# shell, and anything the first mate asks tmux to run. Everything inside may
+# write only to this home (never its egress directory), this checkout's
+# .opencode/ scratch, the worktree pool under ~/.treehouse, firstmate's
+# per-task temp roots under /tmp/fm-*, and the server's own socket; may connect
+# only to the egress proxy, the DNS resolver, and that socket; and may signal
+# only processes inside the same sandbox, so it can neither stop the proxy nor
+# rewrite its record. A client that ignores the proxy variables therefore
+# reaches nothing remote at all. macOS cannot apply a second sandbox inside
+# the first, so a Privateer worker runs in this session sandbox rather than a
+# per-task sailor sandbox. As bin/fm-sandbox-exec.sh states, the sandbox is not
+# a boundary against same-user system services that start programs outside it.
 #
 # attach attaches this terminal to the running session. stop refuses while any
 # task record (state/<id>.meta) exists, because a running worker's copy would
 # be orphaned, and otherwise stops this home's watcher and the whole server,
-# the egress proxy with it.
+# and then the egress proxy.
 #
 # Environment: FM_HOME, FM_STATE_OVERRIDE, FM_CONFIG_OVERRIDE, and
 # FM_PROJECTS_OVERRIDE resolve the home exactly as the other bin/ scripts do. With FM_TEST_SEAM=1, FM_PRIVATEER_PRIMARY names a command to launch in
@@ -376,40 +385,56 @@ egress_allowlist() {
   } | tr '[:upper:]' '[:lower:]' | LC_ALL=C sort -u
 }
 
-# start_egress_proxy <socket>: the proxy in window `egress` of a new session,
-# started with cmd_start's env_args in its home_real;
-# prints its port once it has bound, or fails.
+# stop_egress_proxy: stop the proxy this home last started, if it still runs.
+stop_egress_proxy() {
+  local pid
+  pid=$(cat "$EGRESS/pid" 2>/dev/null) || pid=
+  case "$pid" in
+    '' | *[!0-9]*) ;;
+    *)
+      case "$(ps -p "$pid" -o command= 2>/dev/null)" in
+        *fm-privateer-proxy.py*) kill "$pid" 2>/dev/null || true ;;
+      esac
+      ;;
+  esac
+  rm -f "$EGRESS/port" "$EGRESS/pid"
+}
+
+# start_egress_proxy: the proxy as its own process, outside the session and its
+# sandbox, started with cmd_start's env_args; prints its port once it has
+# bound, or fails.
 start_egress_proxy() {
-  local socket=$1 proxy_cmd dest port
+  local dest port pid
   local -a allow
   allow=()
   while IFS= read -r dest; do
     [ -z "$dest" ] || allow+=("$dest")
   done < <(egress_allowlist)
   mkdir -p "$EGRESS" || die "cannot create $EGRESS"
-  rm -f "$EGRESS/port"
-  proxy_cmd="exec python3 $(shell_quote "$SCRIPT_DIR/fm-privateer-proxy.py") $(shell_quote "$EGRESS/port") $(shell_quote "$EGRESS/log")"
-  for dest in "${allow[@]+"${allow[@]}"}"; do proxy_cmd="$proxy_cmd $(shell_quote "$dest")"; done
-  /usr/bin/env -i "${env_args[@]}" tmux -L "$socket" new-session -d -s "$SESSION" -n egress -c "$home_real" -- "$proxy_cmd" ||
-    return 1
+  stop_egress_proxy
+  /usr/bin/env -i "${env_args[@]}" nohup python3 "$SCRIPT_DIR/fm-privateer-proxy.py" "$EGRESS/port" "$EGRESS/log" \
+    "${allow[@]+"${allow[@]}"}" </dev/null >>"$EGRESS/proxy.err" 2>&1 &
+  pid=$!
+  printf '%s\n' "$pid" > "$EGRESS/pid"
   for _ in $(seq 100); do
     port=$(cat "$EGRESS/port" 2>/dev/null) || port=
     case "$port" in
       '' | *[!0-9]*) ;;
       *) printf '%s\n' "$port"; return 0 ;;
     esac
-    session_running "$socket" || break
+    kill -0 "$pid" 2>/dev/null || break
     sleep 0.1
   done
-  tmux -L "$socket" kill-server 2>/dev/null || true
+  stop_egress_proxy
   return 1
 }
 
 cmd_start() {
   local line sailor model check provider config socket socket_path primary port
-  local name value launch sandbox home_real root_real egress_real
-  local -a env_args sandbox_args
+  local name value launch home_real root_real egress_real
+  local -a env_args session_env sandbox_args
   env_args=()
+  session_env=()
   sandbox_args=()
   [ "$#" -eq 0 ] || usage
   active || refuse "config/privateer is absent; this launcher starts only a Privateer home"
@@ -450,37 +475,40 @@ cmd_start() {
   done
   home_real=$(cd "$FM_HOME" && pwd -P) || die "cannot resolve $FM_HOME"
   env_args+=("FM_HOME=$home_real")
-  port=$(start_egress_proxy "$socket") ||
+  port=$(start_egress_proxy) ||
     refuse "the Privateer egress proxy could not bind a loopback port; nothing was started"
   egress_real=$(cd "$EGRESS" && pwd -P) || die "cannot resolve $EGRESS"
+  session_env=("${env_args[@]}")
   while IFS= read -r line; do
-    [ -z "$line" ] || env_args+=("$line")
+    [ -z "$line" ] || session_env+=("$line")
   done < <(cmd_launch_env)
-  env_args+=("OPENCODE_CONFIG_CONTENT=$config")
-  # The sandbox: writes to this home but never its egress record, this
-  # checkout's OpenCode scratch, the worktree pool, and the per-task temp
-  # roots; connections to the egress proxy and this server's socket only.
+  # The sandbox holds the whole tmux server, so every pane, the first mate, its
+  # workers, and every command any of them starts inherit it: writes to this
+  # home but never its egress record, this checkout's OpenCode scratch, the
+  # worktree pool, the per-task temp roots, and the server's own socket;
+  # connections to the egress proxy and that socket only; and signals only
+  # within the sandbox, so nothing inside can stop the proxy.
   root_real=$(cd "$FM_ROOT" && pwd -P) || die "cannot resolve $FM_ROOT"
   socket_path=$(tmux_socket_path "$socket")
-  sandbox_args=(run --write "$home_real" --deny-write "$egress_real" --write-prefix /tmp/fm- --unix-socket "$socket_path"
-    --connect "http://127.0.0.1:$port")
+  [ -d "${socket_path%/*}" ] || mkdir -m 700 "${socket_path%/*}" 2>/dev/null || true
+  sandbox_args=(run --write "$home_real" --deny-write "$egress_real" --write-prefix /tmp/fm- --write-prefix "$socket_path"
+    --write /dev/ptmx --unix-socket "$socket_path" --connect "http://127.0.0.1:$port" --confine-signals)
   [ -z "${HOME:-}" ] || sandbox_args+=(--write "$HOME/.treehouse")
   case "$root_real" in
     "$home_real" | "$home_real"/*) ;;
     *) sandbox_args+=(--write "$root_real/.opencode") ;;
   esac
-  sandbox=$(shell_quote "$SCRIPT_DIR/fm-sandbox-exec.sh")
-  for value in "${sandbox_args[@]}"; do sandbox="$sandbox $(shell_quote "$value")"; done
   # The primary's own boundary: the pane shell tmux starts may have read the
   # captain's profile, so the environment is cleared again here, keeping only
   # the TMUX names the server itself set for this pane.
   # shellcheck disable=SC2016
   launch='/usr/bin/env -i ${TMUX+"TMUX=$TMUX"} ${TMUX_PANE+"TMUX_PANE=$TMUX_PANE"}'
-  for value in "${env_args[@]}"; do launch="$launch $(shell_quote "$value")"; done
-  launch="$launch $sandbox -- $(shell_quote "$primary")"
-  if ! tmux -L "$socket" new-window -t "$SESSION" -n firstmate -c "$root_real" -- "$launch"; then
-    tmux -L "$socket" kill-server 2>/dev/null || true
-    refuse "tmux could not start the Privateer first mate"
+  for value in "${session_env[@]}" "OPENCODE_CONFIG_CONTENT=$config"; do launch="$launch $(shell_quote "$value")"; done
+  launch="$launch $(shell_quote "$primary")"
+  if ! /usr/bin/env -i "${session_env[@]}" "$SCRIPT_DIR/fm-sandbox-exec.sh" "${sandbox_args[@]}" -- \
+    tmux -L "$socket" new-session -d -s "$SESSION" -n firstmate -c "$root_real" -- "$launch"; then
+    stop_egress_proxy
+    refuse "tmux could not start the Privateer session"
   fi
   # Never copy a variable from a client that attaches later.
   tmux -L "$socket" set-option -g update-environment '' >/dev/null 2>&1 || true
@@ -514,7 +542,7 @@ cmd_stop() {
   fi
   FM_HOME="$FM_HOME" FM_STATE_OVERRIDE="$STATE" "$SCRIPT_DIR/fm-watch-arm.sh" --stop >/dev/null 2>&1 || true
   tmux -L "$socket" kill-server 2>/dev/null || refuse "the Privateer tmux server could not be stopped"
-  rm -f "$EGRESS/port"
+  stop_egress_proxy
   echo "privateer: stopped session $SESSION on tmux socket $socket"
 }
 
@@ -528,6 +556,11 @@ case "$cmd" in
     ;;
   launch-env)
     [ "$#" -eq 0 ] || usage
+    socket=$(socket_name)
+    tmux_socket=${TMUX:-}
+    tmux_socket=${tmux_socket%%,*}
+    [ "${tmux_socket##*/}" = "$socket" ] ||
+      refuse "launch-env runs only inside the Privateer session (tmux socket $socket), whose sandbox every worker inherits"
     cmd_launch_env
     ;;
   start) cmd_start "$@" ;;

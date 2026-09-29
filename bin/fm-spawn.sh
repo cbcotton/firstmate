@@ -334,10 +334,11 @@
 #   isolation assignments `fm-privateer.sh launch-env` prints, so a worker's
 #   OpenCode reads no config, login, session, or cache of the captain's own and
 #   sends its traffic to the session's egress proxy; its OPENCODE_CONFIG_CONTENT
-#   also turns auto-update off and disables sharing. The sailor sandbox is
-#   required by the check, so every Privateer worker runs inside it, and there
-#   its one allowed connection is that proxy rather than the sailor's endpoint;
-#   a spawn is refused while no proxy runs. With the flag absent nothing here
+#   also turns auto-update off and disables sharing. A spawn is refused unless
+#   it runs inside the Privateer session with its proxy running, because the
+#   worker then runs inside that session's sandbox (bin/fm-privateer.sh owns
+#   it), in place of the sailor sandbox, which macOS cannot nest inside it; the
+#   record still gets sandbox=seatbelt. With the flag absent nothing here
 #   changes.
 # Claude permission mode (config/claude-permission-mode):
 #   One token selecting the permission flag every claude launch (ship, scout,
@@ -2462,7 +2463,7 @@ if [ -n "$SAILOR" ] && [ "$OC_PROFILE" = restricted ] && [ ! -e "$CONFIG/sailor-
   echo "error: sailor $SAILOR runs under the restricted OpenCode profile, which requires config/sailor-sandbox; create it to launch restricted sailors inside the sandbox" >&2
   exit 1
 fi
-if [ -n "$SAILOR" ] && [ -e "$CONFIG/sailor-sandbox" ]; then
+if [ -n "$SAILOR" ] && [ -e "$CONFIG/sailor-sandbox" ] && [ ! -e "$CONFIG/privateer" ] && [ ! -L "$CONFIG/privateer" ]; then
   "$SCRIPT_DIR/fm-sandbox-exec.sh" available || {
     echo "error: config/sailor-sandbox asks for the sailor sandbox, but sandbox-exec cannot run on this machine; refusing to launch sailor $SAILOR unconfined" >&2
     exit 1
@@ -2504,8 +2505,10 @@ if [ -e "$CONFIG/privateer" ] || [ -L "$CONFIG/privateer" ]; then
   fi
   # The environment is cleared at the worker's command boundary whether or not
   # config/launch-env-allowlist exists (its names, already checked, still apply),
-  # OpenCode's directories are this home's own, for the sandbox paths below and
-  # for the launch, and the sandbox reaches only the session's egress proxy.
+  # OpenCode's directories are this home's own, and its traffic goes to the
+  # session's egress proxy. The worker runs inside the Privateer session's own
+  # sandbox, which a spawn from outside that session could not give it and
+  # which macOS cannot nest a sailor sandbox inside.
   LAUNCH_ENV_ENABLED=1
   if ! PRIVATEER_ENV=$(FM_HOME="$FM_HOME" FM_STATE_OVERRIDE="$STATE" "$SCRIPT_DIR/fm-privateer.sh" launch-env 2>&1); then
     echo "error: the Privateer quarantine refuses this spawn: ${PRIVATEER_ENV#fm-privateer: refused: }" >&2
@@ -2514,7 +2517,7 @@ if [ -e "$CONFIG/privateer" ] || [ -L "$CONFIG/privateer" ]; then
   while IFS= read -r privateer_assignment; do
     [ -z "$privateer_assignment" ] || export "${privateer_assignment?}"
   done <<< "$PRIVATEER_ENV"
-  SAILOR_ENDPOINT=$HTTP_PROXY
+  SAILOR_SANDBOX=session
 fi
 # Worker account pin (header above): resolved before any endpoint, worktree, or
 # record exists. An absent pin selects nothing and leaves every later launch
@@ -4984,7 +4987,7 @@ preserve_relaunch_meta() {
   echo "model=${MODEL:-default}"
   echo "effort=${EFFORT:-default}"
   [ -z "$SAILOR" ] || echo "sailor=$SAILOR"
-  [ "$SAILOR_SANDBOX" != 1 ] || echo "sandbox=seatbelt"
+  [ "$SAILOR_SANDBOX" = 0 ] || echo "sandbox=seatbelt"
   # The dispatch stamp a task-scoped permission grant binds to
   # (bin/fm-permission-grant.sh): written once, kept across relaunches, so a
   # later task that reuses this id never inherits this one's grants.
@@ -5600,5 +5603,5 @@ SPAWN_ACCOUNT=
 [ ! -e "$CONFIG/fleet-ledger" ] || [ "$RELAUNCH" -eq 1 ] || FM_HOME=$FM_HOME FM_STATE_OVERRIDE=$STATE FM_CONFIG_OVERRIDE=$CONFIG "$SCRIPT_DIR/fm-fleet-ledger.sh" dispatched "$ID" "$KIND" "${PROJ_ABS##*/}" "$HARNESS" "$MODEL" "$SAILOR" || true
 SPAWN_SAILOR=
 [ -z "$SAILOR" ] || SPAWN_SAILOR=" sailor=$SAILOR"
-[ "$SAILOR_SANDBOX" != 1 ] || SPAWN_SAILOR="$SPAWN_SAILOR sandbox=seatbelt"
+[ "$SAILOR_SANDBOX" = 0 ] || SPAWN_SAILOR="$SPAWN_SAILOR sandbox=seatbelt"
 echo "spawned $ID harness=$HARNESS kind=$KIND$SPAWN_DELIVERY$SPAWN_SAILOR window=$META_WINDOW worktree=$WT$SPAWN_ACCOUNT"

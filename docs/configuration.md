@@ -912,7 +912,7 @@ With the flag present, bootstrap reports each violation as `PRIVATEER: <violatio
 - `config/crew-harness` must hold `opencode`, and `config/secondmate-harness`, when present, must name it too.
 - `config/supervision-host`, `config/claude-account`, and `config/pi-account` must not exist.
 - The [spoken interface and captain inbox](#spoken-interface-and-captain-inbox-configvoice--configinbox-) settings `config/inbox-ask-model`, `inbox-stt-model`, `inbox-region`, `inbox-profile`, `voice-model`, `voice-region`, and `voice-profile` must not exist, because those side channels send the captain's words to Bedrock.
-- `config/sailor-sandbox` must exist, so every sailor runs inside the [sailor sandbox](#sailor-sandbox-configsailor-sandbox).
+- `config/sailor-sandbox` must exist, so a sailor under the `restricted` profile may launch; a Privateer worker then runs inside the session sandbox described below.
 - `.env` must set no Relay pairing token, no typed-resolution key, no `FM_INBOX_*` or `FM_VOICE_*` override, and no `ANTHROPIC_*`, `CLAUDE_*`, or `CLAUDECODE` line, and `config/launch-env-allowlist` must list none of the Anthropic or Claude names.
 - `config/crew-dispatch.json` must exist, declare no `sailor_fallback`, give every profile the `opencode` harness and a sailor, and give every sailor a private endpoint: localhost, a loopback, RFC 1918, or tailnet (100.64/10) address, an IPv6 loopback or unique-local address, or a name ending in `.local` or `.ts.net`.
 - An endpoint's host is read from its authority, which ends at the first `/`, `?`, or `#`; an authority carrying userinfo or a backslash is refused, so no endpoint can hide a public host behind a private-looking suffix.
@@ -931,15 +931,18 @@ Every Privateer worker launch clears the environment the same way at its command
 OpenCode is isolated: the first mate and every worker read and write OpenCode's config, data, state, and cache under `state/privateer/opencode/` in the home, so the captain's own OpenCode logins, global configuration, and sessions are invisible to them.
 Auto-update is off, session sharing is disabled, and the first mate's configuration pins its model to its sailor as the only provider.
 
-Every connection leaves through the launcher's egress proxy, `bin/fm-privateer-proxy.py`, which runs in the session's `egress` window on a loopback port.
+Every connection leaves through the launcher's egress proxy, `bin/fm-privateer-proxy.py`, which `start` runs as its own process on a loopback port, outside the session and outside its sandbox.
 It allows exactly the endpoint of every sailor in the sailor map and the forge origin of the checkout and of every clone under `projects/`, each by host and port, refuses everything else, and logs every allowed and refused destination to `state/privateer/egress/log`.
-`start` refuses, and leaves nothing running, if the proxy cannot bind.
-The first mate and every worker receive `HTTP_PROXY`, `HTTPS_PROXY`, and a `GIT_SSH_COMMAND` that tunnels Git over SSH through the proxy, and a spawn is refused while no proxy runs.
+`start` refuses, and starts nothing, if the proxy cannot bind, and `stop` stops it after the tmux server.
+The first mate and every worker receive `HTTP_PROXY`, `HTTPS_PROXY`, and a `GIT_SSH_COMMAND` that tunnels Git over SSH through the proxy.
 
-The first mate runs inside the same macOS sandbox as a sailor.
-It can write only to the home (never its egress record), the checkout's `.opencode/` scratch, the worktree pool, and firstmate's per-task temp roots, and it can connect only to the egress proxy, the DNS resolver, and its own tmux socket.
-Every Privateer worker's sailor sandbox likewise allows the egress proxy as its only address, in place of the sailor's endpoint.
-A client that ignores the proxy variables therefore reaches nothing remote at all, because the sandbox denies the direct connection.
+The sandbox holds the session's whole tmux server, so every pane and every command started in the session inherits it: the first mate, each worker and its pane shell, and anything the first mate asks tmux to run.
+Everything inside can write only to the home (never its egress directory), the checkout's `.opencode/` scratch, the worktree pool, firstmate's per-task temp roots, and the server's own socket.
+It can connect only to the egress proxy, the DNS resolver, and that socket, so a client that ignores the proxy variables reaches nothing remote at all.
+It can signal only processes inside the same sandbox, so nothing in the session can stop the proxy, and the egress directory's port and process record are out of its reach.
+macOS cannot apply one sandbox inside another, so a Privateer worker runs in this session sandbox, with the session's write reach, instead of the per-task [sailor sandbox](#sailor-sandbox-configsailor-sandbox).
+A spawn is therefore refused unless it runs inside the home's Privateer session with its proxy running, so a worker can never land in an unsandboxed tmux server.
+The sandbox is not a boundary against same-user system services that start programs outside it, as `bin/fm-sandbox-exec.sh` states.
 Version 1 has honest limits: `sandbox-exec` is required, so Privateer runs on macOS only; `python3` is required for the proxy; a first mate whose checkout is not inside its home cannot update that checkout from inside its session; and Git over SSH needs a key file, because no agent socket enters the environment.
 
 ### Egress audit

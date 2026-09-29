@@ -6,13 +6,16 @@
 # launcher, run with a stub first mate that prints its environment, passes no
 # ANTHROPIC_*, CLAUDE_*, or CLAUDECODE variable, refuses without the flag or
 # with a forbidden file, starts the real egress proxy (bin/fm-privateer-proxy.py)
-# with exactly the sailors and the forge allowed and a sandbox that reaches only
-# that proxy, refuses when the proxy cannot bind, and refuses to stop while work
-# is in flight. A fake tmux runs each new window's command in the background
-# and records every call, and a fake sandbox-exec records the profile it was
-# given and runs the command, so the launch shape is pinned on every platform;
-# the live egress audit (tests/fm-privateer-egress-live-e2e.test.sh) runs the
-# real ones.
+# as its own process with exactly the sailors and the forge allowed and the
+# tmux server inside a sandbox that reaches only that proxy, refuses when the
+# proxy cannot bind, and refuses to stop while work is in flight. A fake tmux
+# runs each new session's command in the background and records every call,
+# and a fake sandbox-exec records the profile it was given and runs the
+# command, so the launch shape is pinned on every platform. Where sandbox-exec
+# and tmux really run, one case starts the real session and proves that a
+# command the first mate starts through tmux reaches nothing but the proxy and
+# cannot stop or rewrite it; the live egress audit
+# (tests/fm-privateer-egress-live-e2e.test.sh) runs the real OpenCode.
 # docs/configuration.md ("Privateer quarantine") owns the contract.
 set -u
 
@@ -59,8 +62,8 @@ SH
 
 # make_launcher_fakebin <case-dir>: a tmux that runs each new session's or
 # window's command in the background and logs every call to <case-dir>/tmux.log,
-# keeping "running" as the file <case-dir>/tmux-running while the session's
-# first window lives and the background pids in <case-dir>/tmux-pids; a
+# keeping "running" as the file <case-dir>/tmux-running and the background pids
+# in <case-dir>/tmux-pids; a
 # sandbox-exec that writes its profile to <case-dir>/profile.sb and runs the
 # command; and the sailor's curl. The launcher clears the environment, so the
 # paths are baked in. Prints the dir.
@@ -77,10 +80,7 @@ printf '%s\\n' "\$*" >> "\$log"
 sock=
 if [ "\${1:-}" = -L ]; then sock=\$2; shift 2; fi
 case "\${1:-}" in
-  has-session)
-    [ -e "\$running" ] || exit 1
-    [ ! -s "\$pids" ] || kill -0 "\$(head -1 "\$pids")" 2>/dev/null
-    ;;
+  has-session) [ -e "\$running" ] ;;
   new-session | new-window)
     [ "\$1" = new-window ] || : > "\$running"
     shift
@@ -262,16 +262,27 @@ test_endpoint_rule() {
   pass "check accepts loopback, private, tailnet, .local, and .ts.net endpoints and refuses the rest, including an authority hidden behind ?, #, a backslash, or userinfo"
 }
 
+# session_socket <home>: the tmux socket name of <home>'s Privateer session, as
+# launch-env's refusal outside that session names it.
+session_socket() {
+  FM_HOME="$1" TMUX='' "$PRIVATEER" launch-env 2>&1 | sed -n 's/.*(tmux socket \([^)]*\)).*/\1/p'
+}
+
 test_launch_env_lives_inside_the_home() {
-  local home out status
+  local home out status socket
   home=$(make_home launch-env)
-  out=$(FM_HOME="$home" "$PRIVATEER" launch-env 2>&1)
+  out=$(FM_HOME="$home" TMUX=/tmp/tmux-501/default,1,0 "$PRIVATEER" launch-env 2>&1)
+  status=$?
+  expect_code 1 "$status" "launch-env must refuse outside the Privateer session"
+  assert_contains "$out" "launch-env runs only inside the Privateer session (tmux socket fm-privateer-" "the refusal must name the session"
+  socket=$(session_socket "$home")
+  out=$(FM_HOME="$home" TMUX="/tmp/tmux-501/$socket,1,0" "$PRIVATEER" launch-env 2>&1)
   status=$?
   expect_code 1 "$status" "launch-env must refuse while no egress proxy runs"
   assert_contains "$out" "the Privateer egress proxy is not running" "the refusal must name the proxy"
   mkdir -p "$home/state/privateer/egress"
   printf '18080\n' > "$home/state/privateer/egress/port"
-  out=$(FM_HOME="$home" "$PRIVATEER" launch-env)
+  out=$(FM_HOME="$home" TMUX="/tmp/tmux-501/$socket,1,0" "$PRIVATEER" launch-env)
   assert_equals "XDG_CONFIG_HOME=$home/state/privateer/opencode/config
 XDG_DATA_HOME=$home/state/privateer/opencode/data
 XDG_STATE_HOME=$home/state/privateer/opencode/state
@@ -282,7 +293,7 @@ HTTPS_PROXY=http://127.0.0.1:18080
 http_proxy=http://127.0.0.1:18080
 https_proxy=http://127.0.0.1:18080
 GIT_SSH_COMMAND=ssh -o ProxyCommand='/usr/bin/nc -X connect -x 127.0.0.1:18080 %h %p'" "$out" "launch-env must isolate OpenCode under the home's state directory and route every client through the egress proxy"
-  pass "launch-env points every OpenCode directory inside the home, turns auto-update off, names the egress proxy, and refuses without one"
+  pass "launch-env points every OpenCode directory inside the home, turns auto-update off, names the egress proxy, and refuses outside the session or without the proxy"
 }
 
 # --- launcher ---------------------------------------------------------------
@@ -372,7 +383,7 @@ test_start_passes_only_the_allowlist() {
   assert_equals "HTTP_PROXY=http://127.0.0.1:$port" "$(grep '^HTTP_PROXY=' "$envlog")" "the egress proxy must reach the first mate as HTTP_PROXY"
   assert_equals "GIT_SSH_COMMAND=ssh -o ProxyCommand='/usr/bin/nc -X connect -x 127.0.0.1:$port %h %p'" "$(grep '^GIT_SSH_COMMAND=' "$envlog")" "Git over SSH must tunnel through the egress proxy"
   assert_grep "TMUX=/tmp/tmux-fake/fm-privateer-" "$envlog" "the first mate must keep the TMUX its own server set"
-  assert_grep "TMUX_PANE=%1" "$envlog" "the first mate must keep the TMUX_PANE its own server set"
+  assert_grep "TMUX_PANE=%0" "$envlog" "the first mate must keep the TMUX_PANE its own server set"
   assert_grep "HOME=" "$envlog" "HOME must be passed"
   assert_grep "PATH=" "$envlog" "PATH must be passed"
   assert_grep "CWD=$root_real" "$envlog" "the first mate must run in the checkout"
@@ -380,17 +391,21 @@ test_start_passes_only_the_allowlist() {
     [ -d "$home/state/privateer/opencode/$d" ] || fail "start must create OpenCode's $d directory"
   done
   profile="$dir/profile.sb"
-  [ -f "$profile" ] || fail "the first mate never ran inside the sandbox"
+  [ -f "$profile" ] || fail "the tmux server never started inside the sandbox"
   assert_grep '(deny network-outbound)' "$profile" "the sandbox must deny every connection first"
   assert_equals "(allow network-outbound (remote ip \"localhost:$port\"))" "$(grep 'remote ip' "$profile")" \
     "the egress proxy must be the sandbox's only allowed address"
   assert_grep "(subpath \"$home_real\")" "$profile" "the sandbox must allow writes to the home"
-  assert_grep "(subpath \"$home_real/state/privateer/egress\")" "$profile" "the sandbox must deny writes to the egress record"
+  assert_equals "(deny file-write*
+  (subpath \"$home_real/state/privateer/egress\")
+)" "$(sed -n '/^(deny file-write\*$/,/^)$/p' "$profile")" \
+    "the egress record must be the only write the sandbox takes back from the home, so every worker's OpenCode directories stay writable"
+  assert_grep '(deny signal)' "$profile" "the sandbox must deny signals outside itself"
+  assert_grep '(allow signal (target same-sandbox))' "$profile" "the sandbox must allow signals within itself"
   assert_grep "(subpath \"$root_real/.opencode\")" "$profile" "the sandbox must allow OpenCode's scratch in the checkout"
   assert_grep '(regex #"^/private/tmp/fm-")' "$profile" "the sandbox must allow firstmate's per-task temp roots"
   assert_grep '(allow network-outbound (remote unix-socket (path-literal "/private/tmp/tmux-' "$profile" "the sandbox must allow the session's own tmux socket"
-  assert_grep 'new-session -d -s privateer -n egress ' "$dir/tmux.log" "tmux must start the session with the egress proxy"
-  assert_grep 'new-window -t privateer -n firstmate -c '"$root_real" "$dir/tmux.log" "tmux must start the first mate in the checkout"
+  assert_grep 'new-session -d -s privateer -n firstmate -c '"$root_real" "$dir/tmux.log" "tmux must start the first mate in the checkout"
   assert_grep "set-option -g update-environment " "$dir/tmux.log" "the server must copy no variable from an attaching client"
   # The proxy start launched allows exactly the sailor and the forge.
   assert_not_contains "$(proxy_request "$port" 'CONNECT forge.example.test:3000 HTTP/1.1')" "403" "the forge must be allowed through the proxy"
@@ -405,8 +420,9 @@ refused CONNECT forge.example.test:443' "$(jq -r '"\(.verdict) \(.method) \(.des
   out=$(run_launcher "$dir" "$home" "$root" stop)
   expect_code 0 "$?" "stop must end the session: $out"
   [ ! -e "$home/state/privateer/egress/port" ] || fail "stop must retire the proxy's port"
+  [ ! -e "$home/state/privateer/egress/pid" ] || fail "stop must retire the proxy's process id"
   ! proxy_request "$port" 'CONNECT 127.0.0.1:11234 HTTP/1.1' | grep -q HTTP || fail "stop must stop the egress proxy"
-  pass "start runs the egress proxy with the sailor and forge allowed, and the first mate with only the allowlist, isolated OpenCode directories, and a sandbox that reaches only that proxy"
+  pass "start runs the egress proxy with the sailor and forge allowed, and the first mate with only the allowlist and isolated OpenCode directories in a tmux server whose sandbox reaches only that proxy"
 }
 
 test_start_refuses_when_the_proxy_cannot_bind() {
@@ -423,8 +439,8 @@ test_start_refuses_when_the_proxy_cannot_bind() {
   status=$?
   expect_code 1 "$status" "start must refuse when the proxy cannot bind"
   assert_contains "$out" "the Privateer egress proxy could not bind a loopback port; nothing was started" "the refusal must name the proxy"
-  assert_grep "kill-server" "$dir/tmux.log" "a refused start must stop the server it began"
-  assert_no_grep "new-window" "$dir/tmux.log" "no first mate may start without the proxy"
+  [ ! -e "$dir/tmux.log" ] || assert_no_grep "new-session" "$dir/tmux.log" "no session may start without the proxy"
+  [ ! -e "$home/state/privateer/egress/pid" ] || fail "a refused start must leave no proxy record"
   [ ! -e "$dir/primary.env" ] || fail "no first mate may start without the proxy"
   pass "start refuses, and leaves nothing running, when the egress proxy cannot bind"
 }
@@ -535,6 +551,91 @@ test_attach_refuses_without_a_session() {
   pass "attach refuses when the Privateer session is not running"
 }
 
+# serve_dir <dir> <log>: a loopback http server over <dir>; prints its pid and port.
+serve_dir() {
+  local pid port
+  ( cd "$1" && exec python3 -u -m http.server 0 --bind 127.0.0.1 ) > "$2" 2>&1 &
+  pid=$!
+  for _ in $(seq 100); do
+    port=$(sed -n 's/.*port \([0-9][0-9]*\).*/\1/p' "$2" | head -1)
+    [ -n "$port" ] && break
+    sleep 0.1
+  done
+  printf '%s %s\n' "$pid" "$port"
+}
+
+test_session_sandbox_holds_every_command() {
+  local dir home root out status spid opid sport oport port pid socket probe alive
+  if ! "$ROOT/bin/fm-sandbox-exec.sh" available || ! command -v tmux >/dev/null 2>&1; then
+    pass "session sandbox checks not run: sandbox-exec or tmux is not available on this machine"
+    return 0
+  fi
+  dir="$TMP_ROOT/real-session"
+  home=$(make_home real-session)
+  root="$dir/root"
+  fm_git_init_commit "$root"
+  mkdir -p "$dir/sailor/v1" "$dir/other"
+  printf '{"data":[{"id":"coder"}]}\n' > "$dir/sailor/v1/models"
+  printf 'reached\n' > "$dir/other/index.html"
+  read -r spid sport < <(serve_dir "$dir/sailor" "$dir/sailor.log")
+  read -r opid oport < <(serve_dir "$dir/other" "$dir/other.log")
+  [ -n "$sport" ] && [ -n "$oport" ] || fail "the stand-in servers did not start"
+  jq -n --arg e "http://127.0.0.1:$sport/v1" '{sailors: {tiller: {title: "Tiller", endpoint: $e, status: "live", models: ["coder"]}}, default: {harness: "opencode", sailor: "tiller", model: "coder"}}' \
+    > "$home/config/crew-dispatch.json"
+  probe="$home/state/probe"
+  # A command the first mate starts through tmux, as a worker's pane is: it
+  # tries the other server directly and through the proxy, and writes where a
+  # worker's OpenCode keeps its data.
+  cat > "$dir/window" <<SH
+#!/bin/sh
+/usr/bin/curl --noproxy '*' -sS -m 3 -o /dev/null http://127.0.0.1:$oport/ 2>/dev/null
+echo "direct=\$?" > '$probe.window.tmp'
+echo "proxied=\$(/usr/bin/curl -sS -m 3 -o /dev/null -w '%{http_code}' http://127.0.0.1:$oport/ 2>/dev/null)" >> '$probe.window.tmp'
+mkdir -p "\$XDG_DATA_HOME/opencode" && : > "\$XDG_DATA_HOME/opencode/probe"
+echo "write=\$?" >> '$probe.window.tmp'
+mv '$probe.window.tmp' '$probe.window'
+SH
+  # The first mate: it starts that window, then tries to stop the proxy and to
+  # rewrite the port every worker is sent to.
+  cat > "$dir/primary" <<SH
+#!/bin/sh
+tmux new-window -d '$dir/window'
+kill "\$(cat "\$FM_HOME/state/privateer/egress/pid")" 2>/dev/null
+echo "kill=\$?" > '$probe.primary.tmp'
+( echo 1 > "\$FM_HOME/state/privateer/egress/port" ) 2>/dev/null
+echo "rewrite=\$?" >> '$probe.primary.tmp'
+mv '$probe.primary.tmp' '$probe.primary'
+exec sleep 60
+SH
+  chmod +x "$dir/window" "$dir/primary"
+  out=$(FM_TEST_SEAM=1 FM_PRIVATEER_PRIMARY="$dir/primary" FM_HOME="$home" FM_ROOT_OVERRIDE="$root" "$PRIVATEER" start 2>&1)
+  status=$?
+  socket=$(printf '%s\n' "$out" | sed -n 's/.*on tmux socket \([^ ]*\).*/\1/p' | head -1)
+  port=$(cat "$home/state/privateer/egress/port" 2>/dev/null)
+  pid=$(cat "$home/state/privateer/egress/pid" 2>/dev/null)
+  wait_for_file "$probe.primary" && wait_for_file "$probe.window"
+  alive=$(proxy_request "$port" "GET http://127.0.0.1:$sport/v1/models HTTP/1.1")
+  FM_HOME="$home" FM_ROOT_OVERRIDE="$root" "$PRIVATEER" stop >/dev/null 2>&1 || { [ -z "$socket" ] || tmux -L "$socket" kill-server 2>/dev/null; }
+  kill "$spid" "$opid" 2>/dev/null
+  expect_code 0 "$status" "the real session must start: $out"
+  assert_equals "direct=7
+proxied=403
+write=0" "$(cat "$probe.window" 2>/dev/null)" \
+    "a command started through tmux must reach nothing directly, be refused by the proxy for an unlisted host, and write the worker's OpenCode data"
+  case "$(cat "$probe.primary" 2>/dev/null)" in
+    "kill=0"* | *"rewrite=0") fail "the first mate stopped or rewrote the egress proxy: $(cat "$probe.primary" 2>/dev/null)" ;;
+    "kill="*) ;;
+    *) fail "the stub first mate never ran" ;;
+  esac
+  assert_equals "HTTP/1.0 200 OK" "$alive" "the proxy must still serve the sailor after the first mate's attempt to stop it"
+  assert_equals "refused GET 127.0.0.1:$oport
+allowed GET 127.0.0.1:$sport" "$(jq -r '"\(.verdict) \(.method) \(.dest)"' "$home/state/privateer/egress/log")" \
+    "the proxy must log the refused host and the sailor request"
+  [ -n "$pid" ] && ! kill -0 "$pid" 2>/dev/null || fail "stop must stop the egress proxy"
+  [ "$port" != 1 ] || fail "the first mate rewrote the proxy's port"
+  pass "in the real sandboxed session, a command started through tmux reaches nothing but the proxy, and the first mate cannot stop or rewrite it"
+}
+
 # --- spawn ------------------------------------------------------------------
 
 # make_spawn_case <name> <id>: a Privateer home with a project and worktree for
@@ -554,15 +655,16 @@ make_spawn_case() {
   mkdir -p "$HOME_DIR/state/privateer/egress"
   printf '18080\n' > "$HOME_DIR/state/privateer/egress/port"
   fake_sailor_curl "$FAKEBIN_DIR"
-  printf '#!/usr/bin/env bash\nexit 0\n' > "$FAKEBIN_DIR/sandbox-exec"
-  chmod +x "$FAKEBIN_DIR/sandbox-exec"
   fm_git_worktree "$PROJ_DIR" "$WT_DIR" "wt-$name"
   fm_test_spawn_brief "$HOME_DIR" "$id"
   : > "$LAUNCH_LOG"
 }
 
+# run_spawn <args...>: fm-spawn from inside the home's Privateer session, as
+# the first mate runs it.
 run_spawn() {
-  FM_FAKE_LAUNCH_LOG="$LAUNCH_LOG" fm_test_run_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$@"
+  TMUX="/tmp/tmux-fake/$(session_socket "$HOME_DIR"),1,0" FM_FAKE_LAUNCH_LOG="$LAUNCH_LOG" \
+    fm_test_run_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$@"
 }
 
 # sq <text>: <text> single-quoted as it appears inside the launch's `sh -c` string.
@@ -665,13 +767,21 @@ test_spawn_allows_a_local_only_sailor_with_a_cleared_environment() {
   oc="$HOME_DIR/state/privateer/opencode"
   assert_contains "$launch" "export XDG_CONFIG_HOME=$(sq "$oc/config") XDG_DATA_HOME=$(sq "$oc/data") XDG_STATE_HOME=$(sq "$oc/state") XDG_CACHE_HOME=$(sq "$oc/cache") OPENCODE_DISABLE_AUTOUPDATE=$(sq 1) HTTP_PROXY=$(sq http://127.0.0.1:18080) HTTPS_PROXY=$(sq http://127.0.0.1:18080) http_proxy=$(sq http://127.0.0.1:18080) https_proxy=$(sq http://127.0.0.1:18080) GIT_SSH_COMMAND=" \
     "the launch must isolate the worker's OpenCode inside the home and route it through the egress proxy"
-  assert_contains "$launch" ",\"autoupdate\":false,\"share\":\"disabled\"}'\\'' $(sq "$ROOT/bin/fm-sandbox-exec.sh") $(sq run)" \
-    "the worker's OpenCode config must turn auto-update off and disable sharing, and the launch must run inside the sandbox"
-  assert_contains "$launch" "$(sq --write) $(sq "$oc/data/opencode")" "the sandbox must allow the isolated OpenCode data directory"
-  assert_contains "$launch" "$(sq --connect) $(sq http://127.0.0.1:18080) -- opencode" "the sandbox must allow only the egress proxy"
-  assert_not_contains "$launch" "$(sq --connect) $(sq http://127.0.0.1:11234/v1)" "the sandbox must not reach the sailor except through the proxy"
+  assert_contains "$launch" ",\"autoupdate\":false,\"share\":\"disabled\"}'\\'' opencode " \
+    "the worker's OpenCode config must turn auto-update off and disable sharing"
+  assert_not_contains "$launch" "fm-sandbox-exec.sh" "the worker must run in the session's sandbox, which macOS cannot nest a sailor sandbox inside"
   assert_not_contains "$launch" "no-mistakes/socket" "a local-only ship must not reach the shared pipeline socket"
-  pass "a Privateer home launches a local-only sailor with a cleared environment, isolated OpenCode directories, and a sandbox that reaches only the egress proxy"
+  pass "a Privateer home launches a local-only sailor with a cleared environment and isolated OpenCode directories inside the session's sandbox"
+}
+
+test_spawn_refuses_outside_the_session() {
+  local id=pv-outside out status
+  make_spawn_case outside "$id"
+  out=$(TMUX=/tmp/tmux-fake/default,1,0 FM_FAKE_LAUNCH_LOG="$LAUNCH_LOG" \
+    fm_test_run_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$id" "$PROJ_DIR" --mode local-only --yolo off --harness opencode --model coder --sailor tiller)
+  status=$?
+  assert_refused_spawn "$id" "$status" "$out" "error: the Privateer quarantine refuses this spawn: launch-env runs only inside the Privateer session" "a spawn from outside the session"
+  pass "a Privateer home refuses every spawn from outside its sandboxed session"
 }
 
 test_spawn_refuses_while_no_egress_proxy_runs() {
@@ -696,6 +806,7 @@ test_start_refuses_without_a_first_mate_line
 test_start_passes_only_the_allowlist
 test_start_refuses_when_the_proxy_cannot_bind
 test_proxy_forwards_only_allowed_destinations
+test_session_sandbox_holds_every_command
 test_start_refuses_while_running
 test_stop_refuses_with_work_in_flight_and_stops_an_idle_session
 test_attach_refuses_without_a_session
@@ -707,5 +818,6 @@ test_spawn_refuses_a_secondmate
 test_spawn_refuses_while_a_forbidden_file_exists
 test_spawn_allows_a_local_only_sailor_with_a_cleared_environment
 test_spawn_refuses_while_no_egress_proxy_runs
+test_spawn_refuses_outside_the_session
 
 echo "# all fm-privateer tests passed"

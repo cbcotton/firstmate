@@ -19,6 +19,7 @@
 #                            even inside a --deny-write path
 #   --connect <endpoint>     allow outbound TCP to <endpoint>, a URL or host:port
 #   --unix-socket <path>     allow connecting to that Unix socket
+#   --confine-signals        deny signals to every process outside this sandbox
 #
 # The profile starts from the system default, then denies every file write and
 # every outbound network connection. Seatbelt lets a later rule win, so file
@@ -33,6 +34,8 @@
 # (localhost, 127.0.0.1, ::1) allows that one port, and any other host allows
 # that port on every host, because a Seatbelt rule can name only localhost or
 # any host.
+# With --confine-signals, a sandboxed process may signal only processes in the
+# same sandbox, so it cannot stop or signal anything the caller started outside.
 # Reads, process launches, and every other operation keep the system default.
 # The sandbox therefore bounds where a sandboxed process can write and what it
 # can connect to; it does not stop it reading what the user can read, and it is
@@ -117,6 +120,7 @@ PREFIXES=()
 DENIES=()
 CONNECTS=()
 SOCKETS=()
+CONFINE_SIGNALS=0
 
 parse_options() {
   while [ "$#" -gt 0 ]; do
@@ -131,6 +135,10 @@ parse_options() {
           --unix-socket) safe_path "$2" "$1"; SOCKETS+=("$(physical "$2")") ;;
         esac
         shift 2
+        ;;
+      --confine-signals)
+        CONFINE_SIGNALS=1
+        shift
         ;;
       --)
         shift
@@ -167,6 +175,7 @@ render_profile() {
   for p in "${SOCKETS[@]+"${SOCKETS[@]}"}"; do
     printf '(allow network-outbound (remote unix-socket (path-literal "%s")))\n' "$p"
   done
+  [ "$CONFINE_SIGNALS" = 0 ] || printf '%s\n' '(deny signal)' '(allow signal (target same-sandbox))'
 }
 
 [ "$#" -ge 1 ] || usage
