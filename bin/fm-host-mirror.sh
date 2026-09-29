@@ -14,14 +14,10 @@
 # omp have no writer (docs/supervision-host.md "The dialog mirror"). A writer
 # appends captain text (the submitted prompt) and MAIN text (the turn's final
 # assistant message), never tool traffic, as said, with only the whitespace at
-# the very end of the message trimmed. A prompt the shared operational-input
-# protocol classifies
-# (bin/fm-operational-input.sh: watcher wakes, guard follow-ups, launch briefs)
-# is fleet machinery, not dialog, and is dropped, and so is a prompt that opens
-# with the wrapper a harness puts around a turn it started itself: Claude
-# submits its Stop-hook rewake inside <task-notification>, with no other field
-# to tell it from a typed prompt (tests/fm-host-mirror-live-e2e.test.sh proves
-# it).
+# the very end of the message trimmed. A prompt that is fleet machinery rather
+# than dialog (an operational input, or a turn the harness started itself) is
+# dropped. bin/fm-turn-dialog-lib.sh owns the payload fields, that machinery
+# rule, and the writer scope below, shared with the phone mirror.
 # Every writer is a silent no-op unless this home opted into the supervision
 # host (config/supervision-host, checked before anything else runs), the hook
 # runs in a genuine primary checkout, and this session holds the fleet lock, so
@@ -121,6 +117,8 @@ fi
 . "$SCRIPT_DIR/fm-wake-lib.sh"
 # shellcheck source=bin/fm-supervision-engine-lib.sh
 . "$SCRIPT_DIR/fm-supervision-engine-lib.sh"
+# shellcheck source=bin/fm-turn-dialog-lib.sh
+. "$SCRIPT_DIR/fm-turn-dialog-lib.sh"
 
 umask 077
 MIRROR="$STATE/.host-mirror.jsonl"
@@ -139,29 +137,13 @@ ENTRIES='if . == "" or endswith("\n") then .[:-1] else error("unterminated mirro
       and (map(.seq) | [.[:-1], .[1:]] | transpose | all(.[0] < .[1]))
     then . else error("invalid mirror entry") end'
 
-# A writer records only the lock-owning primary session's dialog.
-writer_in_scope() {
-  # shellcheck source=bin/fm-primary-scope-lib.sh
-  . "$SCRIPT_DIR/fm-primary-scope-lib.sh"
-  # shellcheck source=bin/fm-session-lock-lib.sh
-  . "$SCRIPT_DIR/fm-session-lock-lib.sh"
-  fm_primary_scope_matches "$FM_ROOT" "$STATE" && fm_session_lock_owned_by_self "$STATE"
-}
-
-operational() {  # <text>
-  printf '%s' "$1" | "$SCRIPT_DIR/fm-operational-input.sh" classify >/dev/null 2>&1
-}
-
 # Append one entry. The caller holds nothing; this takes the mirror lock.
 # Returns 1 when the entry could not be recorded; an entry dropped by design
 # (injected, operational, or already recorded) returns 0.
 append_entry() {  # <captain|main> <text> [<id>]
   local tag=$1 text=$2 id=${3:-} key last seq tmp record lines=0 recorded=/dev/null
   if [ "$tag" = captain ]; then
-    case "${text#"${text%%[![:space:]]*}"}" in
-      '<task-notification>'*) return 0 ;;
-    esac
-    ! operational "$text" || return 0
+    ! fm_turn_dialog_prompt_is_machinery "$text" || return 0
   fi
   key=$(fm_supervision_host_main_key "$STATE") || return 1
   fm_lock_acquire_wait "$LOCK" || return 1
@@ -224,27 +206,12 @@ case "$1" in
       # Cursor loads the tracked Claude settings too; its own entries mirror it.
       fm_hook_payload_is_foreign_host "$PAYLOAD" && exit 0
     fi
-    # One line per field: event, tag, id; the text follows as the remainder.
-    PARSED=$(printf '%s' "$PAYLOAD" | jq -r '
-      if type != "object" then empty else
-        ((.hook_event_name // "") | tostring) as $event
-        | if ($event == "UserPromptSubmit" or $event == "beforeSubmitPrompt") then
-            ["captain", ((.prompt_id // .generation_id // "") | tostring), ((.prompt // "") | tostring)]
-          elif $event == "Stop" then
-            ["main", ((.prompt_id // .generation_id // "") | tostring),
-             ((.last_assistant_message // "") | tostring)]
-          elif $event == "afterAgentResponse" then
-            ["main", ((.generation_id // "") | tostring), ((.text // "") | tostring)]
-          else empty end
-        | .[2] |= sub("\\s+\\z"; "")
-        | select(.[2] != "")
-        | "\(.[0])\n\(.[1])\n\(.[2])"
-      end' 2>/dev/null) || exit 0
+    PARSED=$(printf '%s' "$PAYLOAD" | fm_turn_dialog_parse) || exit 0
     [ -n "$PARSED" ] || exit 0
     TAG=$(printf '%s\n' "$PARSED" | sed -n '1p')
     ID=$(printf '%s\n' "$PARSED" | sed -n '2p')
     TEXT=$(printf '%s\n' "$PARSED" | sed '1,2d')
-    writer_in_scope || exit 0
+    fm_turn_dialog_writer_in_scope "$FM_ROOT" "$STATE" || exit 0
     append_entry "$TAG" "$TEXT" "$ID"
     exit 0
     ;;
