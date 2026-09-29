@@ -943,7 +943,7 @@ Everything inside can write only to the home, the checkout's `.opencode/` scratc
 Workers' copies live in the home's own Treehouse pool, `state/privateer/treehouse`, which the session names as `TREEHOUSE_ROOT`, so `treehouse` creates and hands out slots there and the shared pool under `~/.treehouse`, with every other home's slots, is out of reach.
 It can never write the home's egress directory, `config/`, or `bin/`, or the Git config or hooks of the checkout, of any clone under `projects/`, or of any linked worktree or submodule of those.
 It can neither rename, replace, or create any `.git` entry in the checkout or in a clone, nor redirect or relabel the git dir, `commondir`, or `gitdir` of a linked worktree that lives outside the home's pool.
-It also cannot write the `projects/` directory entry, any clone's directory entry, any git dir's entry, or any directory between the home and the checkout's git dir, so none of those can be moved aside, changed, and moved back.
+It also cannot write the `projects/` directory entry, any clone's directory entry, the entry of the top-level git dir of the checkout or of any clone, or any directory between the home and the checkout's git dir, so none of those can be moved aside, changed, and moved back.
 It can connect only to the egress proxy, the DNS resolver, and that socket, so a client that ignores the proxy variables reaches nothing remote at all.
 It can signal only processes inside the same sandbox, so nothing in the session can stop the proxy, and the egress directory's port and process record are out of its reach.
 A spawn is refused unless it runs inside the home's Privateer session with its proxy running, so a worker can never land in an unsandboxed tmux server.
@@ -955,8 +955,8 @@ Version 1 has these remaining limits:
 - A worker can therefore still write the two records the first mate's own spawn and grant commands write from inside that sandbox: the task records `state/<id>.meta` and the grant ledger `state/permission-grants.jsonl`.
 - The per-task temp roots under `/tmp/fm-`, and the user's own temporary directory (`$TMPDIR`), are namespaces shared by every home on the machine.
 - Clones under `projects/` are added, moved, and removed from outside the session, and a worktree the session creates in its own pool is meant for use only inside it.
-- The directory entries denied are the `projects/` directory, each clone's directory, each git dir, and the directories between the home and the checkout's git dir.
-- The `worktrees` and `modules` directories inside a git dir, the intermediate directories under `modules`, and a symlink placed over any of them can still be moved aside and back from inside the session, so a linked worktree's or submodule's Git config or hooks can be planted that way; closing that class is follow-up work.
+- The directory entries denied are the `projects/` directory, each clone's directory, the top-level git dir of the checkout and of each clone, and the directories between the home and the checkout's git dir.
+- The `worktrees` and `modules` directories inside a git dir, a submodule's own git dir (`modules/<path>`), the intermediate directories under `modules`, and a symlink placed over any of them can still be moved aside and back from inside the session, so a linked worktree's or submodule's Git config or hooks can be planted that way; closing that class is follow-up work.
 - The sandbox is not a boundary against same-user system services that start programs outside it, as `bin/fm-sandbox-exec.sh` states.
 - A first mate whose checkout is not inside its home cannot update that checkout from inside its session.
 - Git over SSH needs a key file, because no agent socket enters the environment.

@@ -106,8 +106,9 @@
 # any .git entry inside a clone, or the checkout's own .git; or the projects
 # directory, any clone's directory, or any directory between this home and the
 # checkout's git dir, so none of those directory entries can be moved aside,
-# changed, and moved back; the directory entries inside a git dir are not all
-# covered (see the remaining limits below).
+# changed, and moved back; of the git dirs, only the top-level git dir of the
+# checkout and of each clone has its entry denied, and the directory entries
+# inside it are not all covered (see the remaining limits below).
 # It may connect only to the egress proxy, the DNS resolver, and that socket,
 # so a client that ignores the proxy variables reaches nothing remote at all,
 # and may signal only processes inside the same sandbox, so it can neither
@@ -127,12 +128,13 @@
 #     session, and a worktree the session creates in its own pool is meant
 #     for use only inside it;
 #   - the directory entries denied are the projects directory, each clone's
-#     directory, each git dir, and the directories between this home and the
-#     checkout's git dir; the worktrees and modules directories inside a git
-#     dir, the intermediate directories under modules, and a symlink placed
-#     over any of them can still be moved aside and back from inside the
-#     session, so a linked worktree's or submodule's Git config or hooks can
-#     be planted that way; closing that class is follow-up work;
+#     directory, the top-level git dir of the checkout and of each clone, and
+#     the directories between this home and the checkout's git dir; the
+#     worktrees and modules directories inside a git dir, a submodule's own
+#     git dir (modules/<path>), the intermediate directories under modules,
+#     and a symlink placed over any of them can still be moved aside and back
+#     from inside the session, so a linked worktree's or submodule's Git config
+#     or hooks can be planted that way; closing that class is follow-up work;
 #   - as bin/fm-sandbox-exec.sh states, the sandbox is not a boundary against
 #     same-user system services that start programs outside it.
 #
@@ -590,9 +592,10 @@ cmd_start() {
   # sandbox: this home's config and scripts, or any Git config or hook of this
   # checkout, of a clone under projects/, or of a worker's worktree.
   sandbox_args+=(--deny-write "$home_real/config" --deny-write "$home_real/bin")
-  # The directory entries leading to each git dir are denied too, so none of
-  # them can be moved aside, written, and moved back; the worktrees and modules
-  # directories inside a git dir are not, a remaining limit the header names.
+  # The directory entries leading to the top-level git dir of the checkout and
+  # of each clone are denied too, so none of them can be moved aside, written,
+  # and moved back; the worktrees and modules directories inside a git dir and
+  # a submodule's own git dir are not, a remaining limit the header names.
   git_meta='($|/(worktrees/[^/]+/|modules/.+/)?(hooks(/|$)|config))'
   root_git=$(cd "$FM_ROOT" && cd "$(git rev-parse --git-common-dir 2>/dev/null)" 2>/dev/null && pwd -P) || root_git=
   if [ -n "$root_git" ]; then
