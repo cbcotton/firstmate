@@ -1,0 +1,34 @@
+# state after /castoff:
+total 8
+drwxr-xr-x@ 3 cotton  staff   96 Sep 29 08:43 .
+drwx------@ 8 cotton  staff  256 Sep 29 08:41 ..
+-rw-------@ 1 cotton  staff   17 Sep 29 08:43 .castoff
+on
+at=1790664214
+# mate records (linked worktree, writer out of scope):
+[]
+# pane after /castoff and /makefast:
+⚠ Your login expires in 1 day · run /login to renew
+  ⎿  SessionStart:startup says: The current Hindsight Claude Code plugin is DEPRECATED, replaced by the Coding Agents plugin.
+     One install now covers Claude Code, Codex, Cursor, Copilot, opencode, Kilo, Grok, Antigravity,
+     Devin and Cline, and they all share a single memory per repository, leveraging the Hindsight Knowledge Page (v0.9.x and onwards).
+     See the migration guide: https://hindsight.vectorize.io/sdks/integrations/coding-agents#migrating-from-the-per-agent-plugins
+     Your Hindsight server and token carry over automatically; past conversations are re-imported from
+     local transcripts. Silence this with "upgradeNotice": false in ~/.hindsight/claude-code.json
+❯ /castoff
+  Ran 1 shell command
+⏺ Captain, Cast Off is set: from now on my replies here will also go to your phone, until you turn it off with Make Fast. There's a catch, though: this home has no phone channel configured yet, so
+  nothing will actually reach your phone until one is set up.
+✻ Cooked for 10s · done 8:43 AM
+❯ /makefast
+  Ran 1 shell command
+⏺ Captain, Make Fast is done: phone mirroring is off and my replies will show only here in the terminal.
+✻ Cooked for 13s · done 8:45 AM
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← 1 agent
+# state after /makefast:
+total 0
+drwxr-xr-x@ 2 cotton  staff   64 Sep 29 08:45 .
+drwx------@ 8 cotton  staff  256 Sep 29 08:41 ..

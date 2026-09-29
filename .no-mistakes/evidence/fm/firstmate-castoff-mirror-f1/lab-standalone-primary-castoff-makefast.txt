@@ -1,0 +1,34 @@
+# Real Claude primary (claude 2.1.284 (Claude Code)) in a standalone lab checkout of HEAD with FM_HOME=lab home
+# Terminal transcript:
+
+# state/ castoff files after /makefast:
+(none)
+# fm-inbox.sh receipts (what the pinnace is served):
+{
+  "reply_cursor": "000000000003",
+  "replies": [
+    {
+      "id": "1790664644-EfhxYs",
+      "cursor": "000000000003",
+      "body": "Aye, the lab is alive."
+    }
+  ],
+  "mate": [
+    {
+      "cursor": "000000000001",
+      "rev": "000000000001",
+      "at": "2026-09-29T06:48:34Z",
+      "id": "63e5c78c-9a19-430a-8b1b-d7e735a4aa3d",
+      "turn": "captain",
+      "body": "Captain, the phone mirror is on, so my replies here will also go to the phone until you use Make Fast. No phone connection is set up for this home yet, so nothing will reach the phone until one is."
+    },
+    {
+      "cursor": "000000000002",
+      "rev": "000000000002",
+      "at": "2026-09-29T06:49:35Z",
+      "id": "50a97137-5d46-45de-bb42-ab725508bffb",
+      "turn": "captain",
+      "body": "Captain, it prints one line: `on since 2026-09-29T06:48:32Z`. That's the time the mirror was turned on (UTC), and it doesn't say whether a phone is connected."
+    }
+  ]
+}

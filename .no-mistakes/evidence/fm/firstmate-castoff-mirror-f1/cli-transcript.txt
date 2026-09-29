@@ -1,0 +1,53 @@
+$ fm-castoff.sh status
+off
+exit=1
+$ fm-castoff.sh on
+The phone mirror is on: each reply the first mate finishes here also reaches the pinnace chat, kept extra concise, until Make Fast turns it off.
+No pinnace is configured for this home (config/pinnace), so nothing reads the mirror until one is.
+exit=0
+$ fm-castoff.sh status
+on since 2026-09-29T06:41:02Z
+exit=0
+$ ls -l state/.castoff
+-rw-------@
+on
+at=1790664062
+
+# 12000-char final message (captain turn)
+fm-inbox: usage: fm-inbox.sh mate [--id <id>] [--since <epoch>] --turn captain|operational -   (body from stdin)
+Exception ignored in: <_io.TextIOWrapper name='<stdout>' mode='w' encoding='utf-8'>
+BrokenPipeError: [Errno 32] Broken pipe
+exit=1
+# operational turn
+fm-inbox: usage: fm-inbox.sh mate [--id <id>] [--since <epoch>] --turn captain|operational -   (body from stdin)
+# replay of the same id + body (no duplicate)
+fm-inbox: usage: fm-inbox.sh mate [--id <id>] [--since <epoch>] --turn captain|operational -   (body from stdin)
+# note + reply, then a final message with the same words in the same turn
+note ->   firstmate will pick this up at its next check.
+
+=== second pass (mate reads its body from stdin with a trailing -) ===
+# 12000-char final message (captain turn, id p1)
+created 1
+exit=0
+# operational turn (id p2)
+created 2
+# same id, same body again -> replay (no duplicate)
+replay 2
+# phone note, reply, then the turn ends with the reply words
+note id=1790664074-4PRFfP
+replied 1790664074-4PRFfP
+duplicate 1790664074-4PRFfP
+# receipts (phone view): mate[] summarised
+{"reply_cursor":"000000000003","replies":[{"rev":null,"body":"Aye, merged."}],"mate":[{"cursor":"000000000001","rev":"000000000001","id":"p1","turn":"captain","len":8000,"head":"HEADxxxxxxxx","tail":"xxxxxxxxTAIL"},{"cursor":"000000000002","rev":"000000000002","id":"p2","turn":"operational","len":19,"head":"Captain, shi","tail":", shipshape."}]}
+# middle of the capped body
+[mirror truncated: 4045 characters omitted]
+$ fm-castoff.sh off
+The phone mirror is off: replies stay in the terminal.
+exit=0
+$ fm-castoff.sh status
+off
+exit=1
+ls: /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/tmp.ISndvP1cyQ/state/.castoff: No such file or directory
+# hook with the flag off stays inert
+exit=0
+2

@@ -1,0 +1,40 @@
+ok - castoff: on writes an owner-only flag, a refresh keeps its start, status reports it, and off removes it
+ok - castoff: the Claude and Cursor registrations mirror each turn's final message, never the prompt
+ok - castoff: a home with the mirror off is untouched by every tracked registration
+ok - castoff: a foreign host's payload, other events, empty messages, a session without the lock, and a crewmate write nothing
+ok - castoff: typed turns are stamped captain, and operational input, rewakes, and this home's doorbells operational
+ok - castoff: a guard-blocked turn end leaves one message, the last, at its first cursor, and an unusable id is dropped, not the message
+ok - castoff: a final message repeating the turn's phone reply removes the interim message, served once
+ok - castoff: a reply earlier in the turn removes an interim message the final message replaces with its words
+ok - castoff: a repeated Cursor response for one generation is one message, the last
+ok - castoff: replies from before the first Cast Off or from while the mirror was off never suppress a final message
+ok - castoff: the Make Fast turn and every later turn stay in the terminal
+ok - castoff: prompts and final messages reach the mirror without ever entering a process argument list
+EXIT=0
+ok - plain note, list, and wake stay on the historical human path
+ok - plain note keeps exit 1 for a saved-but-unannounced failure
+ok - the same request id returns the original note as a distinguishable replay
+ok - a crash between recording the request id and publishing the note reuses the original id
+ok - saved-but-unannounced notes are repairable without creating a second note
+ok - repair and replay do not wake firstmate for an already-acknowledged note
+ok - receipts JSON is bounded by fixed bounds and discloses what it omitted
+ok - notes that predate the announcement marker are unknown, not re-announced
+ok - the reply channel is durable and its cursor is a strict order
+ok - the reply cursor never goes backwards when the sequence counter is lost
+ok - a reply without a valid sequence is reported as malformed
+ok - replies and mirrored messages share one sequence and one receipts cursor
+ok - a mirrored message replays by id and text, updates by id, and an empty or unstamped one is refused
+ok - an updated mirrored message reaches a reader past its cursor exactly once
+ok - a final message repeating the same turn's phone reply is recorded once, as the reply
+ok - a final message equal to a reply from before its turn is still mirrored
+ok - a long mirrored message keeps head and tail within the cap, is owner-only, and wakes nothing
+ok - bounded pages of replies and mirrored messages never skip or repeat an entry
+ok - a mirrored message without a valid sequence or turn is reported as malformed
+ok - mirrored messages are pruned oldest first past the retention bound
+ok - a non-UTF-8 note does not break the receipts view
+ok - readiness says unknown (or not-receivable) instead of inferring liveness from a lock
+ok - empty bodies and unsafe request ids are refused
+ok - a note body that opens with a double dash is queued as text
+ok - a note records its source and provenance headers, defaults to text, and refuses malformed tokens
+ok - drain --ack still moves the note to handled
+EXIT=0
