@@ -1,0 +1,19 @@
+Note: switching to '285b7f3a1ec52899be8e7abf66fcda0af6a18174'.
+
+You are in 'detached HEAD' state. You can look around, make experimental
+changes and commit them, and you can discard any commits you make in this
+state without impacting any branches by switching back to a branch.
+
+If you want to create a new branch to retain commits you create, you may
+do so (now or later) by using -c with the switch command. Example:
+
+  git switch -c <new-branch-name>
+
+Or undo this operation with:
+
+  git switch -
+
+Turn off this advice by setting config variable advice.detachedHead to false
+
+ok - opencode 1.18.32 in a Privateer session made 1 model request(s) to its sailor through the egress proxy (first after 104s, typed prompt needed: yes), its direct connections around the proxy were denied (anthropic=7 sailor=7), and the proxy recorded zero Anthropic destinations among: 2 allowed 127.0.0.1:55700;1 refused models.opencode.ai:443;2 refused registry.npmjs.org:443
+# all fm-privateer-egress-live-e2e tests passed

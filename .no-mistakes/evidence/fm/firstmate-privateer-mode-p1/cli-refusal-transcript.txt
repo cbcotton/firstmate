@@ -1,0 +1,46 @@
+$ fm-privateer.sh check   # no config/privateer
+exit=0
+$ fm-privateer.sh start   # no config/privateer
+fm-privateer: refused: config/privateer is absent; this launcher starts only a Privateer home
+exit=1
+$ fm-privateer.sh check   # home with Claude harness, claude-account, supervision-host, voice-model, ANTHROPIC key, Anthropic endpoint
+config/crew-harness must hold opencode
+config/supervision-host exists, and the supervision host runs on Claude
+config/claude-account exists, and it pins a Claude login
+config/voice-model exists, and the inbox and voice side channels send the captain's words to Bedrock
+config/sailor-sandbox is absent; every Privateer sailor runs inside the sandbox
+.env sets ANTHROPIC_API_KEY, an Anthropic or Claude variable
+.env sets FMX_PAIRING_TOKEN, and Relay answers public mentions through an outside service
+config/crew-dispatch.json profile claude uses a harness other than opencode
+config/crew-dispatch.json sailor box has endpoint 'https://api.anthropic.com/v1', which is not on this machine or the local network
+exit=1
+$ ANTHROPIC_API_KEY=leak fm-privateer.sh start
+fm-privateer: refused: the quarantine is not satisfied:
+config/crew-harness must hold opencode
+config/supervision-host exists, and the supervision host runs on Claude
+config/claude-account exists, and it pins a Claude login
+config/voice-model exists, and the inbox and voice side channels send the captain's words to Bedrock
+config/sailor-sandbox is absent; every Privateer sailor runs inside the sandbox
+.env sets ANTHROPIC_API_KEY, an Anthropic or Claude variable
+.env sets FMX_PAIRING_TOKEN, and Relay answers public mentions through an outside service
+config/crew-dispatch.json profile claude uses a harness other than opencode
+config/crew-dispatch.json sailor box has endpoint 'https://api.anthropic.com/v1', which is not on this machine or the local network
+exit=1
+$ fm-bootstrap.sh (privateer lines)
+PRIVATEER: config/crew-harness must hold opencode
+PRIVATEER: config/supervision-host exists, and the supervision host runs on Claude
+PRIVATEER: config/claude-account exists, and it pins a Claude login
+PRIVATEER: config/voice-model exists, and the inbox and voice side channels send the captain's words to Bedrock
+PRIVATEER: config/sailor-sandbox is absent; every Privateer sailor runs inside the sandbox
+PRIVATEER: .env sets ANTHROPIC_API_KEY, an Anthropic or Claude variable
+PRIVATEER: .env sets FMX_PAIRING_TOKEN, and Relay answers public mentions through an outside service
+PRIVATEER: config/crew-dispatch.json profile claude uses a harness other than opencode
+PRIVATEER: config/crew-dispatch.json sailor box has endpoint 'https://api.anthropic.com/v1', which is not on this machine or the local network
+CREW_DISPATCH: invalid config/crew-dispatch.json - sailor box status must be live or placeholder
+FMX: X mode on - relay poll armed via state/x-watch.check.sh; 30s watcher cadence in config/x-mode.env
+$ fm-privateer.sh attach
+fm-privateer: refused: the Privateer session is not running; start it first
+exit=1
+$ fm-privateer.sh stop
+fm-privateer: refused: the Privateer session is not running, and no egress proxy was left behind
+exit=1
