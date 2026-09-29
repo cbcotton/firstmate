@@ -35,12 +35,22 @@
         "type": "command",
         "command": "\"$CURSOR_PROJECT_DIR\"/bin/fm-host-mirror.sh hook cursor",
         "timeout": 10
+      },
+      {
+        "type": "command",
+        "command": "\"$CURSOR_PROJECT_DIR\"/bin/fm-castoff.sh hook cursor",
+        "timeout": 10
       }
     ],
     "afterAgentResponse": [
       {
         "type": "command",
         "command": "\"$CURSOR_PROJECT_DIR\"/bin/fm-host-mirror.sh hook cursor",
+        "timeout": 10
+      },
+      {
+        "type": "command",
+        "command": "\"$CURSOR_PROJECT_DIR\"/bin/fm-castoff.sh hook cursor",
         "timeout": 10
       }
     ]

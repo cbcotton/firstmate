@@ -4,7 +4,8 @@
 # Covers the durable order contract: request-id idempotency, the crash window
 # between save and announce, saved-but-unannounced repair, the unknown
 # announced state of notes that predate the marker, bounded receipts JSON with
-# omission disclosure, the reply cursor's strict order, and the readiness
+# omission disclosure, the reply cursor's strict order, the phone mirror's
+# messages sharing that order without skips or duplicates, and the readiness
 # projection's model-aware verdict and unknown path. Human note/list/drain
 # behaviour stays unchanged when the new flags are omitted.
 set -euo pipefail
@@ -377,6 +378,218 @@ assert_equals "0" "$(printf '%s' "$malformed" | json_len replies)" \
 assert_contains "$malformed" "malformed replies without a valid sequence: 1 ($bad)" \
   "receipts name the malformed reply"
 pass "a reply without a valid sequence is reported as malformed"
+
+# --- mirrored first-mate messages (mate) ------------------------------------
+
+seed_note() {  # <home> <id>
+  mkdir -p "$1/state/inbox"
+  printf 'id=%s\nat=2026-01-01T00:00:00Z\nsource=pinnace\nannounce_marker=1\n--\nfrom the phone\n' \
+    "$2" > "$1/state/inbox/$2.note"
+}
+
+mate() {  # <home> <body> [mate flags...]
+  local home=$1 body=$2
+  shift 2
+  printf '%s' "$body" | run_inbox "$home" mate "$@" -
+}
+
+cursors() {  # <key> -> "<cursor>" per row, one line
+  python3 -c 'import json,sys; print(" ".join(r["cursor"] for r in json.load(sys.stdin)[sys.argv[1]]))' "$1"
+}
+
+mode_of() { stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1"; }
+
+# One sequence orders replies and mirrored messages: a mirrored message takes
+# the number after a reply, and a later reply takes the number after it.
+home=$(make_home mate-order)
+seed_note "$home" 1700000000-first
+seed_note "$home" 1700000000-second
+run_inbox "$home" reply 1700000000-first "answer one" >/dev/null || fail "first reply failed"
+assert_equals "created 2" "$(mate "$home" "mirrored one" --id p1 --turn captain)" \
+  "a mirrored message takes the sequence after the reply"
+run_inbox "$home" reply 1700000000-second "answer two" >/dev/null || fail "second reply failed"
+assert_equals "created 4" "$(mate "$home" "mirrored two" --id p2 --turn operational)" \
+  "a later mirrored message takes the sequence after the later reply"
+receipts=$(run_inbox "$home" receipts) || fail "receipts with mirrored messages should succeed"
+assert_equals "000000000001 000000000003" "$(printf '%s' "$receipts" | cursors replies)" \
+  "replies keep their own cursors in the shared order"
+assert_equals "000000000002 000000000004" "$(printf '%s' "$receipts" | cursors mate)" \
+  "mirrored messages carry cursors in the shared order"
+assert_equals "operational" "$(printf '%s' "$receipts" | json_get mate 1 turn)" \
+  "a mirrored message keeps its turn stamp"
+assert_equals "p1" "$(printf '%s' "$receipts" | json_get mate 0 id)" \
+  "a mirrored message keeps its turn id"
+assert_equals "000000000004" "$(printf '%s' "$receipts" | json_get reply_cursor)" \
+  "the receipts cursor covers both kinds"
+after=$(run_inbox "$home" receipts --after 000000000002) || fail "receipts --after should succeed"
+assert_equals "000000000003" "$(printf '%s' "$after" | cursors replies)" \
+  "--after returns only replies strictly after the cursor"
+assert_equals "000000000004" "$(printf '%s' "$after" | cursors mate)" \
+  "--after returns only mirrored messages strictly after the cursor"
+pass "replies and mirrored messages share one sequence and one receipts cursor"
+
+# A mirrored message is recorded once: the same id and text replay, a
+# different text under the same id updates the message at its cursor, and an
+# empty body or a missing turn is refused.
+assert_equals "replay 2" "$(mate "$home" "mirrored one" --id p1 --turn captain)" \
+  "the same id and text replays the recorded message"
+assert_equals "updated 2" "$(mate "$home" "a later final reply" --id p1 --turn captain)" \
+  "a different text under the same id updates the message at its cursor"
+set +e
+empty_out=$(mate "$home" "$(printf ' \n\t ')" --turn captain 2>&1)
+empty_code=$?
+noturn_out=$(mate "$home" "no turn" 2>&1)
+noturn_code=$?
+set -e
+expect_code 1 "$empty_code" "an empty mirrored message is refused"
+assert_contains "$empty_out" "refusing to record an empty message" "the refusal names the empty message"
+expect_code 1 "$noturn_code" "a mirrored message without a turn stamp is refused"
+assert_contains "$noturn_out" "usage: fm-inbox.sh mate" "the refusal shows the usage"
+assert_equals "2" "$(find "$home/state/inbox/.mate" -maxdepth 1 -type f ! -name '.*' | wc -l | tr -d ' ')" \
+  "replays, updates, and refusals add no record"
+pass "a mirrored message replays by id and text, updates by id, and an empty or unstamped one is refused"
+
+# A reader already past an updated message's cursor receives it once more, at
+# its original cursor, and then not again.
+page=$(run_inbox "$home" receipts --after 000000000004) || fail "receipts past the updated cursor failed"
+assert_equals "000000000002" "$(printf '%s' "$page" | cursors mate)" \
+  "the updated message is served again at its original cursor"
+assert_equals "a later final reply" "$(printf '%s' "$page" | json_get mate 0 body)" \
+  "the updated message carries its new body"
+assert_equals "0" "$(printf '%s' "$page" | json_len replies)" "no reply is served twice"
+cursor=$(printf '%s' "$page" | json_get reply_cursor)
+assert_equals "000000000005" "$cursor" "the receipts cursor moves to the update"
+page=$(run_inbox "$home" receipts --after "$cursor") || fail "receipts past the update failed"
+assert_equals "0" "$(printf '%s' "$page" | json_len mate)" "the update is served exactly once"
+assert_equals "000000000002 000000000004" "$(run_inbox "$home" receipts | cursors mate)" \
+  "a full read still holds one message per cursor"
+seed_note "$home" 1700000000-third
+run_inbox "$home" reply 1700000000-third "answer three" >/dev/null || fail "third reply failed"
+assert_equals "000000000006" "$(run_inbox "$home" receipts --after "$cursor" | cursors replies)" \
+  "a reply after an update takes the sequence after the update"
+pass "an updated mirrored message reaches a reader past its cursor exactly once"
+
+# The turn that answered a phone note with a reply and ends with the same
+# words is one message, not two; different words stay two messages.
+home=$(make_home mate-duplicate)
+seed_note "$home" 1700000000-phone
+seed_note "$home" 1700000000-later
+mate "$home" "an earlier turn" --id p0 --turn captain >/dev/null || fail "seed mirrored message failed"
+since=$(date +%s)
+run_inbox "$home" reply 1700000000-phone "Aye, the fix is merged." >/dev/null || fail "reply failed"
+assert_equals "duplicate 1700000000-phone" \
+  "$(mate "$home" "$(printf '  Aye, the fix\nis merged.  ')" --id p1 --since "$since" --turn captain)" \
+  "a final message equal to the same turn's reply is a duplicate of that reply"
+assert_equals "created 3" "$(mate "$home" "Aye, the fix is merged. The next one is under way." --id p1 --since "$since" --turn captain)" \
+  "a final message with different words is recorded beside the reply"
+assert_equals "created 4" "$(mate "$home" "Aye, the fix is merged." --id p2 --since "$since" --turn captain)" \
+  "a reply recorded before the newest mirrored message belongs to an earlier turn"
+pass "a final message repeating the same turn's phone reply is recorded once, as the reply"
+
+# A reply recorded before the turn started never suppresses its final message:
+# not on the first Cast Off, with no mirrored message yet, and not after a
+# Make Fast then Cast Off, with replies recorded while the mirror was off.
+home=$(make_home mate-earlier-turn)
+seed_note "$home" 1700000000-old
+seed_note "$home" 1700000000-off
+run_inbox "$home" reply 1700000000-old "Done." >/dev/null || fail "old reply failed"
+later=$(( $(date +%s) + 5 ))
+assert_equals "created 2" "$(mate "$home" "Done." --id p1 --since "$later" --turn captain)" \
+  "a reply from before the first Cast Off does not suppress a final message"
+run_inbox "$home" reply 1700000000-off "On it." >/dev/null || fail "reply while off failed"
+assert_equals "created 4" "$(mate "$home" "On it." --id p2 --since "$later" --turn captain)" \
+  "a reply recorded while the mirror was off does not suppress a final message"
+assert_equals "created 5" "$(printf 'On it.' | run_inbox "$home" mate --id p3 --turn captain -)" \
+  "without a turn start no reply counts as this turn's"
+pass "a final message equal to a reply from before its turn is still mirrored"
+
+# Long messages keep their head and tail inside the 8000-character cap, the
+# records are owner-only, and no mirrored message ever wakes firstmate.
+home=$(make_home mate-cap)
+long="HEAD$(awk 'BEGIN { for (i = 0; i < 9000; i++) printf "x" }')TAIL"
+(umask 022; mate "$home" "$long" --id long --turn captain >/dev/null) || fail "a long mirrored message should be recorded"
+body=$(run_inbox "$home" receipts | json_get mate 0 body)
+[ "${#body}" -eq 8000 ] || fail "a capped mirrored message must hold 8000 characters with its note, got ${#body}"
+kept=$(printf '%s' "$body" | tr -cd x | wc -c | tr -d ' ')
+assert_contains "$body" "[mirror truncated: $((9000 - kept)) characters omitted]" \
+  "a capped message names how much it left out"
+case "$body" in HEAD*TAIL) ;; *) fail "a capped message must keep its head and its tail" ;; esac
+assert_equals "replay 1" "$(mate "$home" "$long" --id long --turn captain)" \
+  "a capped message replays against its capped record"
+assert_equals "600" "$(mode_of "$home/state/inbox/.mate/000000000001")" \
+  "a mirrored message is owner-only"
+assert_equals "0" "$(count_wakes "$home")" "a mirrored message appends no wake"
+assert_absent "$home/state/.wake-queue" "a mirrored message never touches the wake queue"
+pass "a long mirrored message keeps head and tail within the cap, is owner-only, and wakes nothing"
+
+# Without --after each list is a snapshot of its newest rows, so the phone
+# never stalls past 20 mirrored messages; with --after, a list cut by its bound
+# never lets the shared cursor skip the other list's unread entries, and every
+# entry arrives exactly once across pages.
+home=$(make_home mate-pages)
+i=0
+while [ "$i" -lt 25 ]; do
+  mate "$home" "message $i" --id "m$i" --turn operational >/dev/null || fail "mirrored message $i failed"
+  i=$((i + 1))
+done
+seed_note "$home" 1700000000-late
+run_inbox "$home" reply 1700000000-late "a late reply" >/dev/null || fail "late reply failed"
+page=$(run_inbox "$home" receipts) || fail "the snapshot failed"
+assert_equals "20" "$(printf '%s' "$page" | json_len mate)" "mirrored messages are bounded to 20"
+assert_equals "000000000006" "$(printf '%s' "$page" | json_get mate 0 cursor)" \
+  "the snapshot holds the newest mirrored messages, not the oldest"
+assert_equals "message 24" "$(printf '%s' "$page" | json_get mate 19 body)" \
+  "the snapshot ends at the newest mirrored message"
+assert_equals "000000000026" "$(printf '%s' "$page" | cursors replies)" "the snapshot holds the newest reply"
+assert_contains "$page" "mirrored messages omitted by bound: 5" "receipts disclose the omitted mirrored messages"
+assert_contains "$page" "pass --all-mate" "omission names the flag that reveals mirrored messages"
+assert_equals "000000000026" "$(printf '%s' "$page" | json_get reply_cursor)" \
+  "the snapshot's cursor is the newest entry in either list"
+mate "$home" "after the snapshot" --id m25 --turn operational >/dev/null || fail "mirrored message 25 failed"
+page=$(run_inbox "$home" receipts --after 000000000026) || fail "the page after the snapshot failed"
+assert_equals "000000000027" "$(printf '%s' "$page" | cursors mate)" \
+  "a reader continuing from the snapshot gets only what came after it"
+assert_equals "0" "$(printf '%s' "$page" | json_len replies)" "the snapshot's reply is not repeated"
+
+page=$(run_inbox "$home" receipts --after 000000000000) || fail "first page failed"
+assert_equals "20" "$(printf '%s' "$page" | json_len mate)" "an --after page is bounded to 20"
+assert_equals "000000000001" "$(printf '%s' "$page" | json_get mate 0 cursor)" "an --after page starts oldest first"
+assert_equals "0" "$(printf '%s' "$page" | json_len replies)" \
+  "a reply after the cut is held for the next page"
+cursor=$(printf '%s' "$page" | json_get reply_cursor)
+assert_equals "000000000020" "$cursor" "the cursor stops at the cut"
+page=$(run_inbox "$home" receipts --after "$cursor") || fail "second page failed"
+assert_equals "6" "$(printf '%s' "$page" | json_len mate)" "the second page carries the rest of the mirrored messages"
+assert_equals "000000000026" "$(printf '%s' "$page" | cursors replies)" "the second page carries the held reply"
+assert_equals "26" "$(run_inbox "$home" receipts --all-mate | json_len mate)" "--all-mate reveals every mirrored message"
+pass "bounded pages of replies and mirrored messages never skip or repeat an entry"
+
+# A mirrored message without a valid sequence or turn is malformed, and the
+# oldest records are pruned once the retention bound is passed.
+home=$(make_home mate-malformed)
+mate "$home" "a sound message" --turn captain >/dev/null || fail "sound mirrored message failed"
+printf 'at=2026-01-01T00:00:00Z\nturn=captain\n--\nno sequence\n' > "$home/state/inbox/.mate/nosequence"
+printf 'seq=9\nat=2026-01-01T00:00:00Z\nturn=loud\n--\nbad turn\n' > "$home/state/inbox/.mate/badturn"
+malformed=$(run_inbox "$home" receipts) || fail "receipts with a malformed mirrored message should succeed"
+assert_equals "1" "$(printf '%s' "$malformed" | json_len mate)" "malformed mirrored messages are not placed in the stream"
+assert_contains "$malformed" "malformed mirrored messages without a valid sequence or turn: 2 (badturn, nosequence)" \
+  "receipts name the malformed mirrored messages"
+pass "a mirrored message without a valid sequence or turn is reported as malformed"
+
+home=$(make_home mate-retention)
+mkdir -p "$home/state/inbox/.mate"
+i=1
+while [ "$i" -le 600 ]; do
+  printf 'seq=%s\nat=2026-01-01T00:00:00Z\nid=\nturn=operational\n--\nold %s\n' "$i" "$i" \
+    > "$home/state/inbox/.mate/$(printf '%012d' "$i")"
+  i=$((i + 1))
+done
+assert_equals "created 601" "$(mate "$home" "the newest" --turn captain)" "a message past the bound is still recorded"
+assert_equals "500" "$(find "$home/state/inbox/.mate" -maxdepth 1 -type f ! -name '.*' | wc -l | tr -d ' ')" \
+  "the oldest mirrored messages are pruned to the retention bound"
+assert_absent "$home/state/inbox/.mate/000000000101" "the oldest records go first"
+assert_present "$home/state/inbox/.mate/000000000102" "the newest records stay"
+pass "mirrored messages are pruned oldest first past the retention bound"
 
 # One undecodable note must not fail the whole receipts view.
 home=$(make_home non-utf8)

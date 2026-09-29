@@ -2456,6 +2456,28 @@ EOF
   pass "next step delegates watcher ownership to the daemon in quiet mode, distinctly from away mode"
 }
 
+# The phone mirror's concise-reply rule must survive a restart: its flag is
+# reported beside the away posture, and never while it is off.
+test_fleet_digest_reports_the_phone_mirror() {
+  local rec root home fakebin out
+  rec=$(new_world phone-mirror)
+  IFS='|' read -r root home fakebin <<EOF
+$rec
+EOF
+  make_fake_toolchain "$fakebin"
+  make_fake_ps_claude "$fakebin"
+
+  out=$(run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+  assert_not_contains "$out" "phone mirror:" "the digest reported a phone mirror that is off"
+  printf 'on\nat=1700000000\n' > "$home/state/.castoff"
+  out=$(run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+  assert_contains "$out" "phone mirror: on since 2023-11-14T22:13:20Z - load /castoff" \
+    "the digest did not report the phone mirror with its start"
+  assert_contains "$out" "keep replies extra concise" "the digest dropped the concise-reply rule"
+
+  pass "the fleet digest reports the phone mirror only while it is on, with its concise-reply rule"
+}
+
 test_next_step_afk_legacy_empty_flag_defaults_away() {
   local rec root home fakebin out
   rec=$(new_world next-step-afk-legacy)
@@ -2739,6 +2761,7 @@ test_next_step_sources_x_mode_cadence
 test_next_step_afk_delegates_to_daemon
 test_next_step_quiet_mode_delegates_to_daemon
 test_next_step_afk_legacy_empty_flag_defaults_away
+test_fleet_digest_reports_the_phone_mirror
 test_supervision_block_exactly_one_and_pi_diagnostic
 test_pi_signed_primary_uses_pi_extensions_without_identity_normalization
 test_pi_diagnostic_rejects_stale_loaded_marker
