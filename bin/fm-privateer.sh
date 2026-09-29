@@ -96,8 +96,9 @@
 # the server's own socket, and never to this home's egress directory, config/,
 # or bin/, or to the Git config or hooks of this checkout, of any clone under
 # projects/, or of any worktree of those (its git dir under
-# .git/worktrees/<name>/), so nothing inside can plant what later runs outside
-# the sandbox; a new clone under projects/ is therefore made outside the
+# .git/worktrees/<name>/, whose commondir is denied too), nor rename, replace,
+# or create the git dir entry of this checkout or of any projects/<p>, so
+# nothing inside can plant what later runs outside the sandbox; a new clone under projects/ is therefore made outside the
 # session. It may connect
 # only to the egress proxy, the DNS resolver, and that socket; and may signal
 # only processes inside the same sandbox, so it can neither stop the proxy nor
@@ -405,7 +406,9 @@ forge_origins() {
 # anthropic_host <host:port>: whether the host is, or is under, anthropic.com,
 # claude.ai, or claude.com.
 anthropic_host() {
-  case "${1%:*}" in
+  local host=${1%:*}
+  while [ "${host%.}" != "$host" ]; do host=${host%.}; done
+  case "$host" in
     anthropic.com | *.anthropic.com | claude.ai | *.claude.ai | claude.com | *.claude.com) return 0 ;;
   esac
   return 1
@@ -546,9 +549,9 @@ cmd_start() {
   # projects/, or of a worker's worktree.
   sandbox_args+=(--deny-write "$home_real/config" --deny-write "$home_real/bin")
   root_git=$(cd "$FM_ROOT" && cd "$(git rev-parse --git-common-dir 2>/dev/null)" 2>/dev/null && pwd -P) || root_git=
-  [ -z "$root_git" ] || sandbox_args+=(--deny-write-regex "^$(regex_quote "$root_git")/(worktrees/[^/]+/)?(hooks(/|\$)|config)")
+  [ -z "$root_git" ] || sandbox_args+=(--deny-write-regex "^$(regex_quote "$root_git")(\$|/(worktrees/[^/]+/)?(hooks(/|\$)|config|commondir))")
   if projects_real=$(cd "$PROJECTS" 2>/dev/null && pwd -P); then
-    sandbox_args+=(--deny-write-regex "^$(regex_quote "$projects_real")/[^/]+/\.git/(worktrees/[^/]+/)?(hooks(/|\$)|config)")
+    sandbox_args+=(--deny-write-regex "^$(regex_quote "$projects_real")/[^/]+/\.git(\$|/(worktrees/[^/]+/)?(hooks(/|\$)|config|commondir))")
   fi
   case "$root_real" in
     "$home_real" | "$home_real"/*) ;;

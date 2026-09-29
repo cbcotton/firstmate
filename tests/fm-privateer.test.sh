@@ -236,15 +236,24 @@ test_check_refuses_anthropic_forges() {
   git -C "$home/projects/fine" remote add origin https://github.com/captain/fine.git
   fm_git_init_commit "$home/projects/lookalike"
   git -C "$home/projects/lookalike" remote add origin https://notanthropic.com/captain/lookalike.git
+  fm_git_init_commit "$home/projects/dot-https"
+  git -C "$home/projects/dot-https" remote add origin https://api.anthropic.com./captain/dot.git
+  fm_git_init_commit "$home/projects/dot-ssh"
+  git -C "$home/projects/dot-ssh" remote add origin ssh://git@claude.ai.:22/captain/dot.git
+  fm_git_init_commit "$home/projects/dot-scp"
+  git -C "$home/projects/dot-scp" remote add origin git@api.anthropic.com..:captain/dot.git
   out=$(FM_HOME="$home" FM_ROOT_OVERRIDE="$root" "$PRIVATEER" check 2>&1)
   status=$?
   expect_code 1 "$status" "check must refuse an Anthropic or Claude forge origin"
   assert_contains "$out" "the origin of $root is on api.anthropic.com:443, an Anthropic or Claude host" "the checkout's https origin must be refused"
   assert_contains "$out" "the origin of $home/projects/ssh is on claude.ai:2222, an Anthropic or Claude host" "an ssh origin must be refused"
   assert_contains "$out" "the origin of $home/projects/scp is on code.claude.com:22, an Anthropic or Claude host" "an scp origin must be refused"
+  assert_contains "$out" "the origin of $home/projects/dot-https is on api.anthropic.com.:443, an Anthropic or Claude host" "a fully qualified https origin must be refused"
+  assert_contains "$out" "the origin of $home/projects/dot-ssh is on claude.ai.:22, an Anthropic or Claude host" "a fully qualified ssh origin must be refused"
+  assert_contains "$out" "the origin of $home/projects/dot-scp is on api.anthropic.com..:22, an Anthropic or Claude host" "a fully qualified scp origin must be refused"
   assert_not_contains "$out" "github.com" "an ordinary forge is not a violation"
   assert_not_contains "$out" "notanthropic.com" "a host that only ends in the same letters is not a violation"
-  pass "check refuses a checkout or clone whose origin is on an Anthropic or Claude host, in https, ssh, and scp form"
+  pass "check refuses a checkout or clone whose origin is on an Anthropic or Claude host, in https, ssh, and scp form, with or without trailing dots"
 }
 
 test_check_requires_the_dispatch_file() {
@@ -430,8 +439,8 @@ test_start_passes_only_the_allowlist() {
   (subpath \"$home_real/state/privateer/egress\")
   (subpath \"$home_real/config\")
   (subpath \"$home_real/bin\")
-  (regex #\"^$(rq "$root_real")/\\.git/(worktrees/[^/]+/)?(hooks(/|\$)|config)\")
-  (regex #\"^$(rq "$home_real")/projects/[^/]+/\\.git/(worktrees/[^/]+/)?(hooks(/|\$)|config)\")
+  (regex #\"^$(rq "$root_real")/\\.git(\$|/(worktrees/[^/]+/)?(hooks(/|\$)|config|commondir))\")
+  (regex #\"^$(rq "$home_real")/projects/[^/]+/\\.git(\$|/(worktrees/[^/]+/)?(hooks(/|\$)|config|commondir))\")
 )" "$(sed -n '/^(deny file-write\*$/,/^)$/p' "$profile")" \
     "the sandbox must take back only the egress record, the home's config and scripts, and every Git config and hook, so every worker's OpenCode directories stay writable"
   assert_grep '(deny signal)' "$profile" "the sandbox must deny signals outside itself"
@@ -664,9 +673,12 @@ mkdir -p "\$XDG_DATA_HOME/opencode" && : > "\$XDG_DATA_HOME/opencode/probe"
 echo "write=\$?" >> '$probe.window.tmp'
 planted=
 for t in '$proj/.git/hooks/post-checkout' '$proj/.git/config' '$wtgit/config.worktree' '$wtgit/hooks/post-checkout' \
-  '$home/config/probe' '$home/bin/probe'; do
+  '$wtgit/commondir' '$home/config/probe' '$home/bin/probe'; do
   ( : >> "\$t" ) 2>/dev/null && planted="\$planted \$t"
 done
+mv '$proj/.git' '$proj/.git.aside' 2>/dev/null && planted="\$planted rename:$proj/.git"
+mkdir -p '$home/projects/planted' && ( printf 'gitdir: %s\\n' '$home/state' > '$home/projects/planted/.git' ) 2>/dev/null &&
+  planted="\$planted gitfile:$home/projects/planted/.git"
 echo "planted=\${planted:-none}" >> '$probe.window.tmp'
 git -C '$proj' config core.hooksPath /tmp/elsewhere 2>/dev/null && echo "gitconfig=written" >> '$probe.window.tmp' || echo "gitconfig=refused" >> '$probe.window.tmp'
 : > "\$FM_HOME/state/pv-probe.status"

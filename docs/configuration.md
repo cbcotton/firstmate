@@ -940,7 +940,7 @@ The first mate and every worker receive `HTTP_PROXY`, `HTTPS_PROXY`, and a `GIT_
 
 The sandbox holds the session's whole tmux server, so every pane and every command started in the session inherits it: the first mate, each worker and its pane shell, and anything the first mate asks tmux to run.
 Everything inside can write only to the home, the checkout's `.opencode/` scratch, the worktree pool, firstmate's per-task temp roots, and the server's own socket.
-It can never write the home's egress directory, `config/`, or `bin/`, or the Git config or hooks of the checkout, of any clone under `projects/`, or of any worktree of those, so nothing inside can plant what later runs outside the sandbox; clone a new project into `projects/` outside the session.
+It can never write the home's egress directory, `config/`, or `bin/`, or the Git config or hooks of the checkout, of any clone under `projects/`, or of any worktree of those, and it can neither rename, replace, or create a git dir or gitfile for the checkout or for any `projects/<p>` nor redirect a worktree's `commondir`, so nothing inside can plant what later runs outside the sandbox; clone a new project into `projects/` outside the session.
 It can connect only to the egress proxy, the DNS resolver, and that socket, so a client that ignores the proxy variables reaches nothing remote at all.
 It can signal only processes inside the same sandbox, so nothing in the session can stop the proxy, and the egress directory's port and process record are out of its reach.
 macOS cannot apply one sandbox inside another, so a Privateer worker runs in this session sandbox, with the session's write reach, instead of the per-task [sailor sandbox](#sailor-sandbox-configsailor-sandbox).
