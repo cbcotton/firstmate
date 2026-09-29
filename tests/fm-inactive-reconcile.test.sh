@@ -436,7 +436,7 @@ test_secondmate_ledger_delivery_carries_report_and_failure() {
 # task's delivered PR: without a recorded PR, only a terminal line in the
 # ready-signal shape carries one, and a scout never carries one at all.
 test_pr_field_requires_recorded_pr_or_ready_signal_line() {
-  local id prose_key ready_key stamped_key placeholder_key scout_key tagged_key direct_key
+  local id prose_key ready_key stamped_key placeholder_key scout_key tagged_key direct_key gitea_key
   make_world pr-provenance; bind_secondmate local
   write_child "$MATE" prose $'working: context in https://example.test/other/repo/pull/33\ndone: cleanup finished'
   write_child "$MATE" ready 'done: PR https://example.test/owner/repo/pull/44 checks green'
@@ -445,7 +445,8 @@ test_pr_field_requires_recorded_pr_or_ready_signal_line() {
   write_child "$MATE" lookout 'done: PR https://example.test/owner/repo/pull/55'
   write_child "$MATE" tagged 'done: PR https://example.test/owner/repo/pull/88 checks green risk=low touches=none'
   write_child "$MATE" direct 'done: PR https://example.test/owner/repo/pull/99 risk=medium touches=auth'
-  for id in prose ready stamped placeholder tagged direct; do
+  write_child "$MATE" gitea 'done: PR https://gitea.example.test/owner/repo/pulls/12 checks green'
+  for id in prose ready stamped placeholder tagged direct gitea; do
     awk '$0 !~ /^pr=/' "$MATE/state/$id.meta" > "$MATE/state/$id.meta.tmp"
     mv "$MATE/state/$id.meta.tmp" "$MATE/state/$id.meta"
   done
@@ -464,6 +465,7 @@ test_pr_field_requires_recorded_pr_or_ready_signal_line() {
   scout_key=$(reported_outcome_key "$MATE" lookout 'done') || fail "scout receipt key missing"
   tagged_key=$(reported_outcome_key "$MATE" tagged 'done') || fail "tagged ready receipt key missing"
   direct_key=$(reported_outcome_key "$MATE" direct 'done') || fail "direct-PR tagged ready receipt key missing"
+  gitea_key=$(reported_outcome_key "$MATE" gitea 'done') || fail "Gitea ready receipt key missing"
   sed -E 's/ \[at=[0-9]+\]//' "$MAIN/state/mate.status" | grep -Fxq "done [key=$prose_key]: child prose done: cleanup finished mode=no-mistakes yolo=off" \
     || fail "a PR mentioned only in prose was claimed as the delivery: $(cat "$MAIN/state/mate.status")"
   sed -E 's/ \[at=[0-9]+\]//' "$MAIN/state/mate.status" | grep -Fxq "done [key=$ready_key]: child ready done: PR https://example.test/owner/repo/pull/44 checks green pr=https://example.test/owner/repo/pull/44 mode=no-mistakes yolo=off" \
@@ -478,6 +480,8 @@ test_pr_field_requires_recorded_pr_or_ready_signal_line() {
     || fail "a ready-signal line carrying risk and touches lost its PR: $(cat "$MAIN/state/mate.status")"
   sed -E 's/ \[at=[0-9]+\]//' "$MAIN/state/mate.status" | grep -Fxq "done [key=$direct_key]: child direct done: PR https://example.test/owner/repo/pull/99 risk=medium touches=auth pr=https://example.test/owner/repo/pull/99 mode=direct-PR yolo=off" \
     || fail "a direct-PR ready line carrying risk and touches lost its PR: $(cat "$MAIN/state/mate.status")"
+  sed -E 's/ \[at=[0-9]+\]//' "$MAIN/state/mate.status" | grep -Fxq "done [key=$gitea_key]: child gitea done: PR https://gitea.example.test/owner/repo/pulls/12 checks green pr=https://gitea.example.test/owner/repo/pulls/12 mode=no-mistakes yolo=off" \
+    || fail "a Gitea /pulls/ ready-signal line did not carry its PR: $(cat "$MAIN/state/mate.status")"
   pass "pr= requires the recorded PR or a ready-signal terminal line, whatever its stamp or risk tags, and never a scout"
 }
 
