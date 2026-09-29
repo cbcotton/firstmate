@@ -110,4 +110,28 @@ After the wait every step ran in about 6 seconds.
 
 Not yet verified live: a no-mistakes pipeline run started from inside the sandbox, which relies on the no-mistakes socket and gate repository allowances.
 
+## A Privateer session reaches nothing but its sailor
+
+Verified 2026-09-28 on macOS 26.6 with OpenCode 1.18.32 and tmux 3.7c by `FM_PRIVATEER_EGRESS_LIVE=1 tests/fm-privateer-egress-live-e2e.test.sh`, the egress audit that `../configuration.md` ("Privateer quarantine") names.
+The audit ran `bin/fm-privateer.sh start` for real: a fixture clone of the checkout with an https GitHub origin as the code root, a throwaway Privateer home whose only sailor was a scripted model on a loopback port, `ANTHROPIC_API_KEY` set to a decoy in the launcher's own environment, the launcher's own egress proxy running outside the sandbox, the real OpenCode primary with the real firstmate plugins in a dedicated tmux server held inside the real Seatbelt sandbox, and `stop` afterwards.
+The primary's command first tried two direct connections that ignored the proxy, inside the same sandbox, and then ran OpenCode.
+
+| Observation | Result |
+| --- | --- |
+| Direct `curl` to `https://api.anthropic.com/` around the proxy | Denied by the sandbox, exit 7 |
+| Direct `curl` to the sailor around the proxy | Denied by the sandbox, exit 7 |
+| Model requests that reached the sailor | 1, through the egress proxy, answered 105 seconds after start, to the prompt the audit typed into the pane; the startup nudge alone had produced none by then, because the sandboxed OpenCode spends its first minute on the blocked plugin install noted above |
+| Proxy destinations naming Anthropic or Claude, allowed or refused | 0 |
+| `CONNECT models.opencode.ai:443` | 1, refused by the proxy; the session continued |
+| `CONNECT registry.npmjs.org:443` | 2, refused by the proxy; the session continued |
+| `stop` with no task record | Stopped the watcher, the server, and then the proxy |
+
+Facts the quarantine design depends on:
+
+- OpenCode honors `HTTP_PROXY` and `HTTPS_PROXY`, for its loopback sailor as well as for hosted services: its model request, catalog fetch, and plugin-package install all arrived at the egress proxy, so the proxy's allowlist, not the sandbox's port rules, decides which hosts it reaches.
+- The sandbox is what holds a client that ignores those variables: a direct connection fails even to the loopback sailor, so nothing leaves except through the proxy.
+- `tests/fm-privateer.test.sh` re-proves the rest of the confinement against the real sandbox and tmux without a model: a command the first mate starts through `tmux new-window` is denied a direct connection, is refused by the proxy for an unlisted host, and can still write the workers' OpenCode data, while the first mate can neither signal the proxy nor rewrite its port.
+- The launcher's allowlist is what keeps a credential out: the live run set a decoy `ANTHROPIC_API_KEY` in the launcher's environment and recorded no attempt to use it, and `tests/fm-privateer.test.sh` pins the exact environment a stub first mate receives, with no `ANTHROPIC_*`, `CLAUDE_*`, or `CLAUDECODE` name in it.
+- The two refused destinations are OpenCode's own startup traffic, not firstmate's; both were denied and the primary still answered its first turn.
+
 Refresh this record by repeating the runs above after an OpenCode or model-server upgrade.

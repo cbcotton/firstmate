@@ -1121,6 +1121,49 @@ test_crew_dispatch_sailors_are_verbose_bootstrap_info() {
   pass "bootstrap names each profile's sailor and the sailor fallback in verbose BOOTSTRAP_INFO"
 }
 
+test_privateer_violations_are_reported() {
+  local case_dir fakebin out expect
+  case_dir="$TMP_ROOT/privateer-violations"
+  mkdir -p "$case_dir/home/config"
+  printf '%s\n' manual > "$case_dir/home/config/backlog-backend"
+  : > "$case_dir/home/config/privateer"
+  : > "$case_dir/home/config/supervision-host"
+  printf '%s\n' claude > "$case_dir/home/config/crew-harness"
+  printf 'TYPESAFE_API_KEY=typed\n' > "$case_dir/home/.env"
+  fakebin=$(make_fake_toolchain "$case_dir")
+  add_real_jq "$fakebin"
+
+  out=$(PATH="$fakebin:$BASE_PATH" FM_HOME="$case_dir/home" FM_ROOT_OVERRIDE="$case_dir/home" \
+    FM_FAKE_TREEHOUSE_LEASE_HELP=1 "$ROOT/bin/fm-bootstrap.sh")
+
+  expect=$'PRIVATEER: config/crew-harness must hold opencode\nPRIVATEER: config/supervision-host exists, and the supervision host runs on Claude\nPRIVATEER: config/sailor-sandbox is absent; every Privateer sailor runs inside the sandbox\nPRIVATEER: .env sets TYPESAFE_API_KEY, and typed dispatch resolution sends every brief to an outside model\nPRIVATEER: config/crew-dispatch.json is absent; a Privateer home dispatches only to the sailors it names'
+  [ "$out" = "$expect" ] || fail "privateer violation block mismatch"$'\n'"expected: $expect"$'\n'"actual:   $out"
+  pass "bootstrap reports each Privateer quarantine violation as a PRIVATEER line"
+}
+
+test_privateer_clean_home_is_silent_and_a_verbose_fact() {
+  local case_dir fakebin out expect
+  case_dir="$TMP_ROOT/privateer-clean"
+  mkdir -p "$case_dir/home/config"
+  printf '%s\n' manual > "$case_dir/home/config/backlog-backend"
+  printf 'tiller/coder\n' > "$case_dir/home/config/privateer"
+  printf '%s\n' opencode > "$case_dir/home/config/crew-harness"
+  : > "$case_dir/home/config/sailor-sandbox"
+  printf '%s\n' '{"sailors":{"tiller":{"endpoint":"http://127.0.0.1:11234/v1","status":"live","models":["coder"]}},"default":{"harness":"opencode","sailor":"tiller","model":"coder"}}' > "$case_dir/home/config/crew-dispatch.json"
+  fakebin=$(make_fake_toolchain "$case_dir")
+  add_real_jq "$fakebin"
+
+  out=$(PATH="$fakebin:$BASE_PATH" FM_HOME="$case_dir/home" FM_ROOT_OVERRIDE="$case_dir/home" \
+    FM_FAKE_TREEHOUSE_LEASE_HELP=1 "$ROOT/bin/fm-bootstrap.sh")
+  [ -z "$out" ] || fail "a clean Privateer home must be silent, got: $out"
+
+  out=$(PATH="$fakebin:$BASE_PATH" FM_HOME="$case_dir/home" FM_ROOT_OVERRIDE="$case_dir/home" \
+    FM_BOOTSTRAP_VERBOSE_FACTS=1 FM_FAKE_TREEHOUSE_LEASE_HELP=1 "$ROOT/bin/fm-bootstrap.sh")
+  expect=$'BOOTSTRAP_INFO: crew harness override active: opencode\nBOOTSTRAP_INFO: privateer quarantine active config/privateer\nBOOTSTRAP_INFO: crew dispatch active config/crew-dispatch.json\nBOOTSTRAP_INFO: crew dispatch default: opencode/coder@tiller'
+  [ "$out" = "$expect" ] || fail "privateer verbose info block mismatch"$'\n'"expected: $expect"$'\n'"actual:   $out"
+  pass "bootstrap is silent for a clean Privateer home and names the quarantine only as a verbose fact"
+}
+
 test_crew_dispatch_validation() {
   local label body expect mode case_dir fakebin out child_env n
   n=0
@@ -1291,4 +1334,6 @@ test_network_phases_record_per_step_elapsed_times
 test_tasks_axi_verdict_handoff_is_consumed_once
 test_crew_dispatch_active_rules_are_verbose_bootstrap_info
 test_crew_dispatch_sailors_are_verbose_bootstrap_info
+test_privateer_violations_are_reported
+test_privateer_clean_home_is_silent_and_a_verbose_fact
 test_crew_dispatch_validation
