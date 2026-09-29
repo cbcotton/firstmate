@@ -522,8 +522,10 @@ assert_equals "0" "$(count_wakes "$home")" "a mirrored message appends no wake"
 assert_absent "$home/state/.wake-queue" "a mirrored message never touches the wake queue"
 pass "a long mirrored message keeps head and tail within the cap, is owner-only, and wakes nothing"
 
-# A list cut by its bound never lets the shared cursor skip the other list's
-# unread entries, and every entry arrives exactly once across pages.
+# Without --after each list is a snapshot of its newest rows, so the phone
+# never stalls past 20 mirrored messages; with --after, a list cut by its bound
+# never lets the shared cursor skip the other list's unread entries, and every
+# entry arrives exactly once across pages.
 home=$(make_home mate-pages)
 i=0
 while [ "$i" -lt 25 ]; do
@@ -532,18 +534,34 @@ while [ "$i" -lt 25 ]; do
 done
 seed_note "$home" 1700000000-late
 run_inbox "$home" reply 1700000000-late "a late reply" >/dev/null || fail "late reply failed"
-page=$(run_inbox "$home" receipts) || fail "first page failed"
+page=$(run_inbox "$home" receipts) || fail "the snapshot failed"
 assert_equals "20" "$(printf '%s' "$page" | json_len mate)" "mirrored messages are bounded to 20"
-assert_equals "0" "$(printf '%s' "$page" | json_len replies)" \
-  "a reply after the cut is held for the next page"
+assert_equals "000000000006" "$(printf '%s' "$page" | json_get mate 0 cursor)" \
+  "the snapshot holds the newest mirrored messages, not the oldest"
+assert_equals "message 24" "$(printf '%s' "$page" | json_get mate 19 body)" \
+  "the snapshot ends at the newest mirrored message"
+assert_equals "000000000026" "$(printf '%s' "$page" | cursors replies)" "the snapshot holds the newest reply"
 assert_contains "$page" "mirrored messages omitted by bound: 5" "receipts disclose the omitted mirrored messages"
 assert_contains "$page" "pass --all-mate" "omission names the flag that reveals mirrored messages"
+assert_equals "000000000026" "$(printf '%s' "$page" | json_get reply_cursor)" \
+  "the snapshot's cursor is the newest entry in either list"
+mate "$home" "after the snapshot" --id m25 --turn operational >/dev/null || fail "mirrored message 25 failed"
+page=$(run_inbox "$home" receipts --after 000000000026) || fail "the page after the snapshot failed"
+assert_equals "000000000027" "$(printf '%s' "$page" | cursors mate)" \
+  "a reader continuing from the snapshot gets only what came after it"
+assert_equals "0" "$(printf '%s' "$page" | json_len replies)" "the snapshot's reply is not repeated"
+
+page=$(run_inbox "$home" receipts --after 000000000000) || fail "first page failed"
+assert_equals "20" "$(printf '%s' "$page" | json_len mate)" "an --after page is bounded to 20"
+assert_equals "000000000001" "$(printf '%s' "$page" | json_get mate 0 cursor)" "an --after page starts oldest first"
+assert_equals "0" "$(printf '%s' "$page" | json_len replies)" \
+  "a reply after the cut is held for the next page"
 cursor=$(printf '%s' "$page" | json_get reply_cursor)
 assert_equals "000000000020" "$cursor" "the cursor stops at the cut"
 page=$(run_inbox "$home" receipts --after "$cursor") || fail "second page failed"
-assert_equals "5" "$(printf '%s' "$page" | json_len mate)" "the second page carries the rest of the mirrored messages"
+assert_equals "6" "$(printf '%s' "$page" | json_len mate)" "the second page carries the rest of the mirrored messages"
 assert_equals "000000000026" "$(printf '%s' "$page" | cursors replies)" "the second page carries the held reply"
-assert_equals "25" "$(run_inbox "$home" receipts --all-mate | json_len mate)" "--all-mate reveals every mirrored message"
+assert_equals "26" "$(run_inbox "$home" receipts --all-mate | json_len mate)" "--all-mate reveals every mirrored message"
 pass "bounded pages of replies and mirrored messages never skip or repeat an entry"
 
 # A mirrored message without a valid sequence or turn is malformed, and the
