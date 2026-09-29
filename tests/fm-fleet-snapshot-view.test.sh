@@ -1152,6 +1152,38 @@ EOF
   pass "home-summary excludes kind=secondmate from unowned_current and terminal_in_flight"
 }
 
+test_gitea_pr_url_recognized() {
+  local home fakebin out
+  home=$(make_home gitea-pr)
+  mkdir -p "$home/projects/gitea-worktree"
+  cat > "$home/data/backlog.md" <<'EOF'
+## Done
+- [x] gitea-done - Gitea Done Task https://gitea.example.com/acme/widgets/pulls/12 (repo: acme) (kind: ship) (merged 2026-08-01)
+EOF
+  fm_write_meta "$home/state/gitea-task.meta" \
+    "window=firstmate:fm-gitea-task" \
+    "worktree=$home/projects/gitea-worktree" \
+    "project=acme" \
+    "harness=claude" \
+    "kind=ship" \
+    "mode=ship" \
+    "yolo=off"
+  printf 'done [at=1]: PR https://gitea.example.com/acme/widgets/pulls/12 checks green risk=low touches=none\n' \
+    > "$home/state/gitea-task.status"
+  fakebin=$(make_fakebin "$home")
+  out=$(PATH="$fakebin:$PATH" FM_HOME="$home" "$SNAPSHOT" --json)
+  printf '%s' "$out" | jq -e '
+    .backlog.records[] | select(.id == "gitea-done")
+    | .pr_url == "https://gitea.example.com/acme/widgets/pulls/12"
+  ' >/dev/null || fail "Gitea pulls URL must parse as backlog pr_url: $out"
+  printf '%s' "$out" | jq -e '
+    .tasks[] | select(.id == "gitea-task")
+    | .pr.url == "https://gitea.example.com/acme/widgets/pulls/12"
+      and .pr.source == "status_event"
+  ' >/dev/null || fail "Gitea pulls URL must be recognized from the status log fallback: $out"
+  pass "Gitea pulls PR URLs are recognized in backlog links and the status-log fallback"
+}
+
 test_milestone_waters_tags_leave_title() {
   local home out
   home=$(make_home milestone-waters-title)
@@ -1168,6 +1200,7 @@ EOF
   pass "milestone and waters tags parse and are stripped from the title"
 }
 
+test_gitea_pr_url_recognized
 test_empty_fleet_json
 test_fixture_snapshot_json
 test_home_summary_excludes_secondmate_from_child_inventory

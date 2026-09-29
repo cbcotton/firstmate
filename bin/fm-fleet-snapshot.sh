@@ -382,8 +382,9 @@ status_event_json() {  # <observed-status-log> [<contract-path>]
 }
 
 first_pr_url_in_file() {  # <file>
+  # /pull/<n> is GitHub's shape; /pulls/<n> is Gitea's.
   [ -f "$1" ] || return 1
-  grep -Eo 'https?://[^[:space:])"]+/pull/[0-9]+' "$1" 2>/dev/null | head -1
+  grep -Eo 'https?://[^[:space:])"]+/pulls?/[0-9]+' "$1" 2>/dev/null | head -1
 }
 
 backlog_json() {  # [<backlog-path>] - defaults to this home's $BACKLOG
@@ -513,7 +514,8 @@ backlog_json() {  # [<backlog-path>] - defaults to this home's $BACKLOG
              done:metadata_word($rest; "done"),
              completion:completion($rest),
              links:links($rest),
-             pr_url:((links($rest) | map(select(test("/pull/[0-9]+"))) | .[0]) // null),
+             # /pull/<n> matches GitHub; /pulls/<n> matches Gitea.
+             pr_url:((links($rest) | map(select(test("/pulls?/[0-9]+"))) | .[0]) // null),
              report_path:cap($rest; ".*(?<v>data/[^[:space:])]+/report\\.md).*"),
              local_note:local_note($rest),
              raw:$line,
