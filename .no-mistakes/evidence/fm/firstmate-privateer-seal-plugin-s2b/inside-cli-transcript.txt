@@ -1,0 +1,15 @@
+## home without config/privateer
+$ env -u TMUX bin/fm-privateer.sh inside
+[exit 3]
+## sealed home (config/privateer present)
+$ env -u TMUX bin/fm-privateer.sh inside
+fm-privateer: refused: this is a sealed Privateer home, and this process runs outside its session, so it may act on nothing here; stop, and tell the captain to attach with bin/fm-privateer.sh attach and give the ask to the Privateer first mate there; never drive the Privateer session from outside
+[exit 1]
+$ TMUX=/tmp/tmux-501/default,1,0 bin/fm-privateer.sh inside
+fm-privateer: refused: this is a sealed Privateer home, and this process runs outside its session, so it may act on nothing here; stop, and tell the captain to attach with bin/fm-privateer.sh attach and give the ask to the Privateer first mate there; never drive the Privateer session from outside
+[exit 1]
+$ TMUX=/tmp/somewhere/fm-privateer-3cc66d4f1954,1,0 bin/fm-privateer.sh inside
+[exit 0]
+$ bin/fm-privateer.sh inside extra
+usage: fm-privateer.sh check | inside | launch-env | start | attach | stop
+[exit 2]

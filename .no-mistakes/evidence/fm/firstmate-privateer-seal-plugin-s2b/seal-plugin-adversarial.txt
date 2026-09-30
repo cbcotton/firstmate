@@ -1,0 +1,33 @@
+## inside the sealed session (TMUX names the home socket)
+mode hooks: tool.execute.before,tool.execute.after,chat.message
+ok   DENY  "tmux -L default send-keys -t fleet 'rm -rf x' Enter"
+ok   DENY  "tmux -S /tmp/tmux-501/default capture-pane -p"
+ok   DENY  "TMUX= tmux send-keys -t 0 hi"
+ok   DENY  "unset TMUX; tmux ls"
+ok   DENY  "env -u TMUX tmux ls"
+ok   DENY  "env -i PATH=/usr/bin tmux ls"
+ok   DENY  "bash -c 'tmux -L other ls'"
+ok   DENY  "echo $(tmux -Lx ls)"
+ok   DENY  "eval tmux -S /tmp/s ls"
+ok   DENY  "sh <<'EOF'\ntmux -L x ls\nEOF"
+ok   DENY  "/opt/homebrew/bin/tmux -uL other ls"
+ok   DENY  "export TMUX=/tmp/x,1,0; tmux ls"
+ok   ALLOW "tmux ls"
+ok   ALLOW "tmux send-keys -t worker 'hi' Enter"
+ok   ALLOW "tmux new-window -c /tmp -n w"
+ok   ALLOW "grep -n TMUX bin/fm-send.sh"
+ok   ALLOW "ls -L /tmp"
+third result carries budget msg: true
+4th call: refused: three refusals in a row: stop, report the last refusal to the captain, and wait; 
+4th fm call blocked: true | reading script still allowed: true
+[exit 0]
+## outside the session (no TMUX)
+hooks: event,tool.execute.before
+read refused: fm-privateer: refused: this is a sealed Privateer home, and this process runs outside its session, s
+bash refused: fm-privateer: refused: this is a sealed Privateer home, and this process runs outside its session, s
+edit refused: fm-privateer: refused: this is a sealed Privateer home, and this process runs outside its session, s
+operational inputs injected (should be 1): 1 | names socket: false
+marked text starts: "⁣FIRSTMATE_OP: v1 privateer-seal: fm-privateer: refused: thi"
+[exit 0]
+## non-Privateer home (no config/privateer)
+hooks: []
