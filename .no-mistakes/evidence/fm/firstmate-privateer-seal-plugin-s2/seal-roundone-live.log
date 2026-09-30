@@ -1,0 +1,100 @@
+Note: switching to 'd0c5b8bc940116e2e2e564af43dbf48fe2b7f892'.
+
+You are in 'detached HEAD' state. You can look around, make experimental
+changes and commit them, and you can discard any commits you make in this
+state without impacting any branches by switching back to a branch.
+
+If you want to create a new branch to retain commits you create, you may
+do so (now or later) by using -c with the switch command. Example:
+
+  git switch -c <new-branch-name>
+
+Or undo this operation with:
+
+  git switch -
+
+Turn off this advice by setting config variable advice.detachedHead to false
+
+opencode rc=0
+tool result seen by model: fm-privateer: refused: this is a sealed Privateer home, and this process runs outside its session, so it may act on nothing here; stop, and tell the captain to attach with bin/fm-privateer.sh attach and give the ask to the Privateer first mate there; never drive the Privateer session from outside
+⁣FIRSTMATE_OP: v1 privateer-seal: fm-privateer: refused: this is a sealed Privateer home, and this process runs outside its session, so it may act on nothing here; stop, and tell the captain to attach with bin/fm-privateer.sh attach and give the ask to the Privateer first mate there; never drive the Privateer session from outside
+ok - outside OpenCode inheriting a foreign non-Privateer FM_HOME is still sealed; bash did not run
+Note: switching to 'd0c5b8bc940116e2e2e564af43dbf48fe2b7f892'.
+
+You are in 'detached HEAD' state. You can look around, make experimental
+changes and commit them, and you can discard any commits you make in this
+state without impacting any branches by switching back to a branch.
+
+If you want to create a new branch to retain commits you create, you may
+do so (now or later) by using -c with the switch command. Example:
+
+  git switch -c <new-branch-name>
+
+Or undo this operation with:
+
+  git switch -
+
+Turn off this advice by setting config variable advice.detachedHead to false
+
+Note: switching to 'd0c5b8bc940116e2e2e564af43dbf48fe2b7f892'.
+
+You are in 'detached HEAD' state. You can look around, make experimental
+changes and commit them, and you can discard any commits you make in this
+state without impacting any branches by switching back to a branch.
+
+If you want to create a new branch to retain commits you create, you may
+do so (now or later) by using -c with the switch command. Example:
+
+  git switch -c <new-branch-name>
+
+Or undo this operation with:
+
+  git switch -
+
+Turn off this advice by setting config variable advice.detachedHead to false
+
+opencode rc=0
+step1 result: refused: inside the Privateer session, tmux reaches only this session's own server, so a tmux command that names another server with -L or -S, or changes TMUX, is blocked; steer a worker with bin/fm-send.sh, and ask the captain for anything outside this session
+ok - checkout outside its sealed home with FM_HOME+TMUX of that home gets inside rules: foreign tmux refused, ordinary bash runs
+Note: switching to 'd0c5b8bc940116e2e2e564af43dbf48fe2b7f892'.
+
+You are in 'detached HEAD' state. You can look around, make experimental
+changes and commit them, and you can discard any commits you make in this
+state without impacting any branches by switching back to a branch.
+
+If you want to create a new branch to retain commits you create, you may
+do so (now or later) by using -c with the switch command. Example:
+
+  git switch -c <new-branch-name>
+
+Or undo this operation with:
+
+  git switch -
+
+Turn off this advice by setting config variable advice.detachedHead to false
+
+opencode rc=0
+--- result after step 1:
+refused: probe refusal 1
+--- result after step 2:
+refused: probe refusal 2
+--- result after step 3:
+#!/bin/sh
+echo run >> "$FM_HOME/state/probe-runs"
+echo "refused: probe refusal $(wc -l < "$FM_HOME/state/probe-runs" | tr -d ' ')" >&2
+--- result after step 4:
+3:echo "refused: probe refusal $(wc -l < "$FM_HOME/state/probe-runs" | tr -d ' ')" >&2
+--- result after step 5:
+refused: probe refusal 3
+
+
+refused: three refusals in a row: stop, report the last refusal to the captain, and wait; no firstmate script runs again until the captain answers (the last refusal: refused: probe refusal 3)
+--- result after step 6:
+#!/bin/sh
+echo run >> "$FM_HOME/state/probe-runs"
+echo "refused: probe refusal $(wc -l < "$FM_HOME/state/probe-runs" | tr -d ' ')" >&2
+exit 1
+--- result after step 7:
+refused: three refusals in a row: stop, report the last refusal to the captain, and wait; no firstmate script runs again until the captain answers (the last refusal: refused: probe refusal 3)
+ok - reading/grepping/cat-ing a bin/fm-* script neither resets nor is blocked; budget still spent on the third refusal; nested call blocked
+# all round-one live scenarios passed
