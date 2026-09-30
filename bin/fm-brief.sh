@@ -120,6 +120,12 @@
 # a later scout promotion could not outrank), stops the scaffold before
 # anything is written. Secondmate charters never take it.
 # Refuses to overwrite an existing brief.
+# Also refuses an unknown --flag (the project is the second positional argument,
+# never a flag) and a task id that is a keyword such as scout, ship, or mode,
+# which means the arguments were given in the wrong shape.
+# In a home with config/privateer, the <repo-name> of a ship or scout brief is
+# checked with `fm-project-mode.sh --registered` and an unregistered name is
+# refused; any other home briefs an unregistered repo without comment.
 # Refuses (exit 2) in a sealed Privateer home outside its session
 # (bin/fm-privateer-lib.sh).
 set -eu
@@ -230,10 +236,21 @@ for a in "$@"; do
     # brief input. Refuse it loudly so it is never silently dropped here and then
     # believed to have been recorded.
     --yolo|--yolo=*) echo "error: --yolo is not a brief input; pass it to bin/fm-spawn.sh, which records the task's merge posture" >&2; exit 1 ;;
+    --*)
+      echo "error: unknown flag '$a'; accepted flags: --scout --secondmate --herdr-lab --no-projects --mode --branch-prefix --forge --shape (the project is the second positional argument, never a flag)" >&2
+      exit 1 ;;
     *) POS+=("$a") ;;
   esac
 done
 [ -z "$want_value" ] || { echo "error: --$want_value requires a value" >&2; exit 1; }
+
+# A task id that is really a verb or a flag word means the arguments were given
+# in the wrong shape; name the right one instead of a misleading downstream error.
+case "${POS[0]:-}" in
+  scout|ship|secondmate|mode|forge|shape|yolo|project|herdr-lab|no-projects|branch-prefix)
+    echo "error: '${POS[0]}' is a keyword, not a task id; did you mean: fm-brief.sh <task-id> <repo-name> --mode <mode>  (or --scout for a scout brief)?" >&2
+    exit 1 ;;
+esac
 
 # Ship delivery mode is an explicit per-task decision (AGENTS.md section 7). A
 # missing or invalid value stops the scaffold rather than silently defaulting.
@@ -292,6 +309,15 @@ if ! git check-ref-format --branch "$BRANCH" >/dev/null 2>&1; then
   exit 1
 fi
 printf -v BRANCH_Q '%q' "$BRANCH"
+
+# A sealed Privateer home works only on registered projects, so it refuses an
+# unregistered repo name before anything is written.
+if [ "$KIND" != secondmate ] && { [ -e "$CONFIG/privateer" ] || [ -L "$CONFIG/privateer" ]; }; then
+  if ! FM_HOME="$FM_HOME" FM_DATA_OVERRIDE="$DATA" "$SCRIPT_DIR/fm-project-mode.sh" --registered "${POS[1]}"; then
+    echo "error: '${POS[1]}' is not a registered project in $DATA/projects.md; a Privateer home briefs only registered projects" >&2
+    exit 1
+  fi
+fi
 
 if [ "$KIND" = secondmate ] && [ "$HERDR_LAB" -eq 1 ]; then
   echo "error: --herdr-lab applies only to crewmate ship or scout briefs" >&2

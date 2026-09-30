@@ -1031,11 +1031,11 @@ test_worker_role_scope() {
   home="$TMP_ROOT/worker-role"
   for kind in no-mistakes direct-PR local-only scout; do
     if [ "$kind" = scout ]; then
-      FM_HOME="$home" "$ROOT/bin/fm-brief.sh" "$kind" arbitrary-project-name --scout >/dev/null || fail "scout scaffold failed"
+      FM_HOME="$home" "$ROOT/bin/fm-brief.sh" "role-$kind" arbitrary-project-name --scout >/dev/null || fail "scout scaffold failed"
     else
-      FM_HOME="$home" "$ROOT/bin/fm-brief.sh" "$kind" arbitrary-project-name --mode "$kind" >/dev/null || fail "$kind scaffold failed"
+      FM_HOME="$home" "$ROOT/bin/fm-brief.sh" "role-$kind" arbitrary-project-name --mode "$kind" >/dev/null || fail "$kind scaffold failed"
     fi
-    brief="$home/data/$kind/brief.md"
+    brief="$home/data/role-$kind/brief.md"
     assert_no_grep '# Current worker role contract' "$brief" "$kind scaffolded a second owner of the role scope fm-spawn.sh delivers"
   done
   FM_HOME="$home" FM_SECONDMATE_CHARTER='Supervise assigned work.' \

@@ -941,7 +941,8 @@ With the flag present, bootstrap reports each violation as `PRIVATEER: <violatio
 - The origin of the checkout and of every clone under `projects/`, in https, http, ssh, or scp form, must not be on a host that is, or is under, `anthropic.com`, `claude.ai`, or `claude.com`, and the egress proxy never allows such a host.
 - An endpoint's host is read from its authority, which ends at the first `/`, `?`, or `#`; an authority carrying userinfo or a backslash is refused, so no endpoint can hide a public host behind a private-looking suffix.
 
-A spawn in a Privateer home is also refused for a secondmate, a raw launch command, any harness but `opencode`, a missing `--sailor`, or a ship mode other than `local-only`.
+A spawn in a Privateer home is also refused for a project directory outside the home's `projects/`, a secondmate, a raw launch command, any harness but `opencode`, a missing `--sailor`, or a ship mode other than `local-only`.
+`bin/fm-brief.sh` in a Privateer home likewise refuses a ship or scout brief for a repo that has no row in `data/projects.md`.
 With no `sailor_fallback`, work waits in the queue while every sailor is down; a struggling sailor is retried on another local sailor or goes to the captain, never to a hosted model.
 Version 1 ships local-only because the shared no-mistakes daemon's agent resolves to Claude; a Privateer-only pipeline instance is later work, and the shared daemon is never switched.
 
