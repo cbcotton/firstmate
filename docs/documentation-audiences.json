@@ -405,6 +405,42 @@
       "audience": "maintainer-architecture"
     },
     {
+      "path": "docs/privateer/AGENTS.md",
+      "audience": "agent-runtime"
+    },
+    {
+      "path": "docs/privateer/agents/privateer.md",
+      "audience": "agent-runtime"
+    },
+    {
+      "path": "docs/privateer/skills/ask-user-authority/SKILL.md",
+      "audience": "agent-runtime"
+    },
+    {
+      "path": "docs/privateer/skills/captain-hold-lifecycle/SKILL.md",
+      "audience": "agent-runtime"
+    },
+    {
+      "path": "docs/privateer/skills/diagnostic-reasoning/SKILL.md",
+      "audience": "agent-runtime"
+    },
+    {
+      "path": "docs/privateer/skills/privateer-sailors/SKILL.md",
+      "audience": "agent-runtime"
+    },
+    {
+      "path": "docs/privateer/skills/scout-completion/SKILL.md",
+      "audience": "agent-runtime"
+    },
+    {
+      "path": "docs/privateer/skills/ship-landing/SKILL.md",
+      "audience": "agent-runtime"
+    },
+    {
+      "path": "docs/privateer/skills/stuck-crewmate-recovery/SKILL.md",
+      "audience": "agent-runtime"
+    },
+    {
       "path": "docs/remote-secondmates.md",
       "audience": "operator-current"
     },

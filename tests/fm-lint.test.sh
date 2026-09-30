@@ -801,6 +801,8 @@ test_changed_mode_hides_cross_file_codes_that_ci_still_sees() {
   cp "$LINT" "$lint"
   cp "$ROOT/bin/fm-lint-workflows.sh" "$test_root/bin/"
   cp "$ROOT"/.github/workflows/* "$test_root/.github/workflows/"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$test_root/bin/fm-privateer-rulebook-check.sh"
+  chmod +x "$test_root/bin/fm-privateer-rulebook-check.sh"
   printf '#!/usr/bin/env bash\nexit 0\n' > "$test_root/bin/backends/noop.sh"
   fixture="$test_root/tests/fm-lint-local-exclude-fixture.test.sh"
   cat > "$fixture" <<'SH'
@@ -1167,7 +1169,8 @@ SH
 #!/usr/bin/env bash
 exit 0
 SH
-  chmod +x "$lint_copy" "$tmp/repo/bin/fm-lint-workflows.sh"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$tmp/repo/bin/fm-privateer-rulebook-check.sh"
+  chmod +x "$lint_copy" "$tmp/repo/bin/fm-lint-workflows.sh" "$tmp/repo/bin/fm-privateer-rulebook-check.sh"
   fm_lint_stub_shellcheck "$fakebin" "$log"
 
   for invocation in \
@@ -1196,6 +1199,42 @@ SH
       "lint did not identify the backend-boundary violation: $invocation"
   done
   pass "fm-lint.sh rejects direct Beads CLI invocations in firstmate core"
+}
+
+test_default_path_runs_the_privateer_rulebook_check() {
+  local tmp fakebin log repo out rc
+  tmp=$(fm_test_tmproot fm-lint-privateer-rulebook)
+  fakebin=$(fm_fakebin "$tmp")
+  log="$tmp/shellcheck.log"
+  repo="$tmp/repo"
+  mkdir -p "$repo/bin/backends" "$repo/tests"
+  repo=$(cd "$repo" && pwd -P)
+  cp "$LINT" "$repo/bin/fm-lint.sh"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$repo/bin/fm-lint-workflows.sh"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$repo/bin/backends/noop.sh"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$repo/tests/noop.test.sh"
+  # A rulebook check that finds one violation and records how it was called.
+  cat > "$repo/bin/fm-privateer-rulebook-check.sh" <<SH
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >> '$tmp/rulebook.log'
+echo "docs/privateer/AGENTS.md names bin/fm-gone.sh, which is not in this checkout"
+exit 1
+SH
+  chmod +x "$repo/bin/fm-lint.sh" "$repo/bin/fm-lint-workflows.sh" "$repo/bin/fm-privateer-rulebook-check.sh"
+  fm_lint_stub_shellcheck "$fakebin" "$log"
+
+  rc=0
+  out=$(cd "$repo" && CI=true PATH="$fakebin:$PATH" "$repo/bin/fm-lint.sh" 2>&1) || rc=$?
+  [ "$rc" -eq 1 ] || fail "a failing rulebook check did not fail the default lint run (exit $rc)"$'\n'"$out"
+  assert_contains "$out" "names bin/fm-gone.sh" "the default lint run did not report the rulebook violation"
+  assert_equals "--root $repo" "$(cat "$tmp/rulebook.log" 2>/dev/null)" \
+    "the default lint run must check the rulebook of the checkout it lints"
+
+  rc=0
+  out=$(cd "$repo" && PATH="$fakebin:$PATH" "$repo/bin/fm-lint.sh" "$repo/tests/noop.test.sh" 2>&1) || rc=$?
+  [ "$rc" -eq 0 ] || fail "an explicit-path lint ran the rulebook check (exit $rc)"$'\n'"$out"
+  assert_not_contains "$out" "fm-gone" "an explicit-path lint must stay a ShellCheck-only run"
+  pass "fm-lint.sh's default path fails on a Privateer rulebook violation, and explicit paths skip that check"
 }
 
 test_rejects_direct_beads_cli_in_explicit_core_path() {
@@ -1737,7 +1776,8 @@ SH
 exit 0
 SH
   printf '#!/usr/bin/env bash\nbd close fm-example\n' > "$tmp/repo/bin/direct-beads.sh"
-  chmod +x "$tmp/repo/bin/fm-lint.sh" "$tmp/repo/bin/fm-lint-workflows.sh"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$tmp/repo/bin/fm-privateer-rulebook-check.sh"
+  chmod +x "$tmp/repo/bin/fm-lint.sh" "$tmp/repo/bin/fm-lint-workflows.sh" "$tmp/repo/bin/fm-privateer-rulebook-check.sh"
   fm_lint_stub_shellcheck "$fakebin" "$log"
 
   # Every ShellCheck root passes, then the backend-purity check fails the run:
@@ -1884,6 +1924,7 @@ test_missing_shellcheck_fails_closed
 test_rejects_wrong_shellcheck_version
 test_catches_a_real_lint_defect
 test_rejects_direct_beads_cli_invocations
+test_default_path_runs_the_privateer_rulebook_check
 test_rejects_direct_beads_cli_in_explicit_core_path
 test_ignores_ambient_shellcheck_opts
 test_clean_fixture_passes
