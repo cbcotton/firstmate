@@ -148,7 +148,7 @@ run_launcher() {
   shift 3
   ANTHROPIC_API_KEY=sk-secret ANTHROPIC_BASE_URL=https://api.anthropic.com CLAUDE_CODE_OAUTH_TOKEN=tok \
     CLAUDECODE=1 CLAUDE_CONFIG_DIR=/captain/.claude OPENAI_API_KEY=oai FMX_PAIRING_TOKEN=relay \
-    TMUX=outer,1,0 TMUX_PANE=%9 SSH_AUTH_SOCK=/captain/agent \
+    TERMINFO=/captain/terminfo TERMINFO_DIRS=/captain/terminfo.d TMUX=outer,1,0 TMUX_PANE=%9 SSH_AUTH_SOCK=/captain/agent \
     PATH="$dir/fakebin:$PATH" FM_TEST_SEAM=1 FM_PRIVATEER_PRIMARY="$dir/stub-primary" \
     FM_HOME="$home" FM_ROOT_OVERRIDE="$root" "$PRIVATEER" "$@" 2>&1
 }
@@ -413,6 +413,8 @@ test_start_passes_only_the_allowlist() {
   wait_for_file "$envlog" || fail "the stub first mate never ran; tmux log: $(cat "$dir/tmux.log" 2>/dev/null)"
   ! grep -E '^(ANTHROPIC_|CLAUDE_|CLAUDECODE=|OPENAI_|FMX_|SSH_AUTH_SOCK=|FM_TEST_SEAM=|FM_PRIVATEER_PRIMARY=)' "$envlog" \
     || fail "a forbidden or unlisted variable reached the first mate:"$'\n'"$(grep -E '^(ANTHROPIC_|CLAUDE_|CLAUDECODE=|OPENAI_|FMX_|SSH_AUTH_SOCK=|FM_TEST_SEAM=|FM_PRIVATEER_PRIMARY=)' "$envlog")"
+  assert_grep "TERMINFO=/captain/terminfo" "$envlog" "TERMINFO must survive so the session finds the captain's terminal description"
+  assert_grep "TERMINFO_DIRS=/captain/terminfo.d" "$envlog" "TERMINFO_DIRS must survive alongside TERMINFO"
   assert_grep "FM_HOME=$home_real" "$envlog" "the first mate must receive FM_HOME"
   assert_grep "XDG_CONFIG_HOME=$home_real/state/privateer/opencode/config" "$envlog" "OpenCode's config directory must sit inside the home"
   assert_grep "XDG_DATA_HOME=$home_real/state/privateer/opencode/data" "$envlog" "OpenCode's data directory must sit inside the home"
