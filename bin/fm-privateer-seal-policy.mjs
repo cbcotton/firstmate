@@ -15,8 +15,11 @@
 // runs any byte of the submitted command. Syntax that tokenizer cannot read is
 // denied only when its raw text names tmux together with -L, -S, or TMUX.
 //
-// The refusal budget: a firstmate-script call is a command naming a bin/fm-*
-// script, and its result is a refusal when the first non-blank line of its
+// The refusal budget: a firstmate-script call is a command that runs a bin/fm-*
+// script, in its command position or a shell's script argument, directly or in
+// any program nested the way the tmux rule finds them; reading, listing, or
+// searching the scripts is not a call. Syntax the tokenizer cannot read is a
+// call when its raw text names a bin/fm-* script. Its result is a refusal when the first non-blank line of its
 // output reads `error:` or `refused:`, in any case, optionally after one
 // `<name>: ` prefix. REFUSAL_BUDGET such results in a row, with no other
 // firstmate-script result and no captain message between them, spend the
@@ -124,8 +127,28 @@ export function tmuxDecision(command) {
   return reachesAnotherServer(command, 0) ? TMUX_REASON : "";
 }
 
+const FIRSTMATE_SCRIPT = /(?:^|[^A-Za-z0-9_.-])bin\/fm-[A-Za-z0-9_.-]+/;
+
+function isFirstmateScript(word) {
+  return Boolean(word) && /(?:^|\/)bin\/fm-[A-Za-z0-9_.-]+$/.test(word.value);
+}
+
+function runsFirstmateScript(command, depth) {
+  if (depth > 12) return FIRSTMATE_SCRIPT.test(command);
+  const lexed = new Lexer(command).tokenize();
+  if (lexed.error) return FIRSTMATE_SCRIPT.test(command);
+  for (const tokens of splitProgram(lexed.tokens).nodes) {
+    const position = commandPosition(tokens);
+    if (nestedPrograms(tokens, position).some((program) => runsFirstmateScript(program, depth + 1))) return true;
+    if (isFirstmateScript(position.command)) return true;
+    const args = position.words.slice(position.index + 1);
+    if (SHELLS.has(basename(position.command?.value || "")) && isFirstmateScript(args.find((word) => !word.value.startsWith("-")))) return true;
+  }
+  return false;
+}
+
 export function callsFirstmateScript(command) {
-  return typeof command === "string" && /(?:^|[^A-Za-z0-9_.-])bin\/fm-[A-Za-z0-9_.-]+/.test(command);
+  return typeof command === "string" && Boolean(command) && runsFirstmateScript(command, 0);
 }
 
 // refusalLine <output>: the refusal's first line, or "" when the output is not one.
