@@ -1,0 +1,15 @@
+## state/s6-byname.meta after 'bin/fm-spawn.sh s6-byname alpha --scout claude'
+window=primary:fm-s6-byname
+endpoint_task_id=s6-byname
+worktree=/Users/cotton/.treehouse/alpha-8cfbec/1/alpha
+project=/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-lab.bRbpwU/projects/alpha
+harness=claude
+kind=scout
+tasktmp=/tmp/fm-s6-byname
+model=default
+effort=default
+dispatched_at=1790783783
+busy_gen=g1790783783.72425.21139
+spawn_gen=s1790783783.71160.5232
+decisions_reviewed=1
+decision_keys=

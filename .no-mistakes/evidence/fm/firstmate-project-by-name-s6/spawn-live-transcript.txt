@@ -1,0 +1,56 @@
+# fm-spawn.sh driven in lab tmux pane (tmux -L fm-lab, FM_HOME=$LAB); registry: alpha (clone in projects/alpha), alphabet (no clone)
+## refusals
+$ bin/fm-spawn.sh s6-priv --project alpha --scout claude
+fm-gate-refuse: gate agent lifecycle permitted only against lab home $LAB
+error: unknown flag '--project'; accepted flags: --scout --secondmate --relaunch --harness --model --effort --sailor --backend --mode --yolo --branch-prefix --traceparent (the project is a positional argument, never a flag)
+[exit 1]
+
+$ bin/fm-spawn.sh s6-priv alpha --project alpha --scout
+fm-gate-refuse: gate agent lifecycle permitted only against lab home $LAB
+error: unknown flag '--project alpha'; accepted flags: --scout --secondmate --relaunch --harness --model --effort --sailor --backend --mode --yolo --branch-prefix --traceparent (the project is a positional argument, never a flag)
+[exit 1]
+
+$ bin/fm-spawn.sh s6-priv alpha --scout --bogus claude
+fm-gate-refuse: gate agent lifecycle permitted only against lab home $LAB
+error: unknown flag '--bogus'; accepted flags: --scout --secondmate --relaunch --harness --model --effort --sailor --backend --mode --yolo --branch-prefix --traceparent (the project is a positional argument, never a flag)
+[exit 1]
+
+$ bin/fm-spawn.sh s6-priv nosuchproject --scout claude
+fm-gate-refuse: gate agent lifecycle permitted only against lab home $LAB
+bin/fm-spawn.sh: line 3231: cd: nosuchproject: No such file or directory
+error: project 'nosuchproject' is not a registered project with a clone under projects/, nor a directory; pass a registered project name or projects/<name>
+[exit 1]
+
+$ bin/fm-spawn.sh s6-priv alphabet --scout claude
+fm-gate-refuse: gate agent lifecycle permitted only against lab home $LAB
+bin/fm-spawn.sh: line 3231: cd: alphabet: No such file or directory
+error: project 'alphabet' is not a registered project with a clone under projects/, nor a directory; pass a registered project name or projects/<name>
+[exit 1]
+
+## spawn by registered name
+$ bin/fm-spawn.sh s6-byname alpha --scout claude
+fm-gate-refuse: gate agent lifecycle permitted only against lab home $LAB
+spawned s6-byname harness=claude kind=scout window=primary:fm-s6-byname worktree=/Users/cotton/.treehouse/alpha-8cfbec/1/alpha
+[exit 0]
+
+## Privateer home (config/privateer present)
+$ bin/fm-spawn.sh s6-priv $LAB/elsewhere/outside --scout claude
+fm-gate-refuse: gate agent lifecycle permitted only against lab home $LAB
+error: the Privateer quarantine refuses a project directory outside projects/; pass a registered project name
+[exit 1]
+
+$ bin/fm-spawn.sh s6-priv alpha --scout claude
+fm-gate-refuse: gate agent lifecycle permitted only against lab home $LAB
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+error: the Privateer quarantine refuses every spawn until this home satisfies it:
+error:   config/crew-harness must hold opencode
+error:   config/sailor-sandbox is absent; every Privateer sailor runs inside the sandbox
+error:   config/crew-dispatch.json is absent; a Privateer home dispatches only to the sailors it names
+[exit 1]
+
+$ bin/fm-spawn.sh s6-priv $LAB/projects/../elsewhere/outside --scout claude
+fm-gate-refuse: gate agent lifecycle permitted only against lab home $LAB
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+error: the Privateer quarantine refuses a project directory outside projects/; pass a registered project name
+[exit 1]
+

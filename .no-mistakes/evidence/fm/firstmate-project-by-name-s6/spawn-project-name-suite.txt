@@ -1,0 +1,9 @@
+ok - fm-spawn.sh: a registered project name resolves to projects/<name>
+ok - fm-spawn.sh: an unregistered name, or one with no clone, is refused with an explanation
+ok - fm-spawn.sh: an unknown --flag is refused with the accepted list, never read as a harness
+ok - fm-spawn.sh: only a Privateer home refuses a project directory outside projects/
+ok - fm-project-mode.sh: --registered answers by exit status alone and matches whole names
+ok - fm-brief.sh: keyword task ids and unknown flags are refused with a correction, writing nothing
+ok - fm-brief.sh: an unregistered repo warns in an ordinary home and is refused in a Privateer home
+# all fm-spawn-project-name tests passed
+exit 0

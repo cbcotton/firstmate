@@ -1,0 +1,61 @@
+## fm-brief.sh (ordinary lab home, no config/privateer)
+$ bin/fm-brief.sh scout my-task alpha
+error: 'scout' is a keyword, not a task id; did you mean: fm-brief.sh <task-id> <repo-name> --mode <mode>  (or --scout for a scout brief)?
+[exit 1]
+
+$ bin/fm-brief.sh ship my-task alpha
+error: 'ship' is a keyword, not a task id; did you mean: fm-brief.sh <task-id> <repo-name> --mode <mode>  (or --scout for a scout brief)?
+[exit 1]
+
+$ bin/fm-brief.sh secondmate my-task alpha
+error: 'secondmate' is a keyword, not a task id; did you mean: fm-brief.sh <task-id> <repo-name> --mode <mode>  (or --scout for a scout brief)?
+[exit 1]
+
+$ bin/fm-brief.sh mode alpha --mode local-only
+error: 'mode' is a keyword, not a task id; did you mean: fm-brief.sh <task-id> <repo-name> --mode <mode>  (or --scout for a scout brief)?
+[exit 1]
+
+$ bin/fm-brief.sh my-task --project alpha --mode local-only
+error: unknown flag '--project'; accepted flags: --scout --secondmate --herdr-lab --no-projects --mode --branch-prefix --forge --shape (the project is the second positional argument, never a flag)
+[exit 1]
+
+$ bin/fm-brief.sh my-task alpha --mode local-only --bogus
+error: unknown flag '--bogus'; accepted flags: --scout --secondmate --herdr-lab --no-projects --mode --branch-prefix --forge --shape (the project is the second positional argument, never a flag)
+[exit 1]
+
+$ bin/fm-brief.sh brief-reg alpha --mode local-only
+scaffolded: $LAB/data/brief-reg/brief.md (ship, mode=local-only; replace {TASK} and {FIRSTMATE_SPEC})
+[exit 0]
+
+$ bin/fm-brief.sh brief-unreg nosuchrepo --mode local-only
+warn: 'nosuchrepo' is not a registered project in $LAB/data/projects.md; briefing it anyway
+scaffolded: $LAB/data/brief-unreg/brief.md (ship, mode=local-only; replace {TASK} and {FIRSTMATE_SPEC})
+[exit 0]
+
+data dirs now: brief-reg
+brief-unreg
+projects.md
+
+## fm-project-mode.sh --registered
+$ bin/fm-project-mode.sh --registered alpha
+[exit 0]
+
+$ bin/fm-project-mode.sh --registered alph
+[exit 1]
+
+$ bin/fm-project-mode.sh --registered alphabet
+[exit 0]
+
+## fm-brief.sh in a Privateer home (touch config/privateer)
+$ bin/fm-brief.sh priv-unreg nosuchrepo --scout
+error: 'nosuchrepo' is not a registered project in $LAB/data/projects.md; a Privateer home briefs only registered projects
+[exit 1]
+
+$ bin/fm-brief.sh priv-reg alpha --scout
+scaffolded: $LAB/data/priv-reg/brief.md (scout; replace {TASK} and {FIRSTMATE_SPEC})
+[exit 0]
+
+data dirs now: brief-reg
+brief-unreg
+priv-reg
+projects.md
