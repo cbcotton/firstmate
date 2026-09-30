@@ -123,10 +123,9 @@
 # Also refuses an unknown --flag (the project is the second positional argument,
 # never a flag) and a task id that is a keyword such as scout, ship, or mode,
 # which means the arguments were given in the wrong shape.
-# The <repo-name> of a ship or scout brief is checked with
-# `fm-project-mode.sh --registered`: a home with config/privateer refuses an
-# unregistered name, and any other home prints one warning line and continues,
-# because homes legitimately brief repos they have not registered.
+# In a home with config/privateer, the <repo-name> of a ship or scout brief is
+# checked with `fm-project-mode.sh --registered` and an unregistered name is
+# refused; any other home briefs an unregistered repo without comment.
 # Refuses (exit 2) in a sealed Privateer home outside its session
 # (bin/fm-privateer-lib.sh).
 set -eu
@@ -311,17 +310,12 @@ if ! git check-ref-format --branch "$BRANCH" >/dev/null 2>&1; then
 fi
 printf -v BRANCH_Q '%q' "$BRANCH"
 
-# The repo name is checked against the registry before anything is written. A
-# sealed Privateer home works only on registered projects, so it refuses an
-# unregistered name; any other home may brief an unregistered repo and only warns.
-if [ "$KIND" != secondmate ]; then
-  REPO=${POS[1]}
-  if ! FM_HOME="$FM_HOME" FM_DATA_OVERRIDE="$DATA" "$SCRIPT_DIR/fm-project-mode.sh" --registered "$REPO"; then
-    if [ -e "$CONFIG/privateer" ] || [ -L "$CONFIG/privateer" ]; then
-      echo "error: '$REPO' is not a registered project in $DATA/projects.md; a Privateer home briefs only registered projects" >&2
-      exit 1
-    fi
-    echo "warn: '$REPO' is not a registered project in $DATA/projects.md; briefing it anyway" >&2
+# A sealed Privateer home works only on registered projects, so it refuses an
+# unregistered repo name before anything is written.
+if [ "$KIND" != secondmate ] && { [ -e "$CONFIG/privateer" ] || [ -L "$CONFIG/privateer" ]; }; then
+  if ! FM_HOME="$FM_HOME" FM_DATA_OVERRIDE="$DATA" "$SCRIPT_DIR/fm-project-mode.sh" --registered "${POS[1]}"; then
+    echo "error: '${POS[1]}' is not a registered project in $DATA/projects.md; a Privateer home briefs only registered projects" >&2
+    exit 1
   fi
 fi
 
@@ -493,6 +487,8 @@ else
 fi
 exit 0
 fi
+
+REPO=${POS[1]}
 
 if [ "$HERDR_LAB" -eq 1 ]; then
 HERDR_LAB_HELPER=$(shell_quote "$FM_ROOT/bin/fm-herdr-lab.sh")

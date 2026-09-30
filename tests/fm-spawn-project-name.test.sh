@@ -152,13 +152,6 @@ test_brief_checks_repo_name_against_registry() {
   home="$TMP_ROOT/brief-registry"
   mkdir -p "$home/data" "$home/config"
   printf '%s\n' '- alpha [no-mistakes] - x (added 2026-01-01)' > "$home/data/projects.md"
-  out=$(FM_HOME="$home" "$ROOT/bin/fm-brief.sh" reg-ok alpha --mode no-mistakes 2>&1)
-  expect_code 0 $? "a registered repo should scaffold: $out"
-  case "$out" in *warn:*) fail "a registered repo drew a warning: $out" ;; esac
-  out=$(FM_HOME="$home" "$ROOT/bin/fm-brief.sh" reg-warn nosuchrepo --mode no-mistakes 2>&1 >/dev/null)
-  expect_code 0 $? "an ordinary home should brief an unregistered repo: $out"
-  [ "$(printf '%s\n' "$out" | grep -c 'not a registered project')" -eq 1 ] || fail "expected one warning line, got: $out"
-  [ -f "$home/data/reg-warn/brief.md" ] || fail "the warned brief was not written"
   : > "$home/config/privateer"
   out=$(FM_HOME="$home" TMUX="/tmp/tmux-fake/$(session_socket "$home"),1,0" "$ROOT/bin/fm-brief.sh" reg-refuse nosuchrepo --scout 2>&1)
   status=$?
@@ -167,7 +160,7 @@ test_brief_checks_repo_name_against_registry() {
   [ ! -e "$home/data/reg-refuse" ] || fail "a refused Privateer brief left a scaffold behind"
   out=$(FM_HOME="$home" TMUX="/tmp/tmux-fake/$(session_socket "$home"),1,0" "$ROOT/bin/fm-brief.sh" reg-priv alpha --scout 2>&1)
   expect_code 0 $? "a Privateer home should brief a registered repo: $out"
-  pass "fm-brief.sh: an unregistered repo warns in an ordinary home and is refused in a Privateer home"
+  pass "fm-brief.sh: a Privateer home refuses an unregistered repo and briefs a registered one"
 }
 
 test_registered_name_resolves_to_its_clone
