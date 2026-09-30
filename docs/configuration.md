@@ -905,12 +905,14 @@ Inside the sandbox a sailor can write only to:
 
 - its own copy and that repository's Git metadata, never the repository's hooks or Git configuration;
 - its task temp directory and OpenCode's own data, state, and cache directories;
+- the flat here-document files stock macOS Bash writes directly in `/var/tmp` as `sh-thd*` (nothing beneath such an entry), because that Bash ignores `$TMPDIR` for them;
 - exactly the files its instructions tell it to write: its status line, inbox acknowledgements, busy state, the opt-in fleet ledger, its report, and its pipeline findings.
 
 The rest of this home's state and data, including the sailor's own task record and instructions, is unwritable.
 It can connect only to its sailor's endpoint, the DNS resolver, and, for a no-mistakes ship, the no-mistakes socket and gate repository.
 A sailor endpoint on this machine is pinned to its port; one on another machine allows that port on every host, because a Seatbelt rule can name only the local host or any host.
 Reads are not confined, and the sandbox is not a boundary against same-user system services that start programs outside it.
+macOS refuses a sandboxed process every setuid program, so `/bin/ps`, which only reads process information, is the one program the sandbox lets run outside it; harness detection and the session lock need it.
 
 A home with the flag refuses a sailor spawn on a machine where `sandbox-exec` cannot run, rather than launching the sailor unconfined; ordinary OpenCode workers on hosted models are unaffected.
 A home selecting the `restricted` OpenCode permission profile requires the flag: without it every sailor spawn is refused.
@@ -960,7 +962,7 @@ When the session has already ended, for example because the first mate's window 
 The first mate and every worker receive `HTTP_PROXY`, `HTTPS_PROXY`, and a `GIT_SSH_COMMAND` that tunnels Git over SSH through the proxy.
 
 The sandbox holds the session's whole tmux server, so every pane and every command started in the session inherits it: the first mate, each worker and its pane shell, and anything the first mate asks tmux to run.
-Everything inside can write only to the home, the checkout's `.opencode/` scratch, firstmate's per-task temp roots, and the server's own socket.
+Everything inside can write only to the home, the checkout's `.opencode/` scratch, the shared temporary namespaces named in the remaining limits below, and the server's own socket.
 Workers' copies live in the home's own Treehouse pool, `state/privateer/treehouse`, which the session names as `TREEHOUSE_ROOT`, so `treehouse` creates and hands out slots there and the shared pool under `~/.treehouse`, with every other home's slots, is out of reach.
 It can never write the home's egress directory, `config/`, or `bin/`, or the Git config or hooks of the checkout, of any clone under `projects/`, or of any linked worktree or submodule of those.
 When the checkout is inside the home, it also cannot write any path in the checkout that the first mate's OpenCode loads from: `AGENTS.md`, `CLAUDE.md`, `CONTEXT.md`, `opencode.json`, `opencode.jsonc`, `tui.json`, `tui.jsonc`, `.agents/`, `docs/`, the `.claude` entry and its `skills` link, the `.opencode` entry, and, under `.opencode/`, the `opencode.json`, `opencode.jsonc`, `tui.json`, and `tui.jsonc` files and the `agent`, `agents`, `command`, `commands`, `mode`, `modes`, `plugin`, `plugins`, `skill`, `skills`, `tool`, and `tools` directories.
@@ -969,6 +971,7 @@ It can neither rename, replace, or create any `.git` entry in the checkout or in
 It also cannot write the `projects/` directory entry, any clone's directory entry, the entry of the top-level git dir of the checkout or of any clone, or any directory between the home and the checkout's git dir, so none of those can be moved aside, changed, and moved back.
 It can connect only to the egress proxy, the DNS resolver, and that socket, so a client that ignores the proxy variables reaches nothing remote at all.
 It can signal only processes inside the same sandbox, so nothing in the session can stop the proxy, and the egress directory's port and process record are out of its reach.
+Process information stays readable, as the [sailor sandbox](#sailor-sandbox-configsailor-sandbox) describes, so the first mate's session start finds its own OpenCode process, names `opencode` as the primary harness, and owns the home's session lock, while a plain shell started in the session finds no harness and stays read-only.
 
 The home's own scripts act on it only from inside its session.
 `bin/fm-spawn.sh`, `bin/fm-tasks-axi.sh`, `bin/fm-brief.sh`, `bin/fm-send.sh`, `bin/fm-control.sh`, `bin/fm-captain-hold.sh`, `bin/fm-permission-grant.sh`, `bin/fm-merge-local.sh`, and `bin/fm-teardown.sh` each refuse from anywhere else before reading or writing anything, with exit status 2 and `this is a sealed Privateer home; attach with bin/fm-privateer.sh attach, and never drive its session from outside`.
@@ -982,7 +985,7 @@ Version 1 has these remaining limits:
 - `sandbox-exec` is required, so Privateer runs on macOS only, and `python3` is required for the proxy.
 - macOS cannot apply one sandbox inside another, so one session sandbox covers the first mate and every worker alike, in place of the per-task [sailor sandbox](#sailor-sandbox-configsailor-sandbox).
 - A worker can therefore still write the two records the first mate's own spawn and grant commands write from inside that sandbox: the task records `state/<id>.meta` and the grant ledger `state/permission-grants.jsonl`.
-- The per-task temp roots under `/tmp/fm-`, and the user's own temporary directory (`$TMPDIR`), are namespaces shared by every home on the machine.
+- The per-task temp roots under `/tmp/fm-`, the user's own temporary directory (`$TMPDIR`), and the flat here-document files stock macOS Bash writes directly in `/var/tmp` as `sh-thd*` are namespaces shared by every home on the machine.
 - Clones under `projects/` are added, moved, and removed from outside the session, and a worktree the session creates in its own pool is meant for use only inside it.
 - The directory entries denied are the `projects/` directory, each clone's directory, the top-level git dir of the checkout and of each clone, and the directories between the home and the checkout's git dir.
 - The `worktrees` and `modules` directories inside a git dir, a submodule's own git dir (`modules/<path>`), the intermediate directories under `modules`, and a symlink placed over any of them can still be moved aside and back from inside the session, so a linked worktree's or submodule's Git config or hooks can be planted that way; closing that class is follow-up work.
@@ -999,6 +1002,12 @@ Version 1 has these remaining limits:
 Inside the sandbox, before OpenCode starts, the primary's command tries a direct connection to Anthropic and to the sailor that ignores the proxy, and the audit fails unless both are denied.
 It then fails on a session whose model requests did not pass through the egress proxy, on any destination the proxy allowed other than the sailor and the forge, and on any logged destination, allowed or refused, naming Anthropic or Claude.
 [`verification/local-sailors.md`](verification/local-sailors.md) records the dated result; rerun the audit after an OpenCode upgrade.
+
+### Session lock check
+
+`FM_PRIVATEER_SESSION_LOCK_LIVE=1 tests/fm-privateer-session-lock-live-e2e.test.sh` starts a short Privateer session the same way, with the checkout outside the home, and a scripted sailor that has the real OpenCode first mate run `bin/fm-session-start.sh` through its own shell tool.
+It fails unless session start acquires the session lock for that OpenCode process and names `opencode` as the primary harness, and unless a plain shell opened in the same session finds no harness and stays read-only.
+[`verification/local-sailors.md`](verification/local-sailors.md) records the dated result; rerun the check after an OpenCode upgrade.
 
 ### Setting up a home
 

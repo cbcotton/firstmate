@@ -15,10 +15,13 @@
 # runs each new session's command in the background and records every call,
 # and a fake sandbox-exec records the profile it was given and runs the
 # command, so the launch shape is pinned on every platform. Where sandbox-exec
-# and tmux really run, one case starts the real session and proves that a
+# and tmux really run, two cases start the real session: one proves that a
 # command the first mate starts through tmux reaches nothing but the proxy and
-# cannot stop or rewrite it; the live egress audit
-# (tests/fm-privateer-egress-live-e2e.test.sh) runs the real OpenCode.
+# cannot stop or rewrite it, and one that a first mate running as opencode
+# detects its harness and owns the fleet lock while a plain shell in the same
+# session stays read-only. The live egress audit
+# (tests/fm-privateer-egress-live-e2e.test.sh) and session lock check
+# (tests/fm-privateer-session-lock-live-e2e.test.sh) run the real OpenCode.
 # docs/configuration.md ("Privateer quarantine") owns the contract.
 set -u
 
@@ -835,6 +838,73 @@ allowed GET 127.0.0.1:$sport" "$(jq -r --arg o "127.0.0.1:$oport" --arg s "127.0
   pass "in the real sandboxed session, a command started through tmux reaches nothing but the proxy, plants nothing that runs outside, and cannot rewrite the first mate's instructions, skills, docs, or plugins, a worker still commits in its own copy and in a new slot of the home's own pool, and the first mate cannot stop or rewrite the proxy"
 }
 
+test_session_first_mate_owns_the_lock_and_a_plain_shell_does_not() {
+  local dir home outside root out status spid sport socket state mate_pid lock _
+  if ! "$ROOT/bin/fm-sandbox-exec.sh" available || ! command -v tmux >/dev/null 2>&1; then
+    pass "session lock checks not run: sandbox-exec or tmux is not available on this machine"
+    return 0
+  fi
+  dir="$TMP_ROOT/session-lock"
+  home=$(make_home session-lock)
+  state="$home/state"
+  # The checkout lies outside the home and every path the session may write,
+  # so a command run from it has no writable current directory to fall back on.
+  outside=$(mktemp -d /tmp/pv-checkout.XXXXXX)
+  root="$outside/root"
+  fm_git_init_commit "$root"
+  mkdir -p "$dir/sailor/v1" "$dir/bin"
+  printf '{"data":[{"id":"coder"}]}\n' > "$dir/sailor/v1/models"
+  read -r spid sport < <(serve_dir "$dir/sailor" "$dir/sailor.log")
+  [ -n "$sport" ] || fail "the stand-in sailor did not start"
+  jq -n --arg e "http://127.0.0.1:$sport/v1" '{sailors: {tiller: {title: "Tiller", endpoint: $e, status: "live", models: ["coder"]}}, default: {harness: "opencode", sailor: "tiller", model: "coder"}}' \
+    > "$home/config/crew-dispatch.json"
+  # What the harness detector and the fleet lock make of the shell that runs
+  # this, written to <out> in the home.
+  cat > "$dir/probe" <<SH
+#!/bin/sh
+{
+  echo "harness=\$('$ROOT/bin/fm-harness.sh' 2>&1)"
+  '$ROOT/bin/fm-lock.sh' >/dev/null 2>&1
+  echo "lock=\$?"
+} > "\$1.tmp"
+mv "\$1.tmp" "\$1"
+SH
+  # The first mate runs under the name opencode, which macOS reports for a
+  # program started through a link of that name, and runs each command through
+  # a child shell as OpenCode's shell tool does. It first opens a plain shell in
+  # a new window of the sealed session, which must stay read-only.
+  ln -s /bin/bash "$dir/bin/opencode"
+  cat > "$dir/first-mate" <<SH
+tmux new-window -d "/bin/sh '$dir/probe' '$state/plain'"
+while [ ! -e '$state/plain' ]; do sleep 0.1; done
+/bin/sh '$dir/probe' '$state/mate'
+echo "\$\$" > '$state/mate.pid'
+sleep 60
+SH
+  printf '#!/bin/sh\nexec %s %s\n' "$dir/bin/opencode" "$dir/first-mate" > "$dir/primary"
+  chmod +x "$dir/probe" "$dir/primary"
+  out=$(FM_TEST_SEAM=1 FM_PRIVATEER_PRIMARY="$dir/primary" FM_HOME="$home" FM_ROOT_OVERRIDE="$root" "$PRIVATEER" start 2>&1)
+  status=$?
+  socket=$(printf '%s\n' "$out" | sed -n 's/.*on tmux socket \([^ ]*\).*/\1/p' | head -1)
+  for _ in $(seq 300); do
+    [ -e "$state/mate.pid" ] && break
+    sleep 0.1
+  done
+  mate_pid=$(cat "$state/mate.pid" 2>/dev/null)
+  lock=$(cat "$state/.lock" 2>/dev/null)
+  FM_HOME="$home" FM_ROOT_OVERRIDE="$root" "$PRIVATEER" stop >/dev/null 2>&1 || { [ -z "$socket" ] || tmux -L "$socket" kill-server 2>/dev/null; }
+  kill "$spid" 2>/dev/null
+  rm -rf "$outside"
+  expect_code 0 "$status" "the real session must start: $out"
+  assert_equals "harness=unknown
+lock=1" "$(cat "$state/plain" 2>/dev/null)" "a plain shell in the sealed session must detect no harness and stay read-only"
+  assert_equals "harness=opencode
+lock=0" "$(cat "$state/mate" 2>/dev/null)" "the sealed first mate must detect opencode and acquire the fleet lock"
+  [ -n "$mate_pid" ] || fail "the stub first mate never recorded its process"
+  assert_equals "$mate_pid" "$lock" "the lock must record the first mate's own opencode process"
+  pass "in the real sandboxed session the opencode first mate detects its harness and owns the fleet lock, while a plain shell in the same session stays read-only"
+}
+
 # --- spawn ------------------------------------------------------------------
 
 # make_spawn_case <name> <id>: a Privateer home with a project and worktree for
@@ -1127,6 +1197,7 @@ test_start_denies_the_instructions_of_a_checkout_that_is_the_home
 test_start_refuses_when_the_proxy_cannot_bind
 test_proxy_forwards_only_allowed_destinations
 test_session_sandbox_holds_every_command
+test_session_first_mate_owns_the_lock_and_a_plain_shell_does_not
 test_start_refuses_while_running
 test_stop_refuses_with_work_in_flight_and_stops_an_idle_session
 test_stop_cleans_up_after_a_session_that_ended
