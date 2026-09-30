@@ -100,15 +100,17 @@ srv.serve_forever()' "$TMP_ROOT/port" >/dev/null 2>&1 &
 # Harness detection and the session lock walk the process ancestry with ps and
 # parse it through here-documents, from inside the Privateer session's sandbox.
 test_process_info_and_here_documents_work_where_sandbox_exec_runs() {
-  local out
+  local out thd_dir
   if ! "$SBX" available; then
     pass "process-info checks not run: sandbox-exec is not available on this machine"
     return 0
   fi
   # Stock macOS Bash puts a here-document in /var/tmp whatever $TMPDIR says,
   # and falls back to the current directory, so run from one it cannot write.
+  thd_dir="/var/tmp/sh-thd-fm-sandbox-probe.$$"
+  mkdir -p "$thd_dir"
   # shellcheck disable=SC2016 # expanded by the sandboxed shell
-  out=$(cd / && "$SBX" run --write "$TMP_ROOT" -- /bin/bash -c '
+  out=$(cd / && THD_DIR="$thd_dir" "$SBX" run --write "$TMP_ROOT" -- /bin/bash -c '
     [ -n "$(ps -o comm= -p $$ 2>/dev/null)" ] && echo ps-allowed || echo ps-denied
     [ "$(ps -o ppid= -p $$ 2>/dev/null | tr -d " ")" = "$PPID" ] && echo ppid-read || echo ppid-unread
     x=$(cat 2>/dev/null <<EOF
@@ -118,11 +120,17 @@ EOF
     [ "$x" = here ] && echo heredoc-allowed || echo heredoc-denied
     (: > "/var/tmp/fm-sandbox-probe.$$") 2>/dev/null && echo vartmp-allowed || echo vartmp-denied
     rm -f "/var/tmp/fm-sandbox-probe.$$" 2>/dev/null
+    (: > "$THD_DIR/probe") 2>/dev/null && echo thd-subtree-allowed || echo thd-subtree-denied
+    (mkdir "/var/tmp/sh-thd-fm-sandbox-made.$$" && : > "/var/tmp/sh-thd-fm-sandbox-made.$$/probe") 2>/dev/null && echo thd-made-allowed || echo thd-made-denied
+    rm -rf "/var/tmp/sh-thd-fm-sandbox-made.$$" 2>/dev/null
     /usr/bin/top -l 1 -n 0 >/dev/null 2>&1 && echo top-allowed || echo top-denied' 2>/dev/null)
+  rm -rf "$thd_dir" /var/tmp/sh-thd-fm-sandbox-made.*
   assert_contains "$out" ps-allowed "ps must read a process's name inside the sandbox"
   assert_contains "$out" ppid-read "ps must read a process's parent inside the sandbox"
   assert_contains "$out" heredoc-allowed "a stock macOS Bash here-document must work inside the sandbox"
   assert_contains "$out" vartmp-denied "only here-document files may be written in /var/tmp"
+  assert_contains "$out" thd-subtree-denied "nothing may be written beneath a /var/tmp/sh-thd* directory"
+  assert_contains "$out" thd-made-denied "a /var/tmp/sh-thd* directory made inside the sandbox must not hold files"
   assert_contains "$out" top-denied "no setuid program but ps may run outside the sandbox"
   pass "inside the sandbox ps reads process information and stock Bash here-documents work, while the rest of /var/tmp and every other setuid program stay out of reach"
 }

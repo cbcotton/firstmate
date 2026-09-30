@@ -136,9 +136,9 @@
 #     and fm-permission-grant write from inside it: the task records
 #     state/<id>.meta and the grant ledger state/permission-grants.jsonl;
 #   - the per-task temp roots under /tmp/fm-*, the user's own temporary
-#     directory ($TMPDIR), and the here-document files stock macOS Bash
-#     writes as /var/tmp/sh-thd* are namespaces shared by every home on this
-#     machine;
+#     directory ($TMPDIR), and the flat here-document files stock macOS
+#     Bash writes directly in /var/tmp as sh-thd* are namespaces shared by
+#     every home on this machine;
 #   - clones under projects/ are added, moved, and removed outside the
 #     session, and a worktree the session creates in its own pool is meant
 #     for use only inside it;

@@ -30,9 +30,10 @@
 #      stock macOS Bash (3.2) creates for a here-document, /dev/null, the
 #      terminal, the process's own file descriptors, and every --write
 #      directory; that Bash ignores $TMPDIR for a here-document and writes it
-#      as /var/tmp/sh-thd* once it finds it may write /var/tmp, and otherwise
-#      in /tmp or the current directory, so the /var/tmp entry itself and
-#      those names are allowed and nothing else in /var/tmp is;
+#      as a flat file /var/tmp/sh-thd* once it finds it may write /var/tmp,
+#      and otherwise in /tmp or the current directory, so the /var/tmp entry
+#      itself and entries with those names directly in it are allowed, and
+#      nothing else in /var/tmp is, not even anything beneath such an entry;
 #   2. every --deny-write path and --deny-write-regex match is denied again;
 #   3. every --write-prefix path is allowed again, so a caller can deny a whole
 #      directory and still expose the exact files it names.
@@ -177,7 +178,7 @@ render_profile() {
   printf '%s\n' '(allow file-write*'
   printf '  (subpath "%s")\n' "$tmp"
   for p in "${WRITES[@]+"${WRITES[@]}"}"; do printf '  (subpath "%s")\n' "$p"; done
-  printf '%s\n' '  (literal "/private/var/tmp")' '  (regex #"^/private/var/tmp/sh-thd")'
+  printf '%s\n' '  (literal "/private/var/tmp")' '  (regex #"^/private/var/tmp/sh-thd[^/]*$")'
   printf '%s\n' '  (literal "/dev/null")' '  (regex #"^/dev/tty")' '  (regex #"^/dev/fd/"))'
   if [ "${#DENIES[@]}" -gt 0 ] || [ "${#DENY_REGEXES[@]}" -gt 0 ]; then
     printf '%s\n' '(deny file-write*'

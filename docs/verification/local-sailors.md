@@ -157,7 +157,7 @@ Facts the fix depends on:
 - `(allow process-exec (literal "/bin/ps") (with no-sandbox))` lets `/bin/ps` run, while `/usr/bin/top`, another setuid program, stays refused.
 - OpenCode 1.18.33's shell tool runs each command under the user's shell (`/bin/zsh` here) as a child of the `opencode` process, so `bin/fm-harness.sh ancestry` reported `comm opencode` once `ps` could run.
 - Stock macOS Bash 3.2.57 ignores `$TMPDIR` for a here-document: with only `$TMPDIR` writable, `cat <<EOF` failed with `cannot create temp file for here document: Operation not permitted`.
-- That Bash writes a here-document as `/var/tmp/sh-thd*` once it may write the `/var/tmp` entry itself, and otherwise falls back to `/tmp` and then the current directory; allowing both the `/var/tmp` entry and the `sh-thd` prefix was enough, and either alone was not.
+- That Bash writes a here-document as a flat file `/var/tmp/sh-thd*` once it may write the `/var/tmp` entry itself, and otherwise falls back to `/tmp` and then the current directory; allowing both the `/var/tmp` entry and entries named `sh-thd*` directly in it, with nothing beneath them, was enough, and either alone was not.
 - With `ps` allowed but here-documents still refused, a first mate whose current directory the session could not write detected `opencode` but still could not take the lock, because `bin/fm-session-lock-lib.sh` reads the ancestry through here-documents.
 - `tests/fm-sandbox-exec.test.sh` re-proves both allowances against the real sandbox, and `tests/fm-privateer.test.sh` re-proves the whole lock path in a real session with a stub first mate running as `opencode`, both without a model.
 

@@ -905,7 +905,7 @@ Inside the sandbox a sailor can write only to:
 
 - its own copy and that repository's Git metadata, never the repository's hooks or Git configuration;
 - its task temp directory and OpenCode's own data, state, and cache directories;
-- the here-document files stock macOS Bash writes as `/var/tmp/sh-thd*`, because that Bash ignores `$TMPDIR` for them;
+- the flat here-document files stock macOS Bash writes directly in `/var/tmp` as `sh-thd*` (nothing beneath such an entry), because that Bash ignores `$TMPDIR` for them;
 - exactly the files its instructions tell it to write: its status line, inbox acknowledgements, busy state, the opt-in fleet ledger, its report, and its pipeline findings.
 
 The rest of this home's state and data, including the sailor's own task record and instructions, is unwritable.
@@ -985,7 +985,7 @@ Version 1 has these remaining limits:
 - `sandbox-exec` is required, so Privateer runs on macOS only, and `python3` is required for the proxy.
 - macOS cannot apply one sandbox inside another, so one session sandbox covers the first mate and every worker alike, in place of the per-task [sailor sandbox](#sailor-sandbox-configsailor-sandbox).
 - A worker can therefore still write the two records the first mate's own spawn and grant commands write from inside that sandbox: the task records `state/<id>.meta` and the grant ledger `state/permission-grants.jsonl`.
-- The per-task temp roots under `/tmp/fm-`, the user's own temporary directory (`$TMPDIR`), and the here-document files stock macOS Bash writes as `/var/tmp/sh-thd*` are namespaces shared by every home on the machine.
+- The per-task temp roots under `/tmp/fm-`, the user's own temporary directory (`$TMPDIR`), and the flat here-document files stock macOS Bash writes directly in `/var/tmp` as `sh-thd*` are namespaces shared by every home on the machine.
 - Clones under `projects/` are added, moved, and removed from outside the session, and a worktree the session creates in its own pool is meant for use only inside it.
 - The directory entries denied are the `projects/` directory, each clone's directory, the top-level git dir of the checkout and of each clone, and the directories between the home and the checkout's git dir.
 - The `worktrees` and `modules` directories inside a git dir, a submodule's own git dir (`modules/<path>`), the intermediate directories under `modules`, and a symlink placed over any of them can still be moved aside and back from inside the session, so a linked worktree's or submodule's Git config or hooks can be planted that way; closing that class is follow-up work.
