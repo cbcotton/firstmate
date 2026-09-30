@@ -1,0 +1,3 @@
+harness=unknown
+error: cannot locate harness process in ancestry
+lock=1

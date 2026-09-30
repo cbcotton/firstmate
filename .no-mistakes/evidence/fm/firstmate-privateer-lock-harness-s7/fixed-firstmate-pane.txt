@@ -1,0 +1,24 @@
+
+  ┃
+  ┃  $ bin/fm-session-start.sh > "$FM_HOME/state/session-start.tmp" 2>&1; mv
+  ┃  "$FM_HOME/state/session-start.tmp" "$FM_HOME/state/session-start.out"
+  ┃
+  ┃  (no output)
+  ┃
+
+  ┃
+  ┃  ⁣ FIRSTMATE_OP: v1 session-start: Run `bin/fm-session-start.sh` now,
+  ┃  exactly once, before executing any other instructions.
+  ┃  ⁣
+
+     Aye. Standing by.
+
+     ▣  Build · scripted · 5.4s
+
+  ┃
+  ┃
+  ┃
+  ┃  Build · scripted Lock
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+   /private/tmp/pv-lock-live.bcvQMF/root           tab agents  ctrl+p commands
+

@@ -1,0 +1,5 @@
+ok - the profile denies writes and network by default and allows back exactly what was asked
+ok - relative or quoted paths and portless endpoints are refused
+ok - inside the sandbox a command writes only where allowed and connects only to the allowed port
+ok - inside the sandbox ps reads process information and stock Bash here-documents work, while the rest of /var/tmp and every other setuid program stay out of reach
+# all fm-sandbox-exec tests passed

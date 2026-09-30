@@ -1,0 +1,123 @@
+/private/tmp/pv-lock-live.jt7zPR/root/bin/fm-tasks-axi-lib.sh: line 81: cannot create temp file for here document: Operation not permitted
+
+================================================================================
+SESSION START - /private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-privateer-session-lock-live.1RLmxB/case/home
+================================================================================
+
+LOCK
+--------------------------------------------------------------------------------
+error: cannot locate harness process in ancestry
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  READ-ONLY SESSION - FLEET LOCK OWNERSHIP WAS NOT VERIFIED
+●  error: cannot locate harness process in ancestry
+●  Skipping every mutating step: stale Herdr child cleanup,
+●  secondmate convergence, secondmate liveness, pending remote handoff retry,
+●  X-mode artifacts, fleet sync, and wake-queue drain. Detect-only bootstrap
+●  diagnostics and the rest of this read-only-safe digest still ran below.
+●  Operate read-only until this resolves - do not spawn, steer, merge, or
+●  otherwise mutate fleet state from this session.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+BOOTSTRAP
+--------------------------------------------------------------------------------
+/private/tmp/pv-lock-live.jt7zPR/root/bin/fm-bootstrap.sh: line 868: cannot create temp file for here document: Operation not permitted
+MISSING: no-mistakes (install: curl -fsSL https://raw.githubusercontent.com/kunchenguid/no-mistakes/main/docs/install.sh | sh)
+/private/tmp/pv-lock-live.jt7zPR/root/bin/fm-bootstrap.sh: line 868: cannot create temp file for here document: Operation not permitted
+MISSING: gh-axi (install: npm install -g gh-axi && gh-axi setup hooks)
+/private/tmp/pv-lock-live.jt7zPR/root/bin/fm-bootstrap.sh: line 868: cannot create temp file for here document: Operation not permitted
+PRESENTATION_UNAVAILABLE: lavish-axi (requires >=0.1.77; install: npm install -g lavish-axi && lavish-axi setup hooks) - nonvisual work may proceed with plain-text decisions and reports; install or upgrade before using Lavish
+/private/tmp/pv-lock-live.jt7zPR/root/bin/fm-quota-axi-lib.sh: line 63: cannot create temp file for here document: Operation not permitted
+MISSING: quota-axi (install: npm install -g quota-axi)
+MISSING: tasks-axi (install: npm install -g tasks-axi)
+PRIVATEER: /private/tmp/pv-lock-live.jt7zPR/root/bin/fm-privateer.sh: line 260: cannot create temp file for here document: Operation not permitted
+PRIVATEER: config/crew-dispatch.json sailor tiller has endpoint 'http://127.0.0.1:57230/v1', which is not on this machine or the local network
+
+WAKE QUEUE
+--------------------------------------------------------------------------------
+skipped (read-only session) - 0 record(s) remain queued because this session lacks verified fleet-lock ownership.
+================================================================================
+SUPERVISION OPERATING INSTRUCTIONS - primary harness: unknown
+================================================================================
+Current state:
+- Lock: read-only; do not drain, arm, spawn, steer, merge, or repair fleet state here.
+- Away/quiet mode: inactive.
+- X mode: inactive; use the default watcher cadence.
+- Ordinary wake: follow the continuation in the harness protocol below; do not use shell &.
+
+Mode: Unknown harness fallback.
+
+This primary harness does not have a verified watcher wake adapter.
+Follow the generic supervision contract in `AGENTS.md`.
+First cycle: drain queued wakes, then choose a supervision wait that the harness can actually wake from.
+Ordinary wake: drain, handle all emitted wakes, reconcile open decisions and unread status lines, and run the exact `--ack-through` command printed as `WAKE_ACK_REQUIRED`, then repeat that verified wait while supervision is still required.
+Before that acknowledgement, interruption leaves the work durable for idempotent re-handling.
+Use `bin/fm-watch-arm.sh` only when the harness has a tracked background mechanism that survives the tool call and notifies the model on process exit.
+Use a bounded foreground wait over `bin/fm-watch.sh` when that wake mechanism is not verified.
+Never use shell `&` for watcher supervision.
+Failure or missing cycle only: inspect the failure and restore the same verified wait shape.
+
+Record new verification evidence before promoting an unknown harness to a named snippet.
+
+
+================================================================================
+READ-ONCE CONTRACT
+================================================================================
+/private/tmp/pv-lock-live.jt7zPR/root/bin/fm-session-start.sh: line 857: cannot create temp file for here document: Operation not permitted
+
+================================================================================
+FLEET STATE
+================================================================================
+
+data/backlog.md
+--------------------------------------------------------------------------------
+ABSENT
+
+Work under way (state/*.meta)
+--------------------------------------------------------------------------------
+(none)
+
+Orphan status logs (state/*.status without matching .meta)
+--------------------------------------------------------------------------------
+(none)
+
+AFK
+--------------------------------------------------------------------------------
+absent
+
+================================================================================
+NETWORK CHECKS
+================================================================================
+skipped (read-only session) - GitHub authentication, project clone refresh,
+secondmate liveness and convergence, and pending handoff delivery were not run.
+They need the fleet lock, and this session must not spawn, steer, or merge, so it
+has no action they would gate. The session holding the lock runs them.
+
+================================================================================
+CONTEXT
+================================================================================
+
+data/projects.md
+--------------------------------------------------------------------------------
+ABSENT
+
+data/secondmates.md
+--------------------------------------------------------------------------------
+ABSENT
+
+data/captain.md
+--------------------------------------------------------------------------------
+ABSENT
+
+data/captain-shared.md (shared, main-authoritative, read-only in secondmate homes)
+--------------------------------------------------------------------------------
+ABSENT
+
+data/learnings.md
+--------------------------------------------------------------------------------
+ABSENT
+
+================================================================================
+NEXT STEP
+================================================================================
+/private/tmp/pv-lock-live.jt7zPR/root/bin/fm-session-start.sh: line 1030: cannot create temp file for here document: Operation not permitted
+/private/tmp/pv-lock-live.jt7zPR/root/bin/fm-session-start.sh: line 1065: cannot create temp file for here document: Operation not permitted
