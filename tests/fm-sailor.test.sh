@@ -154,9 +154,11 @@ test_model_settings_travel_with_the_model() {
     '.sailors.tiller.model_settings = []|sailor tiller model_settings must be an object' \
     '.sailors.tiller.model_settings = {"other":{}}|sailor tiller model_settings names other, which its models do not list' \
     '.sailors.tiller.model_settings = {"qwen-coder":{"temp":1}}|sailor tiller model_settings for qwen-coder may hold only limit and options' \
-    '.sailors.tiller.model_settings = {"qwen-coder":{"limit":{"context":0}}}|sailor tiller model_settings for qwen-coder limit must hold only context and output, each a positive whole number' \
-    '.sailors.tiller.model_settings = {"qwen-coder":{"limit":{"window":8}}}|sailor tiller model_settings for qwen-coder limit must hold only context and output, each a positive whole number' \
-    '.sailors.tiller.model_settings = {"qwen-coder":{"limit":{"context":"big"}}}|sailor tiller model_settings for qwen-coder limit must hold only context and output, each a positive whole number' \
+    '.sailors.tiller.model_settings = {"qwen-coder":{"limit":{"context":0,"output":8}}}|sailor tiller model_settings for qwen-coder limit must hold both context and output and nothing else, each a positive whole number' \
+    '.sailors.tiller.model_settings = {"qwen-coder":{"limit":{"context":131072}}}|sailor tiller model_settings for qwen-coder limit must hold both context and output and nothing else, each a positive whole number' \
+    '.sailors.tiller.model_settings = {"qwen-coder":{"limit":{}}}|sailor tiller model_settings for qwen-coder limit must hold both context and output and nothing else, each a positive whole number' \
+    '.sailors.tiller.model_settings = {"qwen-coder":{"limit":{"window":8}}}|sailor tiller model_settings for qwen-coder limit must hold both context and output and nothing else, each a positive whole number' \
+    '.sailors.tiller.model_settings = {"qwen-coder":{"limit":{"context":"big","output":8}}}|sailor tiller model_settings for qwen-coder limit must hold both context and output and nothing else, each a positive whole number' \
     '.sailors.tiller.model_settings = {"qwen-coder":{"options":{"stop":["a"]}}}|sailor tiller model_settings for qwen-coder options must be an object of strings, numbers and booleans' \
     '.sailors.tiller.model_settings = {"qwen-coder":{"options":3}}|sailor tiller model_settings for qwen-coder options must be an object of strings, numbers and booleans'; do
     make_case settings-bad "$(jq -c "${bad%%|*}" <<<"$MAP")"

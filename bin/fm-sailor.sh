@@ -227,7 +227,7 @@ validate_file() {
           | if ($s.models | index($e.key)) == null then "sailor \($n) model_settings names \($e.key), which its models do not list"
             elif ($e.value | type) != "object" then "\($who) must be an object"
             elif (($e.value | keys) - ["limit", "options"] | length) > 0 then "\($who) may hold only limit and options"
-            elif ($e.value | has("limit")) and (($e.value.limit | type) != "object" or (($e.value.limit | keys) - ["context", "output"] | length) > 0 or ([$e.value.limit[] | (type == "number" and . >= 1 and . == floor)] | all | not)) then "\($who) limit must hold only context and output, each a positive whole number"
+            elif ($e.value | has("limit")) and (($e.value.limit | type) != "object" or ($e.value.limit | keys) != ["context", "output"] or ([$e.value.limit[] | (type == "number" and . >= 1 and . == floor)] | all | not)) then "\($who) limit must hold both context and output and nothing else, each a positive whole number"
             elif ($e.value | has("options")) and (($e.value.options | type) != "object" or ([$e.value.options[] | scalar] | all | not) or ($e.value.options | keys | any(length == 0))) then "\($who) options must be an object of strings, numbers and booleans"
             else empty
             end] | first // "")

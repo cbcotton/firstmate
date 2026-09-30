@@ -1274,7 +1274,7 @@ A sailor is a named machine serving local models through an OpenAI-compatible en
 `bin/fm-sailor.sh` owns the checks below and its header owns their mechanics.
 
 - `sailors` maps each sailor's name (lowercase letters, digits, and single dashes) to its `endpoint`, its `status`, and the `models` it may be asked for; `title`, `host`, and `max_concurrent` (default 1) are optional.
-- A sailor may also carry `model_settings`, a map from a listed model to that model's own behavior settings, in OpenCode's field names: a `limit` object holding `context` and `output` (positive whole numbers), and an `options` object of string, number, or boolean values such as `reasoningEffort` (camelCase), `enable_thinking`, `temperature`, `top_p`, and `top_k`.
+- A sailor may also carry `model_settings`, a map from a listed model to that model's own behavior settings, in OpenCode's field names: a `limit` object holding both `context` and `output` (positive whole numbers), and an `options` object of string, number, or boolean values such as `reasoningEffort` (camelCase), `enable_thinking`, `temperature`, `top_p`, and `top_k`.
   `bin/fm-sailor.sh provider-json` emits them under that model, so every worker launch and the Privateer first mate get the same settings from the same place, whatever the home's global OpenCode configuration says; an entry without `model_settings` launches exactly as before.
   Settings change only at the next launch, so a Privateer first mate needs a restart.
 - A profile with `sailor` must use the `opencode` harness and name a `model` from that sailor's list; `fm-spawn.sh --sailor` then points the worker's OpenCode at that endpoint.
