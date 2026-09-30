@@ -251,11 +251,11 @@ Firstmate's skills live in two separate places with different audiences:
 - [docs/scripts.md](docs/scripts.md) - the `bin/` toolbelt reference.
 - [docs/documentation-audiences.md](docs/documentation-audiences.md) - documentation audiences and the machine-checked placement boundary.
 - [`AGENTS.md`](AGENTS.md) - the supervisor contract, role boundary, and routing index for conditional procedures.
-- [CONTRIBUTING.md](CONTRIBUTING.md) - how to contribute, including the dev/test commands.
+- [CONTRIBUTING.md](CONTRIBUTING.md) - the dev/test commands and repo conventions, inherited unchanged from the original; its contribution workflow targets the original repository, not this fork.
 
 ## Contributing
 
-Contributions are welcome - see [CONTRIBUTING.md](CONTRIBUTING.md) for the workflow, repo conventions, and how to run the tests.
+This is a personal fork and does not take outside contributions. Contributions to firstmate itself belong in the original repository, [kunchenguid/firstmate](https://github.com/kunchenguid/firstmate), under its own contributing guide.
 
 ## License
 
