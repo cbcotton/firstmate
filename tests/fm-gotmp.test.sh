@@ -79,6 +79,8 @@ SH
   ln -s "$ROOT/bin/fm-path-lib.sh" "$fake/bin/fm-path-lib.sh"
   # fm-gate-refuse-lib.sh: teardown sources it before any fleet mutation.
   ln -s "$ROOT/bin/fm-gate-refuse-lib.sh" "$fake/bin/fm-gate-refuse-lib.sh"
+  # fm-privateer-lib.sh: teardown sources it for the Privateer session gate.
+  ln -s "$ROOT/bin/fm-privateer-lib.sh" "$fake/bin/fm-privateer-lib.sh"
   # fm-pr-lib.sh: teardown uses its canonical task-ID validator for poll cleanup.
   ln -s "$ROOT/bin/fm-pr-lib.sh" "$fake/bin/fm-pr-lib.sh"
   # fm-public-followup-lib.sh (and the fm-x-lib.sh and fm-env-lib.sh it
@@ -184,6 +186,8 @@ SH
   ln -s "$ROOT/bin/fm-path-lib.sh" "$fake/bin/fm-path-lib.sh"
   # fm-gate-refuse-lib.sh: teardown sources it before any fleet mutation.
   ln -s "$ROOT/bin/fm-gate-refuse-lib.sh" "$fake/bin/fm-gate-refuse-lib.sh"
+  # fm-privateer-lib.sh: teardown sources it for the Privateer session gate.
+  ln -s "$ROOT/bin/fm-privateer-lib.sh" "$fake/bin/fm-privateer-lib.sh"
   # fm-pr-lib.sh: teardown uses its canonical task-ID validator for poll cleanup.
   ln -s "$ROOT/bin/fm-pr-lib.sh" "$fake/bin/fm-pr-lib.sh"
   # fm-public-followup-lib.sh (and the fm-x-lib.sh and fm-env-lib.sh it

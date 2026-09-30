@@ -57,7 +57,8 @@
 # other bin/ scripts do.
 #
 # Exit status: 0 success, 1 refused (a grant from the refusal list, an unknown
-# grant id, or a scope that cannot bind), 2 usage or configuration error.
+# grant id, or a scope that cannot bind), 2 usage or configuration error, or a
+# sealed Privateer home called from outside its session (bin/fm-privateer-lib.sh).
 set -u
 export LC_ALL=C
 
@@ -65,6 +66,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FM_ROOT="${FM_ROOT_OVERRIDE:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 FM_HOME="${FM_HOME:-${FM_ROOT_OVERRIDE:-$FM_ROOT}}"
 STATE="${FM_STATE_OVERRIDE:-$FM_HOME/state}"
+# shellcheck source=bin/fm-privateer-lib.sh
+. "$SCRIPT_DIR/fm-privateer-lib.sh"
+fm_privateer_refuse_outside "$FM_HOME" "${FM_CONFIG_OVERRIDE:-$FM_HOME/config}"
 LOG="$STATE/permission-grants.jsonl"
 LOCK_FILE="$STATE/.lock"
 WORDS_MAX=8192
