@@ -986,6 +986,17 @@ Version 1 has these remaining limits:
 - No first mate can update its own checkout's instructions, docs, config, skills, agents, commands, modes, plugins, or tools from inside its session; update the checkout from outside, as [setting up a home](#setting-up-a-home) describes.
 - Git over SSH needs a key file, because no agent socket enters the environment.
 
+### The seal
+
+The home is also sealed against an OpenCode session that runs outside its Privateer session, such as the captain's own OpenCode opened in the home's directory.
+`bin/fm-privateer.sh inside` answers whether a process runs inside the home's session, and the OpenCode plugin `.opencode/plugins/fm-privateer-seal.js` acts on that answer when OpenCode loads it; in a home without `config/privateer` it does nothing.
+Outside the session, the plugin tells the model once per session, as Firstmate operational input, that the home is sealed and that it must stop and hand back to the captain, and it refuses every tool with the same words, so an outside session can act on nothing in the home.
+Inside the session, it refuses a shell command that reaches a tmux server other than the session's own, by naming one with `-L` or `-S` or by changing `TMUX`, so neither the first mate nor a worker can type into, read, or pipe another tmux server.
+It also keeps a refusal budget: after three firstmate-script calls in a row that refuse, it tells the model to stop, report the last refusal to the captain, and wait, and it refuses every further firstmate-script call until the captain's next message.
+`bin/fm-privateer-seal-policy.mjs` owns exactly what each rule matches.
+The seal is mistake-proofing, not a boundary: a same-user process that loads no OpenCode plugin, such as a plain shell or Claude Code, can still use the home and drive its tmux socket.
+[`verification/local-sailors.md`](verification/local-sailors.md) records the OpenCode behavior the seal relies on, and `tests/fm-privateer-seal-live-e2e.test.sh` refreshes it.
+
 ### Egress audit
 
 `FM_PRIVATEER_EGRESS_LIVE=1 tests/fm-privateer-egress-live-e2e.test.sh` starts a short Privateer session through the launcher, with a fixture clone whose origin is an https forge as the checkout, a throwaway home, and a scripted model on a loopback port as the only sailor.

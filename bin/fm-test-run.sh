@@ -367,7 +367,7 @@ family_for_basename() {
     fm-herdr-pi-stale-registration-live-e2e.test.sh|\
     fm-worker-account-live-e2e.test.sh|\
     fm-opencode-primary-live-e2e.test.sh|fm-opencode-restricted-live-e2e.test.sh|\
-    fm-sailor-sandbox-live-e2e.test.sh|fm-privateer-egress-live-e2e.test.sh|\
+    fm-sailor-sandbox-live-e2e.test.sh|fm-privateer-egress-live-e2e.test.sh|fm-privateer-seal-live-e2e.test.sh|\
     fm-pi-branch-live-e2e.test.sh|\
     fm-pi-branch-responsiveness-live-e2e.test.sh|\
     fm-pi-primary-live-e2e.test.sh|fm-pi-codex-native.test.sh|fm-omp-primary-live-e2e.test.sh|\
@@ -1526,9 +1526,11 @@ families_for_changed_path() {
     bin/fm-dispatch-resolve.sh)
       printf '%s\n' "__script__:fm-dispatch-resolve.test.sh"
       ;;
-    bin/fm-privateer.sh|bin/fm-privateer-proxy.py)
-      # The quarantine's one owner and its egress proxy: its own suite, the
-      # bootstrap report, the spawn refusals, and the live egress audit.
+    bin/fm-privateer.sh|bin/fm-privateer-proxy.py|bin/fm-privateer-seal-policy.mjs|\
+    .opencode/plugins/fm-privateer-seal.js)
+      # The quarantine's one owner, its egress proxy, and its OpenCode seal: its
+      # own suite, the bootstrap report, the spawn refusals, and the live egress
+      # audit and seal guard.
       printf '%s\n' "__script__:fm-privateer.test.sh"
       printf '%s\n' "__script__:fm-bootstrap.test.sh"
       printf '%s\n' backend-dispatch
