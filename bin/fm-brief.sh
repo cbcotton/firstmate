@@ -120,6 +120,9 @@
 # a later scout promotion could not outrank), stops the scaffold before
 # anything is written. Secondmate charters never take it.
 # Refuses to overwrite an existing brief.
+# Also refuses an unknown --flag (the project is the second positional argument,
+# never a flag) and a task id that is a keyword such as scout, ship, or mode,
+# which means the arguments were given in the wrong shape.
 set -eu
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -225,6 +228,9 @@ for a in "$@"; do
     # brief input. Refuse it loudly so it is never silently dropped here and then
     # believed to have been recorded.
     --yolo|--yolo=*) echo "error: --yolo is not a brief input; pass it to bin/fm-spawn.sh, which records the task's merge posture" >&2; exit 1 ;;
+    --*)
+      echo "error: unknown flag '$a'; accepted flags: --scout --secondmate --herdr-lab --no-projects --mode --branch-prefix --forge --shape (the project is the second positional argument, never a flag)" >&2
+      exit 1 ;;
     *) POS+=("$a") ;;
   esac
 done
@@ -281,6 +287,13 @@ elif [ "$FORGE_SET" -eq 1 ] || [ "$SHAPE_SET" -eq 1 ]; then
   exit 1
 fi
 ID=${POS[0]}
+# A task id that is really a verb or a flag word means the arguments were given
+# in the wrong shape; name the right one instead of a misleading downstream error.
+case "$ID" in
+  scout|ship|secondmate|mode|forge|shape|yolo|project|herdr-lab|no-projects|branch-prefix)
+    echo "error: '$ID' is a keyword, not a task id; did you mean: fm-brief.sh <task-id> <repo-name> --mode <mode>  (or --scout for a scout brief)?" >&2
+    exit 1 ;;
+esac
 BRANCH="$BRANCH_PREFIX$ID"
 if ! git check-ref-format --branch "$BRANCH" >/dev/null 2>&1; then
   echo "error: --branch-prefix and task id must form a valid git branch (got '$BRANCH')" >&2

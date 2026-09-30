@@ -839,7 +839,7 @@ make_spawn_case() {
   local name=$1 id=$2
   CASE_DIR="$TMP_ROOT/spawn-$name"
   HOME_DIR="$CASE_DIR/home"
-  PROJ_DIR="$CASE_DIR/project"
+  PROJ_DIR="$HOME_DIR/projects/project"
   WT_DIR="$CASE_DIR/wt"
   LAUNCH_LOG="$CASE_DIR/launch.log"
   FAKEBIN_DIR=$(fm_test_make_spawn_fakebin "$CASE_DIR/fake")

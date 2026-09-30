@@ -42,6 +42,12 @@
 #   first in the private launch-brief overlay, including the exact task-owned
 #   steering inbox. This never rewrites a project's instruction files or a
 #   secondmate's charter.
+#   <project-dir> is a directory, `projects/<name>`, or the bare name of a
+#   project registered in data/projects.md whose clone exists under this home's
+#   projects/ (bin/fm-project-mode.sh --registered answers the registration). A
+#   sealed Privateer home accepts only a directory under its own projects/.
+#   An argument starting with `--` that this script does not know is refused
+#   with the accepted flag list; it is never read as a harness.
 #        fm-spawn.sh <task-id> --relaunch [--harness <name>] [--model <name>] [--effort <level>]
 #   --relaunch launches a replacement agent for an EXISTING task into that
 #   task's own recorded worktree, reusing its recorded endpoint when that
@@ -802,6 +808,15 @@ for a in "$@"; do
   --traceparent=*)
     TRACEPARENT_ARG=${a#--traceparent=}
     TRACEPARENT_SET=1
+    ;;
+  --*)
+    case "$a" in
+    *' '*) POS+=("$a") ;; # a raw launch command, the unverified-adapter escape hatch
+    *)
+      echo "error: unknown flag '$a'; accepted flags: --scout --secondmate --relaunch --harness --model --effort --sailor --backend --mode --yolo --branch-prefix --traceparent (the project is a positional argument, never a flag)" >&2
+      exit 1
+      ;;
+    esac
     ;;
   *) POS+=("$a") ;;
   esac
@@ -2490,11 +2505,44 @@ if [ -n "$SAILOR" ] && [ -e "$CONFIG/sailor-sandbox" ] && [ ! -e "$CONFIG/privat
   SAILOR_SANDBOX=1
   SAILOR_ENDPOINT=$(jq -r --arg s "$SAILOR" '.sailors[$s].endpoint' "$CONFIG/crew-dispatch.json")
 fi
+# A registered project name (bin/fm-project-mode.sh --registered) whose clone
+# exists under this home's projects/ resolves to that clone; anything else keeps
+# its meaning as a path.
+resolve_project_dir_arg() {
+  local path=$1
+  case "$path" in
+  projects/*) printf '%s/%s\n' "$PROJECTS" "${path#projects/}" ;;
+  */* | '') printf '%s\n' "$path" ;;
+  *)
+    if [ -d "$PROJECTS/$path" ] && "$SCRIPT_DIR/fm-project-mode.sh" --registered "$path"; then
+      printf '%s/%s\n' "$PROJECTS" "$path"
+    else
+      printf '%s\n' "$path"
+    fi
+    ;;
+  esac
+}
+
 # Privateer quarantine (header above; docs/configuration.md "Privateer
 # quarantine"). bin/fm-privateer.sh check owns the list of violations; every
 # refusal here lands before any endpoint, worktree, or record exists.
 PRIVATEER=0
 if [ -e "$CONFIG/privateer" ] || [ -L "$CONFIG/privateer" ]; then
+  # A sealed Privateer home works only on its own clones, so a project
+  # directory elsewhere on the machine is refused first, before the quarantine
+  # check, because it is the captain-visible mistake a model makes most often.
+  if [ "$KIND" != secondmate ] && [ "$RELAUNCH" -eq 0 ] && [ -n "$PROJ" ]; then
+    priv_projects=$(cd "$PROJECTS" 2>/dev/null && pwd -P) || priv_projects=$PROJECTS
+    priv_proj=$(cd "$(resolve_project_dir_arg "$PROJ")" 2>/dev/null && pwd -P) || priv_proj=
+    case "$priv_proj" in
+    "$priv_projects"/*) ;;
+    '') ;; # unresolvable: the ordinary project-directory error below names it
+    *)
+      echo "error: the Privateer quarantine refuses a project directory outside projects/; pass a registered project name" >&2
+      exit 1
+      ;;
+    esac
+  fi
   PRIVATEER=1
   if ! PRIVATEER_CHECK=$(FM_HOME="$FM_HOME" FM_STATE_OVERRIDE="$STATE" FM_CONFIG_OVERRIDE="$CONFIG" \
     FM_PROJECTS_OVERRIDE="$PROJECTS" "$SCRIPT_DIR/fm-privateer.sh" check 2>&1); then
@@ -3009,14 +3057,6 @@ resolved_existing_dir() {
   cd "$path" && pwd -P
 }
 
-resolve_project_dir_arg() {
-  local path=$1
-  case "$path" in
-  projects/*) printf '%s/%s\n' "$PROJECTS" "${path#projects/}" ;;
-  *) printf '%s\n' "$path" ;;
-  esac
-}
-
 path_is_ancestor_of() {
   local ancestor=$1 path=$2
   [ -n "$ancestor" ] || return 1
@@ -3193,7 +3233,10 @@ if [ "$KIND" = secondmate ]; then
     BRIEF="$DATA/$ID/brief.md"
   fi
 else
-  PROJ_ABS="$(cd "$(resolve_project_dir_arg "$PROJ")" && pwd)"
+  PROJ_ABS="$(cd "$(resolve_project_dir_arg "$PROJ")" && pwd)" || {
+    echo "error: project '$PROJ' is not a registered project with a clone under projects/, nor a directory; pass a registered project name or projects/<name>" >&2
+    exit 1
+  }
   WT=""
   BRIEF="$DATA/$ID/brief.md"
 fi

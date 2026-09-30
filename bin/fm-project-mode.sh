@@ -93,7 +93,11 @@
 # to the forge binding, so it prints even when the forge token is malformed;
 # every path that reads the forge binding (default, --forge, and spawn's
 # forge-agreement check) still refuses.
-# Usage: fm-project-mode.sh [--raw|--branch-prefix|--forge] <project-name>
+# --registered prints nothing and answers by exit status alone: 0 when the
+# project has a row in the registry, 1 when it has none or there is no registry.
+# It never warns and never reads the posture, so a caller resolving a bare
+# project name (bin/fm-spawn.sh) can tell a registered name from a typo.
+# Usage: fm-project-mode.sh [--raw|--branch-prefix|--forge|--registered] <project-name>
 set -eu
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -104,12 +108,28 @@ REG="$DATA/projects.md"
 RAW=0
 BRANCH_PREFIX_QUERY=0
 WANT_FORGE=0
+REGISTERED_ONLY=0
 case "${1:-}" in
   --raw) RAW=1; shift ;;
   --branch-prefix) BRANCH_PREFIX_QUERY=1; shift ;;
   --forge) WANT_FORGE=1; shift ;;
+  --registered) REGISTERED_ONLY=1; shift ;;
 esac
-NAME=${1:?usage: fm-project-mode.sh [--raw|--branch-prefix|--forge] <project-name>}
+NAME=${1:?usage: fm-project-mode.sh [--raw|--branch-prefix|--forge|--registered] <project-name>}
+
+if [ "$REGISTERED_ONLY" -eq 1 ]; then
+  [ -f "$REG" ] || exit 1
+  awk -v n="$NAME" '
+    {
+      prefix = "- " n; plen = length(prefix);
+      if (substr($0, 1, plen) != prefix) next
+      after = substr($0, plen + 1);
+      if (after == "" || substr(after, 1, 2) == " [" || substr(after, 1, 3) == " - ") { found = 1; exit }
+    }
+    END { exit found ? 0 : 1 }
+  ' "$REG"
+  exit $?
+fi
 
 if [ ! -f "$REG" ]; then
   echo "warn: no registry at $REG; defaulting $NAME to no-mistakes off" >&2
