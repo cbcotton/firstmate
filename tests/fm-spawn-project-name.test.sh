@@ -165,7 +165,7 @@ test_brief_checks_repo_name_against_registry() {
   [ "$status" -ne 0 ] || fail "a Privateer home should refuse an unregistered repo"
   assert_contains "$out" "not a registered project" "Privateer refusal did not name the registry"
   [ ! -e "$home/data/reg-refuse" ] || fail "a refused Privateer brief left a scaffold behind"
-  out=$(FM_HOME="$home" "$ROOT/bin/fm-brief.sh" reg-priv alpha --scout 2>&1)
+  out=$(FM_HOME="$home" TMUX="/tmp/tmux-fake/$(session_socket "$home"),1,0" "$ROOT/bin/fm-brief.sh" reg-priv alpha --scout 2>&1)
   expect_code 0 $? "a Privateer home should brief a registered repo: $out"
   pass "fm-brief.sh: an unregistered repo warns in an ordinary home and is refused in a Privateer home"
 }
