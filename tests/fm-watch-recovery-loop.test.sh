@@ -243,7 +243,13 @@ foreign_note() {  # <dir> <text>
 # 0 when <pid> is still blocking after two further completed poll cycles.
 stays_blocking() {  # <state> <pid>
   local beat="$1/.last-watcher-beat" seen=0 last="" now i=0
-  rm -f "$beat"
+  # Count fresh touches from the current mtime rather than deleting the
+  # beacon: an attached arm reads a missing beacon as a stalled holder.
+  if [ "$(uname)" = Darwin ]; then
+    last=$(stat -f %m "$beat" 2>/dev/null || true)
+  else
+    last=$(stat -c %Y "$beat" 2>/dev/null || true)
+  fi
   while [ "$i" -lt 80 ]; do
     kill -0 "$2" 2>/dev/null || return 1
     if [ "$(uname)" = Darwin ]; then
