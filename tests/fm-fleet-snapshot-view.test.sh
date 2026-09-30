@@ -800,7 +800,7 @@ test_snapshot_reports_sailors_and_privateer() {
 
   printf '%s\n' '{"sailors":{"tiller":{"endpoint":"http://127.0.0.1:9/v1","status":"live","models":["qwen-coder"]},"stoker":{"endpoint":"http://127.0.0.1:9/v1","status":"placeholder","models":["qwen-coder"]}}}' \
     > "$home/config/crew-dispatch.json"
-  printf '%s\n' 'tiller/qwen-coder' > "$home/config/privateer"
+  printf '%s\n' '# first mate' '' 'tiller/qwen-coder  # the Heretic' > "$home/config/privateer"
   printf '%s\n' 'constellation' > "$home/config/active-project"
   cat > "$fakebin/curl" <<'SH'
 #!/usr/bin/env bash

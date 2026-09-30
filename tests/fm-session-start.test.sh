@@ -2685,7 +2685,7 @@ EOF
   out=$(run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
   assert_not_contains "$out" "PRIVATEER" "a home without config/privateer must print no PRIVATEER section"
 
-  printf '%s\n' 'tiller/qwen-coder' > "$home/config/privateer"
+  printf '%s\n' '# first mate' '' 'tiller/qwen-coder  # the Heretic' > "$home/config/privateer"
   printf '%s\n' '{"sailors":{"tiller":{"endpoint":"http://127.0.0.1:9/v1","status":"live","models":["qwen-coder"]}}}' \
     > "$home/config/crew-dispatch.json"
   cat > "$fakebin/curl" <<'SH'

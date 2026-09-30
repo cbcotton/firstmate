@@ -997,9 +997,10 @@ fi
 
 # --- 7. network checks ------------------------------------------------------
 # Deliberately here and not later: these lines are actionable (a stuck clone, a
-# secondmate that could not be relaunched, broken GitHub auth), and the section
-# after this one is the curated memory a truncated tail is meant to take first.
-# Deliberately here and not earlier: this is the last point in the digest, so the
+# secondmate that could not be relaunched, broken GitHub auth), and what follows
+# is the Privateer section (silent outside a Privateer home) and then the curated
+# memory a truncated tail is meant to take first.
+# Deliberately here and not earlier: this is the last read before that tail, so the
 # worker started at step 1 has had the whole composition above to finish in. It
 # is a NON-BLOCKING read either way - whatever the worker has published by now is
 # printed, and whatever it has not is named as not yet confirmed.
@@ -1025,7 +1026,7 @@ stage privateer
 . "$SCRIPT_DIR/fm-privateer-lib.sh"
 if fm_privateer_home "$CONFIG"; then
   section "PRIVATEER"
-  first_mate=$(sed -n '1{s/^[[:space:]]*//;s/[[:space:]]*$//;p;}' "$CONFIG/privateer" 2>/dev/null || true)
+  first_mate=$(fm_privateer_first_mate "$CONFIG")
   printf 'first mate: %s\n' "${first_mate:-not named in config/privateer}"
   printf 'delivery: local-only (a ready branch waits for the captain; nothing is pushed)\n'
   printf 'sailors:\n'

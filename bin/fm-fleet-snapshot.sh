@@ -240,6 +240,8 @@ esac
 . "$SCRIPT_DIR/fm-landed-lib.sh"  # FM_LANDED_JQ_DEFS: the shared landed selector
 # shellcheck source=bin/fm-merge-authority-lib.sh
 . "$SCRIPT_DIR/fm-merge-authority-lib.sh"
+# shellcheck source=bin/fm-privateer-lib.sh
+. "$SCRIPT_DIR/fm-privateer-lib.sh"  # fm_privateer_home, fm_privateer_first_mate
 
 usage() {
   cat <<'EOF'
@@ -2037,9 +2039,9 @@ sailors_json() {
 privateer_json() {
   local first_mate='' active_project=''
   local active=false
-  if [ -e "$CONFIG/privateer" ] || [ -L "$CONFIG/privateer" ]; then
+  if fm_privateer_home "$CONFIG"; then
     active=true
-    first_mate=$(sed -n '1{s/^[[:space:]]*//;s/[[:space:]]*$//;p;}' "$CONFIG/privateer" 2>/dev/null || true)
+    first_mate=$(fm_privateer_first_mate "$CONFIG")
   fi
   [ ! -f "$CONFIG/active-project" ] || active_project=$(sed -n '1{s/^[[:space:]]*//;s/[[:space:]]*$//;p;}' "$CONFIG/active-project" 2>/dev/null || true)
   jq -n --argjson active "$active" --arg fm "$first_mate" --arg ap "$active_project" \
@@ -2088,11 +2090,6 @@ printf '%s\n' "$TASKS_JSON" > "$TASKS_JSON_FILE" \
 project_charts_json > "$CHARTS_JSON_FILE" \
   || { echo "fm-fleet-snapshot: project charts read failed" >&2; exit 1; }
 
-sailors_json > "$SAILORS_JSON_FILE" \
-  || { echo "fm-fleet-snapshot: sailor status read failed" >&2; exit 1; }
-privateer_json > "$PRIVATEER_JSON_FILE" \
-  || { echo "fm-fleet-snapshot: privateer read failed" >&2; exit 1; }
-
 CONTRIBUTIONS_JSON_FILE="$JSON_TRANSPORT_DIR/contributions.json"
 CONTRIBUTION_TASKS_JSON=$(contribution_tasks_json) \
   || { echo "fm-fleet-snapshot: contribution task read failed" >&2; exit 1; }
@@ -2110,6 +2107,10 @@ if [ "$OUTPUT_MODE" = secondmate-home-summary ]; then
   exit 0
 fi
 
+sailors_json > "$SAILORS_JSON_FILE" \
+  || { echo "fm-fleet-snapshot: sailor status read failed" >&2; exit 1; }
+privateer_json > "$PRIVATEER_JSON_FILE" \
+  || { echo "fm-fleet-snapshot: privateer read failed" >&2; exit 1; }
 scout_report_lines > "$SCOUT_REPORTS_JSON_FILE" \
   || { echo "fm-fleet-snapshot: scout report snapshot failed" >&2; exit 1; }
 main_inventory_json "$BACKLOG_JSON_FILE" "$TASKS_JSON_FILE" > "$MAIN_INVENTORY_JSON_FILE" \
