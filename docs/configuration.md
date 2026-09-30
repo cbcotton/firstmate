@@ -985,6 +985,11 @@ A checkout that is the home itself cannot update its `bin/` from inside the sess
 A project the home shares with a Claude-orchestrated home takes its own ship-branch prefix in this home's `data/projects.md`.
 The flag is not inherited, because a Privateer home spawns no secondmate.
 
+Change sailors and models with the [named sailor](#crew-dispatch-profiles-configcrew-dispatchjson) commands of `bin/fm-sailor.sh`, from the captain's own shell, because `config/` is unwritable inside the session.
+In a Privateer home each command refuses a change that `bin/fm-privateer.sh check` would report.
+`bin/fm-sailor.sh set-model <sailor> <model> --first-mate` also rewrites the first mate line of `config/privateer`.
+The first mate switches models, and the egress proxy allows a new or moved endpoint, only once the session is stopped and started again.
+
 ## Worker account pin (config/claude-account, config/pi-account)
 
 A home that mixes accounts for one runner, such as a work login and a personal one, can pin the account its own Claude and Pi workers launch on.
@@ -1248,6 +1253,17 @@ A sailor is a named machine serving local models through an OpenAI-compatible en
 - A `placeholder` sailor is never dispatched, even when something answers at its address; only the captain changes its status to `live`.
 - A `live` sailor is eligible only while `bin/fm-sailor.sh check <sailor> <model>` passes: its endpoint must answer within a few seconds and list the model, and this home must hold fewer than `max_concurrent` tasks on it.
   The capacity count is per home, so homes that share one machine each count only their own tasks.
+- `bin/fm-sailor.sh status` shows each live sailor, or every sailor with `--all`: whether it answers, this home's tasks on it, the server's running and waiting requests when it reports them, and each listed model as loaded, unloaded, or missing.
+- `bin/fm-sailor.sh` also edits the map, from the captain's own shell:
+  - `add` registers a sailor, as a `placeholder` unless `--live`.
+  - `add --from-mlx-serve <server-id>` takes the endpoint and the live model list from that server's entry in the local mlx-serve registry, `~/.mlx-serve/servers.json`; it only reads the registry and never loads, unloads, or starts a server.
+  - `set` changes a sailor's endpoint, title, host, capacity, or status.
+  - `set-model` adds a model to a sailor, `--replace <old>` also moves every rule and default profile on that sailor from the old model to the new one, and `--first-mate` moves a [Privateer](#privateer-quarantine-configprivateer) first mate onto it.
+  - `retire` removes a sailor and every profile naming it, with any rule or default left without a profile.
+- Each edit writes nothing unless the whole result validates, keeps a dated copy of the file it replaces, and with `--dry-run` only prints the change.
+  `set-model --replace` and `retire` refuse while a task still runs on what they would remove, and `set-model` refuses a model a live sailor does not serve.
+  A change reaches each worker at its next spawn, while running workers keep what they launched with.
+- `--warm` on `check` or `set-model` asks the model for one token, so a server that loads models on demand loads it now and a failed load shows up then rather than in a worker's first request.
 - When every sailor candidate a matched rule or default offers is refused, firstmate uses `sailor_fallback` (one profile object or a non-empty array, never itself a sailor), for example Opus 5.5 in a home orchestrated through Claude Code.
 - Without `sailor_fallback`, sailor work waits in the queue until a sailor answers.
   A home that must never reach Anthropic, such as a Privateer home, declares no `sailor_fallback` and no Claude profile at all ([Privateer quarantine](#privateer-quarantine-configprivateer)).
