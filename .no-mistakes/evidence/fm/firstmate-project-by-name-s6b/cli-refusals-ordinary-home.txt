@@ -1,0 +1,71 @@
+## fm-brief.sh (ordinary home)
+$ bin/fm-brief.sh t-flag alpha --project alpha --mode local-only
+error: unknown flag '--project'; accepted flags: --scout --secondmate --herdr-lab --no-projects --mode --branch-prefix --forge --shape (the project is the second positional argument, never a flag)
+[exit 1]
+
+$ bin/fm-brief.sh --project alpha t-flag2 --mode local-only
+error: unknown flag '--project'; accepted flags: --scout --secondmate --herdr-lab --no-projects --mode --branch-prefix --forge --shape (the project is the second positional argument, never a flag)
+[exit 1]
+
+$ bin/fm-brief.sh scout alpha --mode local-only
+error: 'scout' is a keyword, not a task id; did you mean: fm-brief.sh <task-id> <repo-name> --mode <mode>  (or --scout for a scout brief)?
+[exit 1]
+
+$ bin/fm-brief.sh ship alpha --mode local-only
+error: 'ship' is a keyword, not a task id; did you mean: fm-brief.sh <task-id> <repo-name> --mode <mode>  (or --scout for a scout brief)?
+[exit 1]
+
+$ bin/fm-brief.sh secondmate my-task alpha
+error: 'secondmate' is a keyword, not a task id; did you mean: fm-brief.sh <task-id> <repo-name> --mode <mode>  (or --scout for a scout brief)?
+[exit 1]
+
+$ bin/fm-brief.sh mode my-task
+error: 'mode' is a keyword, not a task id; did you mean: fm-brief.sh <task-id> <repo-name> --mode <mode>  (or --scout for a scout brief)?
+[exit 1]
+
+$ bin/fm-brief.sh yolo alpha --mode local-only
+error: 'yolo' is a keyword, not a task id; did you mean: fm-brief.sh <task-id> <repo-name> --mode <mode>  (or --scout for a scout brief)?
+[exit 1]
+
+$ bin/fm-brief.sh t-unreg nosuchrepo --mode local-only
+scaffolded: /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.fhdq6k/data/t-unreg/brief.md (ship, mode=local-only; replace {TASK} and {FIRSTMATE_SPEC})
+[exit 0]
+
+$ bin/fm-brief.sh t-alpha alpha --mode local-only
+scaffolded: /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.fhdq6k/data/t-alpha/brief.md (ship, mode=local-only; replace {TASK} and {FIRSTMATE_SPEC})
+[exit 0]
+
+data dir now:
+projects.md
+t-alpha
+t-unreg
+
+## fm-spawn.sh (ordinary home)
+$ bin/fm-spawn.sh t-alpha --project alpha --mode local-only --yolo off
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.fhdq6k
+error: unknown flag '--project'; accepted flags: --scout --secondmate --relaunch --harness --model --effort --sailor --backend --mode --yolo --branch-prefix --traceparent (the project is a positional argument, never a flag)
+[exit 1]
+
+$ bin/fm-spawn.sh t-alpha alpha --bogus --mode local-only --yolo off
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.fhdq6k
+error: unknown flag '--bogus'; accepted flags: --scout --secondmate --relaunch --harness --model --effort --sailor --backend --mode --yolo --branch-prefix --traceparent (the project is a positional argument, never a flag)
+[exit 1]
+
+$ bin/fm-spawn.sh t-alpha alpha --project alpha --mode local-only --yolo off
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.fhdq6k
+error: unknown flag '--project alpha'; accepted flags: --scout --secondmate --relaunch --harness --model --effort --sailor --backend --mode --yolo --branch-prefix --traceparent (the project is a positional argument, never a flag)
+[exit 1]
+
+$ bin/fm-spawn.sh t-unreg nosuchproject --mode local-only --yolo off
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.fhdq6k
+bin/fm-spawn.sh: line 3236: cd: nosuchproject: No such file or directory
+error: project 'nosuchproject' is not a registered project with a clone under projects/, nor a directory; pass a registered project name or projects/<name>
+[exit 1]
+
+$ bin/fm-spawn.sh t-alpha ghost --mode local-only --yolo off
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.fhdq6k
+bin/fm-spawn.sh: line 3236: cd: ghost: No such file or directory
+error: project 'ghost' is not a registered project with a clone under projects/, nor a directory; pass a registered project name or projects/<name>
+[exit 1]
+
+state dir now:

@@ -1,0 +1,5 @@
+$ bin/fm-spawn.sh t-alpha alpha --mode local-only --yolo off   (bare registered name, cwd=/Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M3SNH4STNMEFZ6TQ5TS9BA96)
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.fhdq6k
+spawned t-alpha harness=claude kind=ship mode=local-only yolo=off window=primary:fm-t-alpha worktree=/Users/cotton/.treehouse/alpha-af237e/1/alpha
+[exit 0]
+DONE

@@ -1,0 +1,56 @@
+TMUX socket: /private/tmp/fml.821Xbn/tmux-501/fm-privateer-74d164ab12aa
+config/privateer present: privateer
+
+## fm-brief.sh in the Privateer home (inside its session)
+$ bin/fm-brief.sh p-unreg nosuchrepo --scout
+error: 'nosuchrepo' is not a registered project in /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.fhdq6k/data/projects.md; a Privateer home briefs only registered projects
+[exit 1]
+
+$ bin/fm-brief.sh p-unreg2 nosuchrepo --mode local-only
+error: 'nosuchrepo' is not a registered project in /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.fhdq6k/data/projects.md; a Privateer home briefs only registered projects
+[exit 1]
+
+$ bin/fm-brief.sh p-alpha alpha --scout
+scaffolded: /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.fhdq6k/data/p-alpha/brief.md (scout; replace {TASK} and {FIRSTMATE_SPEC})
+[exit 0]
+
+$ bin/fm-brief.sh p-flag alpha --project alpha --scout
+error: unknown flag '--project'; accepted flags: --scout --secondmate --herdr-lab --no-projects --mode --branch-prefix --forge --shape (the project is the second positional argument, never a flag)
+[exit 1]
+
+## fm-spawn.sh in the Privateer home (inside its session)
+$ bin/fm-spawn.sh p-alpha /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.fhdq6k/elsewhere/beta --yolo off
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.fhdq6k
+error: ship spawns require --mode <no-mistakes|direct-PR|local-only>; resolve it at intake from the captain's instruction and the project's registered posture in data/projects.md
+[exit 1]
+
+$ bin/fm-spawn.sh p-alpha /tmp --yolo off
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.fhdq6k
+error: ship spawns require --mode <no-mistakes|direct-PR|local-only>; resolve it at intake from the captain's instruction and the project's registered posture in data/projects.md
+[exit 1]
+
+$ bin/fm-spawn.sh p-alpha /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.fhdq6k/projects/../elsewhere/beta --yolo off
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.fhdq6k
+error: ship spawns require --mode <no-mistakes|direct-PR|local-only>; resolve it at intake from the captain's instruction and the project's registered posture in data/projects.md
+[exit 1]
+
+$ bin/fm-spawn.sh p-alpha alpha --yolo off
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.fhdq6k
+error: ship spawns require --mode <no-mistakes|direct-PR|local-only>; resolve it at intake from the captain's instruction and the project's registered posture in data/projects.md
+[exit 1]
+
+$ bin/fm-spawn.sh p-alpha projects/alpha --yolo off
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.fhdq6k
+error: ship spawns require --mode <no-mistakes|direct-PR|local-only>; resolve it at intake from the captain's instruction and the project's registered posture in data/projects.md
+[exit 1]
+
+$ bin/fm-spawn.sh p-alpha /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.fhdq6k/projects/alpha --yolo off
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.fhdq6k
+error: ship spawns require --mode <no-mistakes|direct-PR|local-only>; resolve it at intake from the captain's instruction and the project's registered posture in data/projects.md
+[exit 1]
+
+data: p-alpha
+projects.md
+t-alpha
+t-unreg
+DONE

@@ -1,0 +1,49 @@
+TMUX socket: /private/tmp/fml.821Xbn/tmux-501/fm-privateer-74d164ab12aa
+config/privateer present: privateer
+
+## fm-brief.sh in the Privateer home (inside its session)
+## fm-spawn.sh in the Privateer home (inside its session)
+$ bin/fm-spawn.sh p-alpha /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.fhdq6k/elsewhere/beta --mode local-only --yolo off
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.fhdq6k
+error: the Privateer quarantine refuses a project directory outside projects/; pass a registered project name
+[exit 1]
+
+$ bin/fm-spawn.sh p-alpha /tmp --mode local-only --yolo off
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.fhdq6k
+error: the Privateer quarantine refuses a project directory outside projects/; pass a registered project name
+[exit 1]
+
+$ bin/fm-spawn.sh p-alpha /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.fhdq6k/projects/../elsewhere/beta --mode local-only --yolo off
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.fhdq6k
+error: the Privateer quarantine refuses a project directory outside projects/; pass a registered project name
+[exit 1]
+
+$ bin/fm-spawn.sh p-alpha alpha --mode local-only --yolo off
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.fhdq6k
+error: the Privateer quarantine refuses every spawn until this home satisfies it:
+error:   config/crew-harness must hold opencode
+error:   config/sailor-sandbox is absent; every Privateer sailor runs inside the sandbox
+error:   config/crew-dispatch.json is absent; a Privateer home dispatches only to the sailors it names
+[exit 1]
+
+$ bin/fm-spawn.sh p-alpha projects/alpha --mode local-only --yolo off
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.fhdq6k
+error: the Privateer quarantine refuses every spawn until this home satisfies it:
+error:   config/crew-harness must hold opencode
+error:   config/sailor-sandbox is absent; every Privateer sailor runs inside the sandbox
+error:   config/crew-dispatch.json is absent; a Privateer home dispatches only to the sailors it names
+[exit 1]
+
+$ bin/fm-spawn.sh p-alpha /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.fhdq6k/projects/alpha --mode local-only --yolo off
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.fhdq6k
+error: the Privateer quarantine refuses every spawn until this home satisfies it:
+error:   config/crew-harness must hold opencode
+error:   config/sailor-sandbox is absent; every Privateer sailor runs inside the sandbox
+error:   config/crew-dispatch.json is absent; a Privateer home dispatches only to the sailors it names
+[exit 1]
+
+data: p-alpha
+projects.md
+t-alpha
+t-unreg
+DONE
