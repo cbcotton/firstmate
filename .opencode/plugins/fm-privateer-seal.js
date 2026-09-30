@@ -14,7 +14,7 @@ import {
 } from "./lib/fm-operational-input.js";
 
 // The Privateer seal. In a home with config/privateer, `bin/fm-privateer.sh
-// inside` answers once, at load, whether this OpenCode process runs inside the
+// inside` answers once, at load (see sealMode for which homes it asks), whether this OpenCode process runs inside the
 // home's sealed session; in any other home it answers that there is no seal,
 // or cannot run, and this plugin adds no hook at all.
 //
@@ -33,9 +33,9 @@ import {
 // says. docs/verification/local-sailors.md records the OpenCode hook behavior
 // this relies on, and tests/fm-privateer-seal-live-e2e.test.sh refreshes it.
 
-function runProcess(command, args) {
+function runProcess(command, args, env) {
   return new Promise((resolvePromise) => {
-    const child = spawn(command, args, { stdio: ["ignore", "ignore", "pipe"] });
+    const child = spawn(command, args, { env, stdio: ["ignore", "ignore", "pipe"] });
     let stderr = "";
     child.stderr.on("data", (chunk) => {
       stderr += chunk.toString();
@@ -67,11 +67,20 @@ async function resolveRoot(anchor) {
   return result || resolvePath(anchor);
 }
 
+// The checkout is asked as its own home, whatever home the environment names,
+// and the inherited FM_HOME, when it names another directory, is asked too, so
+// a checkout outside its home still finds its session. Either home refusing
+// seals; otherwise either home answering inside is inside.
 async function sealMode(root) {
   if (!root) return { mode: "off" };
-  const result = await runProcess(`${root}/bin/fm-privateer.sh`, ["inside"]);
-  if (result.code === 0) return { mode: "inside" };
-  if (result.code === 1 && result.stderr.trim()) return { mode: "outside", reason: result.stderr.trim() };
+  const own = { ...process.env, FM_HOME: root };
+  for (const name of ["FM_ROOT_OVERRIDE", "FM_STATE_OVERRIDE", "FM_CONFIG_OVERRIDE", "FM_PROJECTS_OVERRIDE"]) delete own[name];
+  const envs = [own];
+  if (process.env.FM_HOME && resolvePath(process.env.FM_HOME) !== root) envs.push(process.env);
+  const results = await Promise.all(envs.map((env) => runProcess(`${root}/bin/fm-privateer.sh`, ["inside"], env)));
+  const outside = results.find((result) => result.code === 1 && result.stderr.trim());
+  if (outside) return { mode: "outside", reason: outside.stderr.trim() };
+  if (results.some((result) => result.code === 0)) return { mode: "inside" };
   return { mode: "off" };
 }
 
