@@ -7,8 +7,9 @@
 # ANTHROPIC_*, CLAUDE_*, or CLAUDECODE variable, refuses without the flag or
 # with a forbidden file, starts the real egress proxy (bin/fm-privateer-proxy.py)
 # as its own process with exactly the sailors and the forge allowed and the
-# tmux server inside a sandbox that reaches only that proxy, refuses when the
-# proxy cannot bind, and refuses to stop while work is in flight. A fake tmux
+# tmux server inside a sandbox that reaches only that proxy and keeps a checkout
+# inside the home from rewriting the first mate's instructions, refuses when
+# the proxy cannot bind, and refuses to stop while work is in flight. A fake tmux
 # runs each new session's command in the background and records every call,
 # and a fake sandbox-exec records the profile it was given and runs the
 # command, so the launch shape is pinned on every platform. Where sandbox-exec
@@ -474,6 +475,29 @@ refused CONNECT forge.example.test:443' "$(jq -r '"\(.verdict) \(.method) \(.des
   pass "start runs the egress proxy with the sailor and forge allowed, and the first mate with only the allowlist and isolated OpenCode directories in a tmux server whose sandbox reaches only that proxy"
 }
 
+test_start_denies_the_instructions_of_a_checkout_that_is_the_home() {
+  local dir home out status home_real deny p
+  dir="$TMP_ROOT/start-inside"
+  home=$(make_home start-inside)
+  fm_git_init_commit "$home"
+  make_launcher_fakebin "$dir" >/dev/null
+  make_stub_primary "$dir" >/dev/null
+  out=$(run_launcher "$dir" "$home" "$home" start)
+  status=$?
+  expect_code 0 "$status" "start must succeed from a checkout that is the home: $out"
+  home_real=$(cd "$home" && pwd -P)
+  [ -f "$dir/profile.sb" ] || fail "the tmux server never started inside the sandbox"
+  deny=$(sed -n '/^(deny file-write\*$/,/^)$/p' "$dir/profile.sb")
+  for p in AGENTS.md .agents docs .opencode/plugins; do
+    assert_contains "$deny" "  (subpath \"$home_real/$p\")" "the sandbox must deny writes to the checkout's $p"
+  done
+  assert_contains "$deny" "  (regex #\"^$(rq "$home_real/.opencode")\$\")" "the sandbox must deny moving the .opencode entry above the plugins"
+  assert_not_contains "$deny" "(subpath \"$home_real/.opencode\")" "the rest of .opencode must stay OpenCode's scratch"
+  out=$(run_launcher "$dir" "$home" "$home" stop)
+  expect_code 0 "$?" "stop must end the session: $out"
+  pass "start denies writes to the instructions, skills, docs, and plugins of a checkout that is the home, and leaves the rest of .opencode writable"
+}
+
 test_start_refuses_when_the_proxy_cannot_bind() {
   local dir home root out status fakebin
   dir="$TMP_ROOT/start-no-bind"
@@ -653,6 +677,11 @@ test_session_sandbox_holds_every_command() {
   root="$home/nest/checkout"
   mkdir -p "$home/nest"
   git -C "$dir/rootmain" worktree add -q -b pv-root "$root"
+  # The first mate's instructions, skills, docs, and plugins in that checkout.
+  mkdir -p "$root/.agents/skills/probe" "$root/docs" "$root/.opencode/plugins"
+  for f in AGENTS.md .agents/skills/probe/SKILL.md docs/probe.md .opencode/plugins/probe.js; do
+    printf 'original\n' > "$root/$f"
+  done
   mkdir -p "$dir/sailor/v1" "$dir/other"
   printf '{"data":[{"id":"coder"}]}\n' > "$dir/sailor/v1/models"
   printf 'reached\n' > "$dir/other/index.html"
@@ -681,8 +710,10 @@ test_session_sandbox_holds_every_command() {
   if command -v treehouse >/dev/null 2>&1; then treehouse_line=treehouse=in-pool; else treehouse_line=treehouse=absent; fi
   # A command the first mate starts through tmux, as a worker's pane is: it
   # tries the other server directly and through the proxy, writes where a
-  # worker's OpenCode keeps its data, tries to plant Git config, hooks, home
-  # config, and scripts, and writes its status and commits in its own copy.
+  # worker's OpenCode keeps its data and in OpenCode's scratch, tries to plant
+  # Git config, hooks, home config, and scripts, and to rewrite or move aside
+  # the first mate's instructions, skills, docs, and plugins, and writes its
+  # status and commits in its own copy.
   cat > "$dir/window" <<SH
 #!/bin/sh
 /usr/bin/curl --noproxy '*' -sS -m 3 -o /dev/null http://127.0.0.1:$oport/ 2>/dev/null
@@ -690,10 +721,17 @@ echo "direct=\$?" > '$probe.window.tmp'
 echo "proxied=\$(/usr/bin/curl -sS -m 3 -o /dev/null -w '%{http_code}' http://127.0.0.1:$oport/ 2>/dev/null)" >> '$probe.window.tmp'
 mkdir -p "\$XDG_DATA_HOME/opencode" && : > "\$XDG_DATA_HOME/opencode/probe"
 echo "write=\$?" >> '$probe.window.tmp'
+: > '$root/.opencode/scratch'
+echo "scratch=\$?" >> '$probe.window.tmp'
 planted=
 for t in '$proj/.git/hooks/post-checkout' '$proj/.git/config' '$wtgit/config.worktree' '$wtgit/hooks/post-checkout' \
-  '$wtgit/commondir' '$wtgit/gitdir' '$home/config/probe' '$home/bin/probe' '$shared/.git' '$shared/README' "\$HOME/.treehouse/probe"; do
+  '$wtgit/commondir' '$wtgit/gitdir' '$home/config/probe' '$home/bin/probe' '$shared/.git' '$shared/README' "\$HOME/.treehouse/probe" \
+  '$root/AGENTS.md' '$root/.agents/skills/probe/SKILL.md' '$root/.agents/skills/new.md' '$root/docs/probe.md' \
+  '$root/.opencode/plugins/probe.js' '$root/.opencode/plugins/new.js'; do
   ( : >> "\$t" ) 2>/dev/null && planted="\$planted \$t"
+done
+for t in '$root/AGENTS.md' '$root/.agents' '$root/docs' '$root/.opencode/plugins' '$root/.opencode'; do
+  mv "\$t" "\$t.aside" 2>/dev/null && planted="\$planted move:\$t"
 done
 mv '$proj/.git' '$proj/.git.aside' 2>/dev/null && planted="\$planted rename:$proj/.git"
 mv '$proj' '$home/moved' 2>/dev/null && planted="\$planted move:$proj" &&
@@ -755,13 +793,14 @@ SH
   assert_equals "direct=7
 proxied=403
 write=0
+scratch=0
 planted=none
 gitconfig=refused
 status=0
 commit=0
 slot=0
 $treehouse_line" "$(cat "$probe.window" 2>/dev/null)" \
-    "a command started through tmux must reach nothing directly, be refused by the proxy for an unlisted host, write the worker's OpenCode data, plant no Git config, hook, home config, script, or shared-pool slot, still write its status and commit in its own copy, and create and commit in a slot of the home's own pool"
+    "a command started through tmux must reach nothing directly, be refused by the proxy for an unlisted host, write the worker's OpenCode data and OpenCode's scratch, plant no Git config, hook, home config, script, or shared-pool slot, rewrite or move none of the first mate's instructions, skills, docs, or plugins, still write its status and commit in its own copy, and create and commit in a slot of the home's own pool"
   case "$(cat "$probe.primary" 2>/dev/null)" in
     "kill=0"* | *"rewrite=0") fail "the first mate stopped or rewrote the egress proxy: $(cat "$probe.primary" 2>/dev/null)" ;;
     "kill="*) ;;
@@ -775,7 +814,7 @@ allowed GET 127.0.0.1:$sport" "$(jq -r --arg o "127.0.0.1:$oport" --arg s "127.0
     fail "stop must stop the egress proxy"
   fi
   [ "$port" != 1 ] || fail "the first mate rewrote the proxy's port"
-  pass "in the real sandboxed session, a command started through tmux reaches nothing but the proxy and plants nothing that runs outside, a worker still commits in its own copy and in a new slot of the home's own pool, and the first mate cannot stop or rewrite the proxy"
+  pass "in the real sandboxed session, a command started through tmux reaches nothing but the proxy, plants nothing that runs outside, and cannot rewrite the first mate's instructions, skills, docs, or plugins, a worker still commits in its own copy and in a new slot of the home's own pool, and the first mate cannot stop or rewrite the proxy"
 }
 
 # --- spawn ------------------------------------------------------------------
@@ -947,6 +986,7 @@ test_start_refuses_without_the_flag
 test_start_refuses_with_a_forbidden_file
 test_start_refuses_without_a_first_mate_line
 test_start_passes_only_the_allowlist
+test_start_denies_the_instructions_of_a_checkout_that_is_the_home
 test_start_refuses_when_the_proxy_cannot_bind
 test_proxy_forwards_only_allowed_destinations
 test_session_sandbox_holds_every_command

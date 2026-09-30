@@ -98,7 +98,10 @@
 # which launch-env names as TREEHOUSE_ROOT, so treehouse creates and hands out
 # slots there; the shared pool under ~/.treehouse, and every other home's
 # slots, are out of reach. Nothing inside may write this home's egress
-# directory, config/, or bin/; the Git config or hooks of this checkout, of
+# directory, config/, or bin/; when this checkout is inside this home, its
+# AGENTS.md, .agents/, docs/, or .opencode/plugins/, or the .opencode entry
+# itself, so no worker can rewrite the first mate's instructions, skills,
+# docs, or plugins; the Git config or hooks of this checkout, of
 # any clone under projects/, or of any linked worktree or submodule of those
 # (git dirs under .git/worktrees/<name>/ and .git/modules/<path>/); the git
 # dir, commondir, or gitdir of a linked worktree that lives outside this
@@ -135,6 +138,12 @@
 #     and a symlink placed over any of them can still be moved aside and back
 #     from inside the session, so a linked worktree's or submodule's Git config
 #     or hooks can be planted that way; closing that class is follow-up work;
+#   - OpenCode also loads plugins and configuration from the rest of
+#     .opencode/ (such as .opencode/plugin/) and from its own directories
+#     under state/privateer/opencode/, which stay writable, so a worker can
+#     still add one there that the first mate loads at its next start; and a
+#     checkout nested below this home, rather than being it, keeps its own
+#     bin/ writable;
 #   - as bin/fm-sandbox-exec.sh states, the sandbox is not a boundary against
 #     same-user system services that start programs outside it.
 #
@@ -619,8 +628,14 @@ cmd_start() {
       *) sandbox_args+=(--deny-write-regex "^$(regex_quote "$wt_git")(\$|/(commondir|gitdir)\$)") ;;
     esac
   done
+  # A checkout inside the home is writable, so its first mate's instructions,
+  # skills, docs, and plugins are taken back, with the .opencode entry above
+  # the plugins; the rest of .opencode stays OpenCode's scratch.
   case "$root_real" in
-    "$home_real" | "$home_real"/*) ;;
+    "$home_real" | "$home_real"/*)
+      sandbox_args+=(--deny-write "$root_real/AGENTS.md" --deny-write "$root_real/.agents" --deny-write "$root_real/docs"
+        --deny-write "$root_real/.opencode/plugins" --deny-write-regex "^$(regex_quote "$root_real/.opencode")\$")
+      ;;
     *) sandbox_args+=(--write "$root_real/.opencode") ;;
   esac
   # The primary's own boundary: the pane shell tmux starts may have read the
