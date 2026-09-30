@@ -117,7 +117,7 @@ digest_requests() {
 }
 
 test_privateer_first_mate_takes_the_helm_by_itself() {
-  local case_dir home root port out status log pid comm started elapsed pane i
+  local case_dir home root port out status log pid comm started elapsed pane
   case_dir="$TMP_ROOT/case"
   home="$case_dir/home"
   mkdir -p "$home/config" "$home/state" "$home/data" "$home/projects"
@@ -160,7 +160,7 @@ test_privateer_first_mate_takes_the_helm_by_itself() {
   # over a minute at startup on a blocked plugin install before its composer
   # is ready.
   started=$(date +%s)
-  for i in $(seq 480); do
+  for _ in $(seq 480); do
     tmux -L "$SOCKET" capture-pane -p -t privateer:firstmate 2>/dev/null | grep -Fq 'Ask anything' && break
     tmux -L "$SOCKET" has-session -t privateer 2>/dev/null || guard_fail "the session ended before its composer was ready"
     sleep 0.5
@@ -168,7 +168,7 @@ test_privateer_first_mate_takes_the_helm_by_itself() {
   sleep 2
   tmux -L "$SOCKET" send-keys -t privateer:firstmate -l 'CAPTAIN_FIRST_MESSAGE' 2>/dev/null || true
   tmux -L "$SOCKET" send-keys -t privateer:firstmate Enter 2>/dev/null || true
-  for i in $(seq 480); do
+  for _ in $(seq 480); do
     [ "$(digest_requests "$log" 'SESSION START - ')" != 0 ] && break
     tmux -L "$SOCKET" has-session -t privateer 2>/dev/null || guard_fail "the session ended before the digest arrived"
     sleep 0.5
