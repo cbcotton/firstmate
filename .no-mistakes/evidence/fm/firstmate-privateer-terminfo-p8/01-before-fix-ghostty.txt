@@ -1,0 +1,12 @@
+=== BEFORE (base 3a0eeff5): TERM=xterm-ghostty TERMINFO=/Applications/Ghostty.app/Contents/Resources/terminfo launcher=/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/tmp.wotlK4yMIJ/bin/fm-privateer.sh
+$ fm-privateer.sh start
+missing or unsuitable terminal: xterm-ghostty
+fm-privateer: refused: tmux could not start the Privateer session
+[exit status 1]
+$ tmux -L fm-privateer-43a1db8bcb5c list-sessions
+no server running on /private/tmp/tmux-501/fm-privateer-43a1db8bcb5c
+--- first mate's environment (TERM*/FM_HOME) and infocmp inside session:
+(first mate never ran)
+$ fm-privateer.sh stop
+fm-privateer: refused: the Privateer session is not running, and no egress proxy was left behind
+[exit status 1]

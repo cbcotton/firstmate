@@ -1,0 +1,14 @@
+=== AFTER (target 39ca1bf3): TERM=xterm-ghostty TERMINFO=/Applications/Ghostty.app/Contents/Resources/terminfo launcher=/Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M3SAPE7YASAYYVGM6FK9WJG9/bin/fm-privateer.sh
+$ fm-privateer.sh start
+privateer: started session privateer on tmux socket fm-privateer-9980b4504195 (first mate tiller/coder, egress proxy 127.0.0.1:60206); attach with: FM_HOME='/private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-lab.IQcYso/home' '/Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M3SAPE7YASAYYVGM6FK9WJG9/bin/fm-privateer.sh' attach
+[exit status 0]
+$ tmux -L fm-privateer-9980b4504195 list-sessions
+privateer: 1 windows (created Wed Sep 30 16:20:03 2026)
+--- first mate's environment (TERM*/FM_HOME) and infocmp inside session:
+TERM=xterm-ghostty
+TERMINFO=/Applications/Ghostty.app/Contents/Resources/terminfo
+#	Reconstructed via infocmp from file: /Applications/Ghostty.app/Contents/Resources/terminfo/78/xterm-ghostty
+xterm-ghostty|ghostty|Ghostty,
+$ fm-privateer.sh stop
+privateer: stopped session privateer on tmux socket fm-privateer-9980b4504195
+[exit status 0]

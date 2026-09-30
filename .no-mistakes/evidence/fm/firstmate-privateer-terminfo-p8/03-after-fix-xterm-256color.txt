@@ -1,0 +1,11 @@
+=== AFTER, workaround TERM still works: TERM=xterm-256color TERMINFO=<unset> launcher=/Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M3SAPE7YASAYYVGM6FK9WJG9/bin/fm-privateer.sh
+$ fm-privateer.sh start
+privateer: started session privateer on tmux socket fm-privateer-4dd5fbe56840 (first mate tiller/coder, egress proxy 127.0.0.1:60168); attach with: FM_HOME='/private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-lab.bWUVw7/home' '/Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M3SAPE7YASAYYVGM6FK9WJG9/bin/fm-privateer.sh' attach
+[exit status 0]
+$ tmux -L fm-privateer-4dd5fbe56840 list-sessions
+privateer: 1 windows (created Wed Sep 30 16:19:53 2026)
+--- first mate's environment (TERM*/FM_HOME) and infocmp inside session:
+(first mate never ran)
+$ fm-privateer.sh stop
+privateer: stopped session privateer on tmux socket fm-privateer-4dd5fbe56840
+[exit status 0]
