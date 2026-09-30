@@ -4,7 +4,8 @@
 # A name-by-name list silently stops ignoring any new or home-local file under
 # config/ (fm-gitignore-config-name-by-name): an unrecognized file there makes
 # the working tree read as dirty, which then blocks guarded sync paths that
-# refuse to touch a dirty home.
+# refuse to touch a dirty home. forks/, which holds other homes cloned inside a
+# checkout, is ignored for the same reason.
 set -u
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -84,7 +85,28 @@ test_scratchpad2_does_not_dirty_porcelain() {
   pass "scratchpad2/ does not make git status --porcelain dirty"
 }
 
+test_nested_fork_does_not_dirty_porcelain() {
+  # Self-update skips a primary checkout whose git status --porcelain prints
+  # anything, so another home cloned under forks/ must not make it dirty.
+  local repo status
+  repo=$(mktemp -d "${TMPDIR:-/tmp}/fm-forks-ignore.XXXXXX")
+  git init -q "$repo"
+  cp "$ROOT/.gitignore" "$repo/.gitignore"
+  git -C "$repo" add .gitignore
+  git -C "$repo" -c user.name='Firstmate Tests' -c user.email='tests@example.invalid' \
+    commit -qm 'seed gitignore'
+  git init -q "$repo/forks/privateer"
+  mkdir -p "$repo/forks/privateer/bin"
+  printf 'script\n' > "$repo/forks/privateer/bin/fm-probe.sh"
+  printf '# Fork\n' > "$repo/forks/privateer/AGENTS.md"
+  status=$(git -C "$repo" status --porcelain --untracked-files=all)
+  rm -rf "$repo"
+  [ -z "$status" ] || fail "a home cloned under forks/ still dirties porcelain: $status"
+  pass "a home cloned under forks/ does not make git status --porcelain dirty"
+}
+
 test_config_dir_ignored_as_category
+test_nested_fork_does_not_dirty_porcelain
 test_unrelated_path_stays_visible
 test_scratchpad_prefix_is_ignored
 test_scratchpad_prefix_ignores_no_tracked_path
