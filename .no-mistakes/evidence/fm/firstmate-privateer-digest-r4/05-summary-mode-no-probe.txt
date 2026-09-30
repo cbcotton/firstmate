@@ -1,0 +1,4 @@
+$ : > sailor-server-access.log; FM_HOME=<lab> bin/fm-fleet-snapshot.sh --secondmate-home-summary | jq -c "{schema, has_sailors:has(\"sailors\")}"
+{"schema":"fm-secondmate-home-summary.v1","has_sailors":false,"has_privateer":false}
+rc=
+sailor server requests during summary mode: 0

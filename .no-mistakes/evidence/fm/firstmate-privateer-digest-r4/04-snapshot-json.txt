@@ -1,0 +1,28 @@
+$ FM_HOME=<lab> bin/fm-fleet-snapshot.sh --json | jq "{sailors,privateer}"
+{
+  "sailors": [
+    {
+      "name": "tiller",
+      "status": "live",
+      "answering": true,
+      "endpoint": "http://127.0.0.1:18731/v1",
+      "tasks": 0,
+      "capacity": 1,
+      "line": "tiller live answering endpoint=http://127.0.0.1:18731/v1 tasks=0/1 running=0 waiting=0 models=heretic-27b(listed)"
+    },
+    {
+      "name": "stoker",
+      "status": "live",
+      "answering": false,
+      "endpoint": "http://127.0.0.1:18799/v1",
+      "tasks": 0,
+      "capacity": 1,
+      "line": "stoker live not-answering endpoint=http://127.0.0.1:18799/v1 tasks=0/1"
+    }
+  ],
+  "privateer": {
+    "active": true,
+    "first_mate": "tiller/heretic-27b",
+    "active_project": "constellation"
+  }
+}

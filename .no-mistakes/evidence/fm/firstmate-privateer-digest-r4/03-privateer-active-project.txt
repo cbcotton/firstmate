@@ -1,0 +1,15 @@
+$ printf "  constellation  
+" > config/active-project
+$ FM_HOME=<lab> bin/fm-session-start.sh  (PRIVATEER..CONTEXT excerpt)
+PRIVATEER
+================================================================================
+first mate: tiller/heretic-27b
+delivery: local-only (a ready branch waits for the captain; nothing is pushed)
+sailors:
+  tiller live answering endpoint=http://127.0.0.1:18731/v1 tasks=0/1 running=0 waiting=0 models=heretic-27b(listed)
+  stoker live not-answering endpoint=http://127.0.0.1:18799/v1 tasks=0/1
+  bosun placeholder not-answering endpoint=http://127.0.0.1:18798/v1 tasks=0/1
+active project: constellation
+
+================================================================================
+CONTEXT

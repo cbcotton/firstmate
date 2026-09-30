@@ -1,0 +1,18 @@
+$ printf "
+# no first mate named yet
+
+" > config/privateer; printf "{ not json" > config/crew-dispatch.json; rm config/active-project
+$ FM_HOME=<lab> bin/fm-session-start.sh  (PRIVATEER..CONTEXT excerpt, then exit status)
+PRIVATEER
+================================================================================
+first mate: not named in config/privateer
+delivery: local-only (a ready branch waits for the captain; nothing is pushed)
+sailors:
+  unavailable (fm-sailor.sh status failed)
+
+================================================================================
+CONTEXT
+NEXT STEP reached: 1  rc=0
+
+$ FM_HOME=<lab> bin/fm-fleet-snapshot.sh --json | jq -c "{sailors,privateer}"
+{"sailors":[],"privateer":{"active":true,"first_mate":null,"active_project":null}}
