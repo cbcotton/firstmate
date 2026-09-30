@@ -97,6 +97,7 @@ Each effective `FM_HOME` contains private operational directories.
 
 `projects/` holds local project clones.
 Firstmate reads these clones, but changes them only through the narrow guarded and concrete captain-approved exceptions in `AGENTS.md`.
+`forks/` holds other homes cloned inside this checkout, such as a [Privateer home](#setting-up-a-home), and is gitignored so they never make this checkout dirty.
 Untracked files and directories whose names begin with `scratchpad` are also gitignored, so temporary scratch does not make porcelain-based secondmate sync guards treat a home as dirty.
 
 ### Format and lifecycle references
@@ -951,6 +952,8 @@ The sandbox holds the session's whole tmux server, so every pane and every comma
 Everything inside can write only to the home, the checkout's `.opencode/` scratch, firstmate's per-task temp roots, and the server's own socket.
 Workers' copies live in the home's own Treehouse pool, `state/privateer/treehouse`, which the session names as `TREEHOUSE_ROOT`, so `treehouse` creates and hands out slots there and the shared pool under `~/.treehouse`, with every other home's slots, is out of reach.
 It can never write the home's egress directory, `config/`, or `bin/`, or the Git config or hooks of the checkout, of any clone under `projects/`, or of any linked worktree or submodule of those.
+When the checkout is inside the home, it also cannot write any path in the checkout that the first mate's OpenCode loads from: `AGENTS.md`, `CLAUDE.md`, `CONTEXT.md`, `opencode.json`, `opencode.jsonc`, `tui.json`, `tui.jsonc`, `.agents/`, `docs/`, the `.claude` entry and its `skills` link, the `.opencode` entry, and, under `.opencode/`, the `opencode.json`, `opencode.jsonc`, `tui.json`, and `tui.jsonc` files and the `agent`, `agents`, `command`, `commands`, `mode`, `modes`, `plugin`, `plugins`, `skill`, `skills`, `tool`, and `tools` directories.
+So no worker can rewrite the first mate's instructions, docs, config, skills, agents, commands, modes, plugins, or tools in its checkout; the rest of `.opencode/`, such as its `package.json` and `node_modules/`, stays OpenCode's scratch.
 It can neither rename, replace, or create any `.git` entry in the checkout or in a clone, nor redirect or relabel the git dir, `commondir`, or `gitdir` of a linked worktree that lives outside the home's pool.
 It also cannot write the `projects/` directory entry, any clone's directory entry, the entry of the top-level git dir of the checkout or of any clone, or any directory between the home and the checkout's git dir, so none of those can be moved aside, changed, and moved back.
 It can connect only to the egress proxy, the DNS resolver, and that socket, so a client that ignores the proxy variables reaches nothing remote at all.
@@ -966,8 +969,10 @@ Version 1 has these remaining limits:
 - Clones under `projects/` are added, moved, and removed from outside the session, and a worktree the session creates in its own pool is meant for use only inside it.
 - The directory entries denied are the `projects/` directory, each clone's directory, the top-level git dir of the checkout and of each clone, and the directories between the home and the checkout's git dir.
 - The `worktrees` and `modules` directories inside a git dir, a submodule's own git dir (`modules/<path>`), the intermediate directories under `modules`, and a symlink placed over any of them can still be moved aside and back from inside the session, so a linked worktree's or submodule's Git config or hooks can be planted that way; closing that class is follow-up work.
+- OpenCode also loads plugins and configuration from its own directories under `state/privateer/opencode/`, which stay writable, so a worker can still add one there that the first mate loads at its next start.
+- A checkout nested below the home, rather than being the home, keeps its own `bin/` writable from inside the session.
 - The sandbox is not a boundary against same-user system services that start programs outside it, as `bin/fm-sandbox-exec.sh` states.
-- A first mate whose checkout is not inside its home cannot update that checkout from inside its session.
+- No first mate can update its own checkout's instructions, docs, config, skills, agents, commands, modes, plugins, or tools from inside its session; update the checkout from outside, as [setting up a home](#setting-up-a-home) describes.
 - Git over SSH needs a key file, because no agent socket enters the environment.
 
 ### Egress audit
@@ -980,8 +985,12 @@ It then fails on a session whose model requests did not pass through the egress 
 ### Setting up a home
 
 Create the home with `config/privateer` naming the first mate's sailor and model, `config/crew-harness` holding `opencode`, `config/sailor-sandbox`, and a `config/crew-dispatch.json` naming only local sailors and no `sailor_fallback`; `config/opencode-permission-profile` set to `restricted` is the agreed posture for its sailors.
-Run the launcher from a checkout cloned into its own directory inside the home, or point `FM_HOME` at the home from another checkout; a checkout inside the home is simpler, because its first mate may then update its files, though never its Git config or hooks, and OpenCode's scratch stays inside the home.
-A checkout that is the home itself cannot update its `bin/` from inside the session.
+Make the home a clone of firstmate that is itself the home, at `forks/<name>` inside the Claude-orchestrated home's checkout, and start it with `FM_HOME=<that clone> <that clone>/bin/fm-privateer.sh start`.
+Its `bin/` is then the home's own, so no worker can rewrite the scripts that govern it; a checkout nested below the home keeps its `bin/` writable, and pointing `FM_HOME` at the home from a checkout outside it also works.
+Before creating `forks/`, add a `forks/` line to the Claude-orchestrated checkout's `.git/info/exclude`.
+The tracked `.gitignore` excludes `forks/` too, but only once that checkout carries the entry, and until then the untracked directory makes the checkout dirty, so its self-update skips it.
+Add `"Read(./forks/**)"` to the `permissions.deny` list in that checkout's `.claude/settings.local.json`, so its Claude first mate never reads the Privateer home's private projects.
+To update the Privateer home, stop its session with `stop`, fast-forward the clone from outside it with `git -C forks/<name> pull --ff-only`, and start it again; the session cannot update itself, because its `bin/`, instructions, skills, docs, and plugins are denied to it.
 A project the home shares with a Claude-orchestrated home takes its own ship-branch prefix in this home's `data/projects.md`.
 The flag is not inherited, because a Privateer home spawns no secondmate.
 

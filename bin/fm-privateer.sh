@@ -98,8 +98,16 @@
 # which launch-env names as TREEHOUSE_ROOT, so treehouse creates and hands out
 # slots there; the shared pool under ~/.treehouse, and every other home's
 # slots, are out of reach. Nothing inside may write this home's egress
-# directory, config/, or bin/; the Git config or hooks of this checkout, of
-# any clone under projects/, or of any linked worktree or submodule of those
+# directory, config/, or bin/; when this checkout is inside this home, any
+# path in it the first mate's OpenCode loads from: its AGENTS.md, CLAUDE.md,
+# CONTEXT.md, opencode.json(c), tui.json(c), .agents/, docs/, the .claude
+# entry and its skills link, the .opencode entry, and, under .opencode/, the
+# opencode.json(c) and tui.json(c) files and the agent(s), command(s),
+# mode(s), plugin(s), skill(s), and tool(s) directories, so no worker can
+# rewrite the first mate's instructions, docs, config, skills, agents,
+# commands, modes, plugins, or tools there; the Git config or hooks of this
+# checkout, of any clone under projects/, or of any linked worktree or
+# submodule of those
 # (git dirs under .git/worktrees/<name>/ and .git/modules/<path>/); the git
 # dir, commondir, or gitdir of a linked worktree that lives outside this
 # home's pool, so none can be redirected or relabeled as a pool worktree;
@@ -135,6 +143,11 @@
 #     and a symlink placed over any of them can still be moved aside and back
 #     from inside the session, so a linked worktree's or submodule's Git config
 #     or hooks can be planted that way; closing that class is follow-up work;
+#   - OpenCode also loads plugins and configuration from its own directories
+#     under state/privateer/opencode/, which stay writable, so a worker can
+#     still add one there that the first mate loads at its next start; and a
+#     checkout nested below this home, rather than being it, keeps its own
+#     bin/ writable;
 #   - as bin/fm-sandbox-exec.sh states, the sandbox is not a boundary against
 #     same-user system services that start programs outside it.
 #
@@ -619,8 +632,20 @@ cmd_start() {
       *) sandbox_args+=(--deny-write-regex "^$(regex_quote "$wt_git")(\$|/(commondir|gitdir)\$)") ;;
     esac
   done
+  # A checkout inside the home is writable, so everything its first mate's
+  # OpenCode loads from it is taken back: instructions, docs, config, skills,
+  # agents, commands, modes, plugins, and tools, with the .opencode and .claude
+  # entries above them and the .claude/skills link itself, which --deny-write
+  # would resolve; the rest of .opencode stays OpenCode's scratch.
   case "$root_real" in
-    "$home_real" | "$home_real"/*) ;;
+    "$home_real" | "$home_real"/*)
+      for name in AGENTS.md CLAUDE.md CONTEXT.md opencode.json opencode.jsonc tui.json tui.jsonc .agents docs \
+        .opencode/{opencode,tui}.{json,jsonc} .opencode/{agent,command,mode,plugin,skill,tool}{,s}; do
+        sandbox_args+=(--deny-write "$root_real/$name")
+      done
+      sandbox_args+=(--deny-write-regex "^$(regex_quote "$root_real/.opencode")\$"
+        --deny-write-regex "^$(regex_quote "$root_real/.claude")(/skills)?\$")
+      ;;
     *) sandbox_args+=(--write "$root_real/.opencode") ;;
   esac
   # The primary's own boundary: the pane shell tmux starts may have read the
