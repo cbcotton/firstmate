@@ -80,12 +80,15 @@
 # for https, 80 for http, 22 for ssh).
 #
 # start refuses without config/privateer, on any check violation, without a
-# first-mate line in config/privateer, and while the session already runs. It
-# probes the first mate's sailor with bin/fm-sailor.sh check, starts the egress
-# proxy, refusing and starting nothing else if the proxy cannot bind, then
-# starts a dedicated tmux server (the socket bin/fm-privateer-lib.sh names) inside
-# bin/fm-sandbox-exec.sh, whose session `privateer` runs the OpenCode primary
-# in window `firstmate`, in this checkout with FM_HOME set to this home. The
+# first-mate line in config/privateer, without this checkout's Privateer
+# rulebook (docs/privateer/AGENTS.md and docs/privateer/agents/privateer.md),
+# and while the session already runs. It probes the first mate's sailor with
+# bin/fm-sailor.sh check, renders the helm, starts the egress proxy, refusing
+# and starting nothing else if the helm cannot be rendered or the proxy cannot
+# bind, then starts a dedicated tmux server (the socket bin/fm-privateer-lib.sh
+# names) inside bin/fm-sandbox-exec.sh, whose session `privateer` runs the
+# OpenCode primary as `opencode --agent privateer` in window `firstmate`, in
+# the helm with FM_HOME set to this home. The
 # server, and again the primary itself, start from an empty environment plus
 # exactly: HOME PATH USER LOGNAME SHELL TERM TERMINFO TERMINFO_DIRS COLORTERM LANG
 # LC_ALL LC_CTYPE TMPDIR TMP TEMP TMUX_TMPDIR as the launcher saw them (TERMINFO
@@ -93,12 +96,32 @@
 # launch-env assignments above; the primary adds OPENCODE_CONFIG_CONTENT, which
 # pins the model to the first mate's sailor as the only provider, allows every
 # tool as a secondmate primary is allowed, turns auto-update off, and disables
-# sharing. The primary also keeps the TMUX and TMUX_PANE names its own server
-# sets. No ANTHROPIC_*, CLAUDE_*, or CLAUDECODE variable can reach the tree,
+# sharing; FM_ROOT_OVERRIDE naming this checkout, so every script and plugin
+# keeps it as the code root; and OPENCODE_DISABLE_EXTERNAL_SKILLS=1 and
+# OPENCODE_DISABLE_CLAUDE_CODE=1, so no skill or instruction file under the
+# captain's ~/.claude or ~/.agents reaches the first mate. The primary also
+# keeps the TMUX and TMUX_PANE names its own server sets.
+# No ANTHROPIC_*, CLAUDE_*, or CLAUDECODE variable can reach the tree,
 # because nothing outside that list does; the server copies no variable from a
 # later attaching client either. A worker pane's login shell may still read
 # the captain's shell profile, so bin/fm-spawn.sh clears the environment again
 # at each worker's command boundary.
+#
+# The helm, state/privateer/helm/, is the first mate's working directory and
+# its whole instruction surface, rendered afresh at every start from this
+# checkout's tracked sources: its own Git repository, where OpenCode's search
+# for instructions and skills stops, so the checkout's AGENTS.md never loads;
+# docs/privateer/AGENTS.md, the Privateer rulebook, as AGENTS.md;
+# docs/privateer/agents/privateer.md as .opencode/agents/privateer.md, whose
+# skill permission denies every skill but the helm's own;
+# docs/privateer/skills/<name>/SKILL.md as .opencode/skills/<name>/SKILL.md; a
+# copy of this checkout's .opencode/plugins/; .opencode/.gitignore, as
+# OpenCode itself writes it, because OpenCode writes that file at start when
+# it is missing and cannot start when the sandbox refuses the write; and bin/,
+# holding for every executable bin/*.sh of this checkout a script that execs
+# it by its real path, so each finds this checkout as its root, and a link to
+# every other entry of this checkout's bin/.
+# bin/fm-privateer-rulebook-check.sh owns the rules those sources must meet.
 #
 # The sandbox holds the tmux server itself, so every pane and every command
 # started in the session inherits it: the first mate, each worker and its pane
@@ -110,8 +133,9 @@
 # which launch-env names as TREEHOUSE_ROOT, so treehouse creates and hands out
 # slots there; the shared pool under ~/.treehouse, and every other home's
 # slots, are out of reach. Nothing inside may write this home's egress
-# directory, config/, or bin/; when this checkout is inside this home, any
-# path in it the first mate's OpenCode loads from: its AGENTS.md, CLAUDE.md,
+# directory, config/, or bin/; the helm, or any directory entry between this
+# home and it; when this checkout is inside this home, any path in it an
+# OpenCode first mate loads or the helm is rendered from: its AGENTS.md, CLAUDE.md,
 # CONTEXT.md, opencode.json(c), tui.json(c), .agents/, docs/, the .claude
 # entry and its skills link, the .opencode entry, and, under .opencode/, the
 # opencode.json(c) and tui.json(c) files and the agent(s), command(s),
@@ -176,7 +200,8 @@
 #
 # Environment: FM_HOME, FM_STATE_OVERRIDE, FM_CONFIG_OVERRIDE, and
 # FM_PROJECTS_OVERRIDE resolve the home exactly as the other bin/ scripts do. With FM_TEST_SEAM=1, FM_PRIVATEER_PRIMARY names a command to launch in
-# place of opencode, so a test can prove the launch environment with a stub.
+# place of opencode, with the same arguments, so a test can prove the launch
+# environment with a stub.
 #
 # Exit status: 0 success, 1 refused (a violation, a missing prerequisite, work
 # in flight, or, for inside, a caller outside the session), 2 usage or
@@ -197,6 +222,8 @@ SESSION=privateer
 OPENCODE_ROOT="$STATE/privateer/opencode"
 EGRESS="$STATE/privateer/egress"
 POOL="$STATE/privateer/treehouse"
+HELM="$STATE/privateer/helm"
+RULEBOOK="$FM_ROOT/docs/privateer"
 FORBIDDEN_NAME_RE='^(ANTHROPIC_[A-Za-z0-9_]*|CLAUDE_[A-Za-z0-9_]*|CLAUDECODE)$'
 
 usage() {
@@ -548,9 +575,43 @@ deny_entries() {
   done
 }
 
+# render_helm <checkout>: build the helm afresh from the checkout's tracked
+# Privateer sources, as the header describes; fails on any error.
+render_helm() {
+  local root=$1 entry name
+  rm -rf "$HELM" && mkdir -p "$HELM/.opencode/agents" "$HELM/.opencode/skills" "$HELM/bin" || return 1
+  git init -q --template= "$HELM" >/dev/null 2>&1 || return 1
+  cp "$RULEBOOK/AGENTS.md" "$HELM/AGENTS.md" &&
+    cp "$RULEBOOK/agents/privateer.md" "$HELM/.opencode/agents/privateer.md" || return 1
+  for entry in "$RULEBOOK"/skills/*/SKILL.md; do
+    [ -f "$entry" ] || continue
+    name=${entry%/SKILL.md}
+    name=${name##*/}
+    mkdir -p "$HELM/.opencode/skills/$name" && cp "$entry" "$HELM/.opencode/skills/$name/SKILL.md" || return 1
+  done
+  if [ -d "$root/.opencode/plugins" ]; then
+    cp -R "$root/.opencode/plugins" "$HELM/.opencode/plugins" || return 1
+  fi
+  for entry in "$root"/bin/*; do
+    [ -e "$entry" ] || [ -L "$entry" ] || continue
+    name=${entry##*/}
+    case "$name" in
+      *.sh)
+        if [ -f "$entry" ] && [ -x "$entry" ]; then
+          printf '#!/bin/sh\nexec %s "$@"\n' "$(shell_quote "$entry")" > "$HELM/bin/$name" &&
+            chmod 755 "$HELM/bin/$name" || return 1
+          continue
+        fi
+        ;;
+    esac
+    ln -s "$entry" "$HELM/bin/$name" || return 1
+  done
+  printf 'node_modules\npackage.json\npackage-lock.json\nbun.lock\n.gitignore' > "$HELM/.opencode/.gitignore"
+}
+
 cmd_start() {
   local line sailor model check provider config socket socket_path primary port
-  local name value launch home_real root_real egress_real root_git projects_real git_meta pool_real wt_git
+  local name value launch home_real root_real egress_real root_git projects_real git_meta pool_real wt_git helm_real
   local -a env_args session_env sandbox_args
   env_args=()
   session_env=()
@@ -565,6 +626,8 @@ cmd_start() {
   [ -n "$line" ] || refuse "config/privateer names no first mate; write one line <sailor>/<model> naming the sailor and model the first mate runs on"
   sailor=${line%%/*}
   model=${line#*/}
+  [ -f "$RULEBOOK/AGENTS.md" ] && [ -f "$RULEBOOK/agents/privateer.md" ] ||
+    refuse "the checkout at $FM_ROOT carries no Privateer rulebook (docs/privateer/AGENTS.md and docs/privateer/agents/privateer.md); update the checkout first"
   command -v tmux >/dev/null 2>&1 || refuse "tmux is required to run the Privateer session"
   command -v python3 >/dev/null 2>&1 || refuse "python3 is required to run the Privateer egress proxy"
   "$SCRIPT_DIR/fm-sandbox-exec.sh" available || refuse "the Privateer sandbox needs sandbox-exec, which cannot run on this machine"
@@ -594,6 +657,9 @@ cmd_start() {
   done
   home_real=$(cd "$FM_HOME" && pwd -P) || die "cannot resolve $FM_HOME"
   env_args+=("FM_HOME=$home_real")
+  root_real=$(cd "$FM_ROOT" && pwd -P) || die "cannot resolve $FM_ROOT"
+  render_helm "$root_real" || refuse "the helm could not be rendered at $HELM from $RULEBOOK; nothing was started"
+  helm_real=$(cd "$HELM" && pwd -P) || die "cannot resolve $HELM"
   port=$(start_egress_proxy) ||
     refuse "the Privateer egress proxy could not bind a loopback port; nothing was started"
   egress_real=$(cd "$EGRESS" && pwd -P) || die "cannot resolve $EGRESS"
@@ -608,7 +674,6 @@ cmd_start() {
   # worktree pool, the per-task temp roots, and the server's own socket;
   # connections to the egress proxy and that socket only; and signals only
   # within the sandbox, so nothing inside can stop the proxy.
-  root_real=$(cd "$FM_ROOT" && pwd -P) || die "cannot resolve $FM_ROOT"
   socket_path=$(tmux_socket_path "$socket")
   [ -d "${socket_path%/*}" ] || mkdir -m 700 "${socket_path%/*}" 2>/dev/null || true
   sandbox_args=(run --write "$home_real" --deny-write "$egress_real" --write-prefix /tmp/fm- --write-prefix "$socket_path"
@@ -617,6 +682,10 @@ cmd_start() {
   # sandbox: this home's config and scripts, or any Git config or hook of this
   # checkout, of a clone under projects/, or of a worker's worktree.
   sandbox_args+=(--deny-write "$home_real/config" --deny-write "$home_real/bin")
+  # The helm is the first mate's whole instruction surface, so nothing inside
+  # may write it or move aside any directory that leads to it.
+  sandbox_args+=(--deny-write "$helm_real")
+  deny_entries "$helm_real"
   # The directory entries leading to the top-level git dir of the checkout and
   # of each clone are denied too, so none of them can be moved aside, written,
   # and moved back; the worktrees and modules directories inside a git dir and
@@ -665,10 +734,13 @@ cmd_start() {
   # the TMUX names the server itself set for this pane.
   # shellcheck disable=SC2016
   launch='/usr/bin/env -i ${TMUX+"TMUX=$TMUX"} ${TMUX_PANE+"TMUX_PANE=$TMUX_PANE"}'
-  for value in "${session_env[@]}" "OPENCODE_CONFIG_CONTENT=$config"; do launch="$launch $(shell_quote "$value")"; done
-  launch="$launch $(shell_quote "$primary")"
+  for value in "${session_env[@]}" "OPENCODE_CONFIG_CONTENT=$config" "FM_ROOT_OVERRIDE=$root_real" \
+    OPENCODE_DISABLE_EXTERNAL_SKILLS=1 OPENCODE_DISABLE_CLAUDE_CODE=1; do
+    launch="$launch $(shell_quote "$value")"
+  done
+  launch="$launch $(shell_quote "$primary") --agent privateer"
   if ! /usr/bin/env -i "${session_env[@]}" "$SCRIPT_DIR/fm-sandbox-exec.sh" "${sandbox_args[@]}" -- \
-    tmux -L "$socket" new-session -d -s "$SESSION" -n firstmate -c "$root_real" -- "$launch"; then
+    tmux -L "$socket" new-session -d -s "$SESSION" -n firstmate -c "$helm_real" -- "$launch"; then
     stop_egress_proxy
     refuse "tmux could not start the Privateer session"
   fi

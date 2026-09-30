@@ -955,12 +955,18 @@ Version 1 ships local-only because the shared no-mistakes daemon's agent resolve
 ### How a Privateer session runs
 
 Start the first mate with `FM_HOME=<home> bin/fm-privateer.sh start`, attach a terminal with `attach`, and end it with `stop`, which refuses while any task record exists so a worker's copy is never orphaned.
-The launcher starts a dedicated tmux server for the home and runs the OpenCode primary in the checkout from an empty environment plus a fixed allowlist of home, path, user, shell, terminal (including `TERM`, `TERMINFO`, and `TERMINFO_DIRS`, which only locate terminal descriptions), locale, and temp variables, `FM_HOME`, OpenCode's directories, and OpenCode's inline configuration.
+The launcher starts a dedicated tmux server for the home and runs the OpenCode primary in the helm, described below, from an empty environment plus a fixed allowlist of home, path, user, shell, terminal (including `TERM`, `TERMINFO`, and `TERMINFO_DIRS`, which only locate terminal descriptions), locale, and temp variables, `FM_HOME`, OpenCode's directories, and OpenCode's inline configuration.
 No `ANTHROPIC_*`, `CLAUDE_*`, or `CLAUDECODE` variable can enter the tree, and the server copies no variable from a client that attaches later.
 Every Privateer worker launch clears the environment the same way at its command boundary, exactly as [worker launch environment](#worker-launch-environment-configlaunch-env-allowlist) does, whether or not that file exists.
 
 OpenCode is isolated: the first mate and every worker read and write OpenCode's config, data, state, and cache under `state/privateer/opencode/` in the home, so the captain's own OpenCode logins, global configuration, and sessions are invisible to them.
 Auto-update is off, session sharing is disabled, and the first mate's configuration pins its model to its sailor as the only provider.
+
+The first mate runs in the helm, `state/privateer/helm/`, which `start` renders afresh from the checkout every time and refuses to start without.
+The helm holds the Privateer rulebook, `docs/privateer/AGENTS.md`, as the first mate's only instructions; the `privateer` agent, `docs/privateer/agents/privateer.md`, in place of OpenCode's build prompt; the skills under `docs/privateer/skills/` as its only skills; a copy of the checkout's OpenCode plugins; and a `bin/` that runs the checkout's scripts by their real paths, so each still finds the checkout as its root.
+The helm is its own Git repository, so OpenCode never reaches the checkout's `AGENTS.md`, and the first mate starts with `OPENCODE_DISABLE_EXTERNAL_SKILLS=1` and `OPENCODE_DISABLE_CLAUDE_CODE=1`, so no skill or instruction file under the captain's `~/.claude` or `~/.agents` reaches it; the agent's skill permission hides every other skill, including the captain's `~/.opencode/skills`.
+The rulebook is written for a local model, small and imperative, with exact command forms, and it names the front-door commands still to come.
+`bin/fm-privateer-rulebook-check.sh`, which `bin/fm-lint.sh` runs, owns the rules its sources meet: at most 12,000 bytes for the rulebook and 6,000 for each skill, an agent that allows exactly those skills, and no named script that is missing or shown command that does not parse.
 
 Every connection leaves through the launcher's egress proxy, `bin/fm-privateer-proxy.py`, which `start` runs as its own process on a loopback port, outside the session and outside its sandbox.
 It allows exactly the endpoint of every sailor in the sailor map and the forge origin of the checkout and of every clone under `projects/`, each by host and port, refuses everything else, and logs every allowed and refused destination to `state/privateer/egress/log`.
@@ -971,8 +977,8 @@ The first mate and every worker receive `HTTP_PROXY`, `HTTPS_PROXY`, and a `GIT_
 The sandbox holds the session's whole tmux server, so every pane and every command started in the session inherits it: the first mate, each worker and its pane shell, and anything the first mate asks tmux to run.
 Everything inside can write only to the home, the checkout's `.opencode/` scratch, the shared temporary namespaces named in the remaining limits below, and the server's own socket.
 Workers' copies live in the home's own Treehouse pool, `state/privateer/treehouse`, which the session names as `TREEHOUSE_ROOT`, so `treehouse` creates and hands out slots there and the shared pool under `~/.treehouse`, with every other home's slots, is out of reach.
-It can never write the home's egress directory, `config/`, or `bin/`, or the Git config or hooks of the checkout, of any clone under `projects/`, or of any linked worktree or submodule of those.
-When the checkout is inside the home, it also cannot write any path in the checkout that the first mate's OpenCode loads from: `AGENTS.md`, `CLAUDE.md`, `CONTEXT.md`, `opencode.json`, `opencode.jsonc`, `tui.json`, `tui.jsonc`, `.agents/`, `docs/`, the `.claude` entry and its `skills` link, the `.opencode` entry, and, under `.opencode/`, the `opencode.json`, `opencode.jsonc`, `tui.json`, and `tui.jsonc` files and the `agent`, `agents`, `command`, `commands`, `mode`, `modes`, `plugin`, `plugins`, `skill`, `skills`, `tool`, and `tools` directories.
+It can never write the home's egress directory, `config/`, or `bin/`, the helm or any directory entry between the home and it, or the Git config or hooks of the checkout, of any clone under `projects/`, or of any linked worktree or submodule of those.
+When the checkout is inside the home, it also cannot write any path in the checkout that an OpenCode first mate loads or the helm is rendered from: `AGENTS.md`, `CLAUDE.md`, `CONTEXT.md`, `opencode.json`, `opencode.jsonc`, `tui.json`, `tui.jsonc`, `.agents/`, `docs/`, the `.claude` entry and its `skills` link, the `.opencode` entry, and, under `.opencode/`, the `opencode.json`, `opencode.jsonc`, `tui.json`, and `tui.jsonc` files and the `agent`, `agents`, `command`, `commands`, `mode`, `modes`, `plugin`, `plugins`, `skill`, `skills`, `tool`, and `tools` directories.
 So no worker can rewrite the first mate's instructions, docs, config, skills, agents, commands, modes, plugins, or tools in its checkout; the rest of `.opencode/`, such as its `package.json` and `node_modules/`, stays OpenCode's scratch.
 It can neither rename, replace, or create any `.git` entry in the checkout or in a clone, nor redirect or relabel the git dir, `commondir`, or `gitdir` of a linked worktree that lives outside the home's pool.
 It also cannot write the `projects/` directory entry, any clone's directory entry, the entry of the top-level git dir of the checkout or of any clone, or any directory between the home and the checkout's git dir, so none of those can be moved aside, changed, and moved back.
@@ -1000,7 +1006,7 @@ Version 1 has these remaining limits:
 - A checkout nested below the home, rather than being the home, keeps its own `bin/` writable from inside the session.
 - The sandbox is not a boundary against same-user system services that start programs outside it, as `bin/fm-sandbox-exec.sh` states.
 - The session gate on the home's scripts prevents mistakes; it is not a security boundary: it reads the `TMUX` variable, which any same-user process can set, and tmux lets any same-user process drive the session's socket directly.
-- No first mate can update its own checkout's instructions, docs, config, skills, agents, commands, modes, plugins, or tools from inside its session; update the checkout from outside, as [setting up a home](#setting-up-a-home) describes.
+- No first mate can update its own checkout's instructions, docs, config, skills, agents, commands, modes, plugins, or tools from inside its session; update the checkout from outside, as [setting up a home](#setting-up-a-home) describes, and start the session again, which renders the helm from it.
 - Git over SSH needs a key file, because no agent socket enters the environment.
 
 ### The seal
@@ -1019,6 +1025,7 @@ The seal is mistake-proofing, not a boundary: a same-user process that loads no 
 `FM_PRIVATEER_EGRESS_LIVE=1 tests/fm-privateer-egress-live-e2e.test.sh` starts a short Privateer session through the launcher, with a fixture clone whose origin is an https forge as the checkout, a throwaway home, and a scripted model on a loopback port as the only sailor.
 Inside the sandbox, before OpenCode starts, the primary's command tries a direct connection to Anthropic and to the sailor that ignores the proxy, and the audit fails unless both are denied.
 It then fails on a session whose model requests did not pass through the egress proxy, on any destination the proxy allowed other than the sailor and the forge, and on any logged destination, allowed or refused, naming Anthropic or Claude.
+It also checks the helm: with a captain home holding Claude instructions and decoy skills, the first mate's own request must carry the `privateer` agent and the helm's rulebook as its only instructions and offer exactly the helm's skills.
 [`verification/local-sailors.md`](verification/local-sailors.md) records the dated result; rerun the audit after an OpenCode upgrade.
 
 ### Session lock check

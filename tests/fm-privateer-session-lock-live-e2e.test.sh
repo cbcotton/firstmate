@@ -9,9 +9,12 @@
 #
 # The launcher runs the real OpenCode primary with the real firstmate plugins,
 # inside the real macOS sandbox, behind the launcher's own egress proxy, with a
-# throwaway Privateer home. The checkout is a fixture clone of this one outside
-# the home and outside every path the session may write, so a command run from
-# it has no writable current directory to fall back on. The session's only
+# throwaway Privateer home. The checkout is a fixture clone of this one, with
+# this working tree's scripts, plugins, and Privateer rulebook, outside the
+# home and outside every path the session may write; the first mate runs in
+# the helm rendered from it, which the session cannot write either, so a
+# command it runs, through the helm's bin/, has no writable current directory
+# to fall back on. The session's only
 # sailor is a scripted OpenAI-compatible model on a loopback port that answers
 # the first turn offering tools with one shell tool call and every other
 # request with a plain reply. It spends no model tokens but starts a whole
@@ -120,6 +123,8 @@ test_privateer_first_mate_owns_its_session_lock() {
   git clone -q "$ROOT" "$root" || guard_fail "the fixture clone of this checkout failed"
   cp -R "$ROOT/bin/." "$root/bin/"
   cp -R "$ROOT/.opencode/." "$root/.opencode/"
+  mkdir -p "$root/docs/privateer"
+  cp -R "$ROOT/docs/privateer/." "$root/docs/privateer/"
   git -C "$root" remote set-url origin https://github.com/cbcotton/firstmate.git
 
   log="$case_dir/model.log"

@@ -43,6 +43,16 @@ make_home() {
   printf '%s\n' "$home"
 }
 
+# make_checkout <dir>: a Git checkout at <dir> carrying this checkout's
+# Privateer rulebook sources, which start renders the helm from, and an
+# AGENTS.md of its own that the first mate must never see.
+make_checkout() {
+  fm_git_init_commit "$1"
+  mkdir -p "$1/docs"
+  cp -R "$ROOT/docs/privateer" "$1/docs/privateer"
+  printf '# The checkout contract\n' > "$1/AGENTS.md"
+}
+
 # rq <text>: <text> as a Seatbelt regex literal.
 rq() {
   printf '%s' "$1" | sed 's/[][\.^$*+?(){}|]/\\&/g'
@@ -131,14 +141,19 @@ SH
   printf '%s\n' "$fakebin"
 }
 
-# make_stub_primary <case-dir>: a first mate that records its environment and
-# working directory in <case-dir>/primary.env; prints the stub's path.
+# make_stub_primary <case-dir>: a first mate that records its environment,
+# arguments, working directory, the Git top level it sits in, and the first
+# line of the AGENTS.md it would load there, in <case-dir>/primary.env; prints
+# the stub's path.
 make_stub_primary() {
   local dir=$1
   cat > "$dir/stub-primary" <<SH
 #!/usr/bin/env bash
 env > '$dir/primary.env.tmp'
+printf 'ARGS=%s\\n' "\$*" >> '$dir/primary.env.tmp'
 printf 'CWD=%s\\n' "\$PWD" >> '$dir/primary.env.tmp'
+printf 'TOPLEVEL=%s\\n' "\$(git rev-parse --show-toplevel 2>/dev/null)" >> '$dir/primary.env.tmp'
+printf 'INSTRUCTIONS=%s\\n' "\$(head -1 AGENTS.md 2>/dev/null)" >> '$dir/primary.env.tmp'
 mv '$dir/primary.env.tmp' '$dir/primary.env'
 SH
   chmod +x "$dir/stub-primary"
@@ -606,7 +621,7 @@ test_start_refuses_without_the_flag() {
   home=$(make_home start-no-flag)
   rm "$home/config/privateer"
   root="$dir/root"
-  fm_git_init_commit "$root"
+  make_checkout "$root"
   make_launcher_fakebin "$dir" >/dev/null
   make_stub_primary "$dir" >/dev/null
   out=$(run_launcher "$dir" "$home" "$root" start)
@@ -623,7 +638,7 @@ test_start_refuses_with_a_forbidden_file() {
   home=$(make_home start-forbidden)
   : > "$home/config/supervision-host"
   root="$dir/root"
-  fm_git_init_commit "$root"
+  make_checkout "$root"
   make_launcher_fakebin "$dir" >/dev/null
   make_stub_primary "$dir" >/dev/null
   out=$(run_launcher "$dir" "$home" "$root" start)
@@ -641,7 +656,7 @@ test_start_refuses_without_a_first_mate_line() {
   home=$(make_home start-no-line)
   : > "$home/config/privateer"
   root="$dir/root"
-  fm_git_init_commit "$root"
+  make_checkout "$root"
   make_launcher_fakebin "$dir" >/dev/null
   make_stub_primary "$dir" >/dev/null
   out=$(run_launcher "$dir" "$home" "$root" start)
@@ -652,11 +667,11 @@ test_start_refuses_without_a_first_mate_line() {
 }
 
 test_start_passes_only_the_allowlist() {
-  local dir home root out status envlog profile home_real root_real port tmp_real
+  local dir home root out status envlog profile home_real root_real helm_real port tmp_real
   dir="$TMP_ROOT/start"
   home=$(make_home start)
   root="$dir/root"
-  fm_git_init_commit "$root"
+  make_checkout "$root"
   git -C "$root" remote add origin https://token@Forge.example.test:3000/captain/firstmate.git
   git -C "$root" worktree add -q -b side "$dir/side"
   make_launcher_fakebin "$dir" >/dev/null
@@ -691,7 +706,14 @@ test_start_passes_only_the_allowlist() {
   assert_grep "TMUX_PANE=%0" "$envlog" "the first mate must keep the TMUX_PANE its own server set"
   assert_grep "HOME=" "$envlog" "HOME must be passed"
   assert_grep "PATH=" "$envlog" "PATH must be passed"
-  assert_grep "CWD=$root_real" "$envlog" "the first mate must run in the checkout"
+  helm_real="$home_real/state/privateer/helm"
+  assert_grep "CWD=$helm_real" "$envlog" "the first mate must run in the helm"
+  assert_equals "ARGS=--agent privateer" "$(grep '^ARGS=' "$envlog")" "the first mate must run as the privateer agent"
+  assert_equals "TOPLEVEL=$helm_real" "$(grep '^TOPLEVEL=' "$envlog")" "the helm must be its own Git repository, so OpenCode never walks up to the checkout"
+  assert_equals "INSTRUCTIONS=# Privateer first mate" "$(grep '^INSTRUCTIONS=' "$envlog")" "the first mate must see the helm's rulebook, not the checkout's AGENTS.md"
+  assert_equals "FM_ROOT_OVERRIDE=$root_real" "$(grep '^FM_ROOT_OVERRIDE=' "$envlog")" "every script and plugin must keep the checkout as the code root"
+  assert_grep "OPENCODE_DISABLE_EXTERNAL_SKILLS=1" "$envlog" "the captain's own ~/.claude and ~/.agents skills must stay out"
+  assert_grep "OPENCODE_DISABLE_CLAUDE_CODE=1" "$envlog" "the captain's own Claude instructions must stay out"
   for d in config data state cache; do
     [ -d "$home/state/privateer/opencode/$d" ] || fail "start must create OpenCode's $d directory"
   done
@@ -705,20 +727,24 @@ test_start_passes_only_the_allowlist() {
   (subpath \"$home_real/state/privateer/egress\")
   (subpath \"$home_real/config\")
   (subpath \"$home_real/bin\")
+  (subpath \"$helm_real\")
+  (regex #\"^$(rq "$helm_real")\$\")
+  (regex #\"^$(rq "$home_real")/state/privateer\$\")
+  (regex #\"^$(rq "$home_real")/state\$\")
   (regex #\"^$(rq "$root_real")/\\.git(\$|/(worktrees/[^/]+/|modules/.+/)?(hooks(/|\$)|config))\")
   (regex #\"^$(rq "$home_real")/projects/[^/]+\$\")
   (regex #\"^$(rq "$home_real")/projects/[^/]+/(.+/)?\\.git(\$|/(worktrees/[^/]+/|modules/.+/)?(hooks(/|\$)|config))\")
   (regex #\"^$(rq "$home_real")/projects\$\")
   (regex #\"^$(rq "$root_real")/\\.git/worktrees/side(\$|/(commondir|gitdir)\$)\")
 )" "$(sed -n '/^(deny file-write\*$/,/^)$/p' "$profile")" \
-    "the sandbox must take back only the egress record, the home's config and scripts, and every Git config and hook, so every worker's OpenCode directories stay writable"
+    "the sandbox must take back only the egress record, the home's config and scripts, the helm and the directories leading to it, and every Git config and hook, so every worker's OpenCode directories stay writable"
   assert_grep '(deny signal)' "$profile" "the sandbox must deny signals outside itself"
   assert_grep '(allow signal (target same-sandbox))' "$profile" "the sandbox must allow signals within itself"
   assert_grep "(subpath \"$root_real/.opencode\")" "$profile" "the sandbox must allow OpenCode's scratch in the checkout"
   tmp_real=$(cd /tmp && pwd -P)
   assert_grep "(regex #\"^$(rq "$tmp_real")/fm-\")" "$profile" "the sandbox must allow firstmate's per-task temp roots"
   assert_grep "(allow network-outbound (remote unix-socket (path-literal \"$(cd "${TMUX_TMPDIR:-/tmp}" && pwd -P)/tmux-" "$profile" "the sandbox must allow the session's own tmux socket"
-  assert_grep 'new-session -d -s privateer -n firstmate -c '"$root_real" "$dir/tmux.log" "tmux must start the first mate in the checkout"
+  assert_grep 'new-session -d -s privateer -n firstmate -c '"$helm_real" "$dir/tmux.log" "tmux must start the first mate in the helm"
   assert_grep "set-option -g update-environment " "$dir/tmux.log" "the server must copy no variable from an attaching client"
   # The proxy start launched allows exactly the sailor and the forge.
   assert_not_contains "$(proxy_request "$port" 'CONNECT forge.example.test:3000 HTTP/1.1')" "403" "the forge must be allowed through the proxy"
@@ -742,7 +768,7 @@ test_start_denies_the_instructions_of_a_checkout_that_is_the_home() {
   local dir home out status home_real deny p
   dir="$TMP_ROOT/start-inside"
   home=$(make_home start-inside)
-  fm_git_init_commit "$home"
+  make_checkout "$home"
   make_launcher_fakebin "$dir" >/dev/null
   make_stub_primary "$dir" >/dev/null
   out=$(run_launcher "$dir" "$home" "$home" start)
@@ -763,12 +789,86 @@ test_start_denies_the_instructions_of_a_checkout_that_is_the_home() {
   pass "start denies writes to every path a checkout that is the home gives its first mate's OpenCode, and leaves the rest of .opencode writable"
 }
 
+test_start_renders_the_helm_afresh() {
+  local dir home root out status helm helm_real root_real skill name
+  dir="$TMP_ROOT/start-helm"
+  home=$(make_home start-helm)
+  root="$dir/root"
+  make_checkout "$root"
+  # The checkout's scripts: one to run, a library, a module, and a directory;
+  # and its OpenCode plugins, with a library of their own.
+  mkdir -p "$root/bin/backends" "$root/.opencode/plugins/lib"
+  cat > "$root/bin/fm-echo.sh" <<'SH'
+#!/usr/bin/env bash
+printf 'script=%s args=%s\n' "$0" "$*"
+SH
+  chmod +x "$root/bin/fm-echo.sh"
+  printf 'fm_lib() { :; }\n' > "$root/bin/fm-lib.sh"
+  printf 'export const policy = 1;\n' > "$root/bin/fm-policy.mjs"
+  printf 'export const Probe = async () => ({});\n' > "$root/.opencode/plugins/probe.js"
+  printf 'export const helper = 1;\n' > "$root/.opencode/plugins/lib/helper.js"
+  helm="$home/state/privateer/helm"
+  # What a previous start left behind must not survive the next one.
+  mkdir -p "$helm/.opencode/skills/stale"
+  printf 'stale\n' > "$helm/.opencode/skills/stale/SKILL.md"
+  make_launcher_fakebin "$dir" >/dev/null
+  make_stub_primary "$dir" >/dev/null
+  out=$(run_launcher "$dir" "$home" "$root" start)
+  status=$?
+  expect_code 0 "$status" "start must render the helm and succeed: $out"
+  helm_real=$(cd "$helm" && pwd -P)
+  root_real=$(cd "$root" && pwd -P)
+  cmp -s "$helm/AGENTS.md" "$ROOT/docs/privateer/AGENTS.md" || fail "the helm's AGENTS.md must be the Privateer rulebook"
+  cmp -s "$helm/.opencode/agents/privateer.md" "$ROOT/docs/privateer/agents/privateer.md" ||
+    fail "the helm must carry the privateer agent"
+  for skill in "$ROOT"/docs/privateer/skills/*/SKILL.md; do
+    name=${skill%/SKILL.md}
+    name=${name##*/}
+    cmp -s "$helm/.opencode/skills/$name/SKILL.md" "$skill" || fail "the helm must carry the $name skill"
+  done
+  assert_equals "$(cd "$ROOT/docs/privateer/skills" && ls)" "$(cd "$helm/.opencode/skills" && ls)" \
+    "the helm must hold exactly the rulebook's skills, and nothing a previous start left"
+  if ! cmp -s "$helm/.opencode/plugins/probe.js" "$root/.opencode/plugins/probe.js" ||
+    ! cmp -s "$helm/.opencode/plugins/lib/helper.js" "$root/.opencode/plugins/lib/helper.js"; then
+    fail "the helm must carry a copy of the checkout's plugins and their libraries"
+  fi
+  assert_equals "$helm_real" "$(git -C "$helm" rev-parse --show-toplevel 2>/dev/null)" "the helm must be its own Git repository"
+  [ ! -L "$helm/bin/fm-echo.sh" ] && [ -x "$helm/bin/fm-echo.sh" ] || fail "an executable script must reach the helm as its own small script, not a link"
+  assert_equals "script=$root_real/bin/fm-echo.sh args=a b" "$("$helm/bin/fm-echo.sh" a b)" \
+    "a script run from the helm must run the checkout's script by its real path, with its arguments"
+  for name in fm-lib.sh fm-policy.mjs backends; do
+    assert_equals "$root_real/bin/$name" "$(readlink "$helm/bin/$name")" "the helm's bin/$name must link to the checkout's"
+  done
+  out=$(run_launcher "$dir" "$home" "$root" stop)
+  expect_code 0 "$?" "stop must end the session: $out"
+  pass "start renders the helm afresh: the rulebook, the agent, exactly the rulebook's skills, the checkout's plugins, its own Git repository, and a bin/ that runs every checkout script by its real path"
+}
+
+test_start_refuses_without_the_rulebook() {
+  local dir home root out status
+  dir="$TMP_ROOT/start-no-rulebook"
+  home=$(make_home start-no-rulebook)
+  root="$dir/root"
+  fm_git_init_commit "$root"
+  make_launcher_fakebin "$dir" >/dev/null
+  make_stub_primary "$dir" >/dev/null
+  out=$(run_launcher "$dir" "$home" "$root" start)
+  status=$?
+  expect_code 1 "$status" "start must refuse a checkout without the Privateer rulebook"
+  assert_contains "$out" "carries no Privateer rulebook (docs/privateer/AGENTS.md and docs/privateer/agents/privateer.md); update the checkout first" \
+    "the refusal must name the missing sources"
+  [ ! -e "$dir/tmux.log" ] || assert_no_grep "new-session" "$dir/tmux.log" "no session may start without the rulebook"
+  [ ! -e "$home/state/privateer/egress/pid" ] || fail "no egress proxy may start without the rulebook"
+  [ ! -e "$home/state/privateer/helm" ] || fail "no helm may be rendered without the rulebook"
+  pass "start refuses, and starts nothing, when the checkout carries no Privateer rulebook"
+}
+
 test_start_refuses_when_the_proxy_cannot_bind() {
   local dir home root out status fakebin
   dir="$TMP_ROOT/start-no-bind"
   home=$(make_home start-no-bind)
   root="$dir/root"
-  fm_git_init_commit "$root"
+  make_checkout "$root"
   fakebin=$(make_launcher_fakebin "$dir")
   printf '#!/bin/sh\necho "cannot bind" >&2\nexit 1\n' > "$fakebin/python3"
   chmod +x "$fakebin/python3"
@@ -831,7 +931,7 @@ test_start_refuses_while_running() {
   dir="$TMP_ROOT/start-running"
   home=$(make_home start-running)
   root="$dir/root"
-  fm_git_init_commit "$root"
+  make_checkout "$root"
   make_launcher_fakebin "$dir" >/dev/null
   make_stub_primary "$dir" >/dev/null
   : > "$dir/tmux-running"
@@ -848,7 +948,7 @@ test_stop_refuses_with_work_in_flight_and_stops_an_idle_session() {
   dir="$TMP_ROOT/stop"
   home=$(make_home stop)
   root="$dir/root"
-  fm_git_init_commit "$root"
+  make_checkout "$root"
   make_launcher_fakebin "$dir" >/dev/null
   make_stub_primary "$dir" >/dev/null
   out=$(run_launcher "$dir" "$home" "$root" stop)
@@ -879,7 +979,7 @@ test_stop_cleans_up_after_a_session_that_ended() {
   dir="$TMP_ROOT/stop-ended"
   home=$(make_home stop-ended)
   root="$dir/root"
-  fm_git_init_commit "$root"
+  make_checkout "$root"
   make_launcher_fakebin "$dir" >/dev/null
   make_stub_primary "$dir" >/dev/null
   out=$(run_launcher "$dir" "$home" "$root" start)
@@ -905,7 +1005,7 @@ test_attach_refuses_without_a_session() {
   dir="$TMP_ROOT/attach"
   home=$(make_home attach)
   root="$dir/root"
-  fm_git_init_commit "$root"
+  make_checkout "$root"
   make_launcher_fakebin "$dir" >/dev/null
   make_stub_primary "$dir" >/dev/null
   out=$(run_launcher "$dir" "$home" "$root" attach)
@@ -929,7 +1029,7 @@ serve_dir() {
 }
 
 test_session_sandbox_holds_every_command() {
-  local dir home root out status spid opid sport oport port pid socket probe alive wtbase wtgit proj shared treehouse_line captain
+  local dir home root out status spid opid sport oport port pid socket probe alive wtbase wtgit proj shared treehouse_line captain helm
   if ! "$ROOT/bin/fm-sandbox-exec.sh" available || ! command -v tmux >/dev/null 2>&1; then
     pass "session sandbox checks not run: sandbox-exec or tmux is not available on this machine"
     return 0
@@ -942,13 +1042,15 @@ test_session_sandbox_holds_every_command() {
   root="$home/nest/checkout"
   mkdir -p "$home/nest"
   git -C "$dir/rootmain" worktree add -q -b pv-root "$root"
-  # Paths in that checkout the first mate's OpenCode loads from.
+  # Paths in that checkout an OpenCode first mate loads or the helm is rendered from.
   mkdir -p "$root/.agents/skills/probe" "$root/docs" "$root/.opencode/plugins" "$root/.opencode/skills/probe" "$root/.claude"
   for f in AGENTS.md CLAUDE.md .agents/skills/probe/SKILL.md docs/probe.md opencode.json .opencode/opencode.json \
     .opencode/plugins/probe.js .opencode/skills/probe/SKILL.md; do
     printf 'original\n' > "$root/$f"
   done
   ln -s ../.agents/skills "$root/.claude/skills"
+  cp -R "$ROOT/docs/privateer" "$root/docs/privateer"
+  helm="$home/state/privateer/helm"
   mkdir -p "$dir/sailor/v1" "$dir/other"
   printf '{"data":[{"id":"coder"}]}\n' > "$dir/sailor/v1/models"
   printf 'reached\n' > "$dir/other/index.html"
@@ -997,8 +1099,14 @@ for t in '$proj/.git/hooks/post-checkout' '$proj/.git/config' '$wtgit/config.wor
   '$root/CLAUDE.md' '$root/CONTEXT.md' '$root/opencode.json' '$root/opencode.jsonc' '$root/tui.json' '$root/tui.jsonc' \
   '$root/.opencode/opencode.json' '$root/.opencode/opencode.jsonc' '$root/.opencode/tui.json' '$root/.opencode/tui.jsonc' \
   '$root/.opencode/plugins/probe.js' '$root/.opencode/skills/probe/SKILL.md' '$root/.claude/skills/probe/SKILL.md' \
-  '$root/.claude/skills/new.md'; do
+  '$root/.claude/skills/new.md' '$helm/AGENTS.md' '$helm/.opencode/agents/privateer.md' \
+  '$helm/.opencode/skills/ship-landing/SKILL.md' '$helm/.opencode/plugins/probe.js' '$helm/.opencode/opencode.json' \
+  '$helm/bin/fm-probe.sh' '$helm/.git/config' '$helm/CLAUDE.md'; do
   ( : >> "\$t" ) 2>/dev/null && planted="\$planted \$t"
+done
+( mkdir -p '$helm/.opencode/skills/new' && : >> '$helm/.opencode/skills/new/SKILL.md' ) 2>/dev/null && planted="\$planted $helm/.opencode/skills/new"
+for t in '$helm' '$home/state/privateer' '$home/state'; do
+  mv "\$t" "\$t.aside" 2>/dev/null && planted="\$planted move:\$t"
 done
 for d in agent agents command commands mode modes plugin plugins skill skills tool tools; do
   ( mkdir -p '$root/.opencode/'"\$d" && : >> '$root/.opencode/'"\$d/new.md" ) 2>/dev/null && planted="\$planted $root/.opencode/\$d"
@@ -1075,12 +1183,14 @@ status=0
 commit=0
 slot=0
 $treehouse_line" "$(cat "$probe.window" 2>/dev/null)" \
-    "a command started through tmux must reach nothing directly, be refused by the proxy for an unlisted host, write the worker's OpenCode data and OpenCode's scratch, plant no Git config, hook, home config, script, or shared-pool slot, rewrite or move none of the first mate's instructions, skills, docs, or plugins, still write its status and commit in its own copy, and create and commit in a slot of the home's own pool"
+    "a command started through tmux must reach nothing directly, be refused by the proxy for an unlisted host, write the worker's OpenCode data and OpenCode's scratch, plant no Git config, hook, home config, script, or shared-pool slot, rewrite or move none of the first mate's instructions, skills, docs, or plugins in the checkout or the helm, nor move aside the helm or the directories leading to it, still write its status and commit in its own copy, and create and commit in a slot of the home's own pool"
   case "$(cat "$probe.primary" 2>/dev/null)" in
     "kill=0"* | *"rewrite=0") fail "the first mate stopped or rewrote the egress proxy: $(cat "$probe.primary" 2>/dev/null)" ;;
     "kill="*) ;;
     *) fail "the stub first mate never ran" ;;
   esac
+  cmp -s "$helm/AGENTS.md" "$ROOT/docs/privateer/AGENTS.md" ||
+    fail "the helm's rulebook must exist and be unchanged after the session, so its write probes were real"
   assert_equals "HTTP/1.0 200 OK" "$alive" "the proxy must still serve the sailor after the first mate's attempt to stop it"
   assert_equals "refused GET 127.0.0.1:$oport
 allowed GET 127.0.0.1:$sport" "$(jq -r --arg o "127.0.0.1:$oport" --arg s "127.0.0.1:$sport" 'select(.dest == $o or .dest == $s) | "\(.verdict) \(.method) \(.dest)"' "$home/state/privateer/egress/log")" \
@@ -1089,7 +1199,7 @@ allowed GET 127.0.0.1:$sport" "$(jq -r --arg o "127.0.0.1:$oport" --arg s "127.0
     fail "stop must stop the egress proxy"
   fi
   [ "$port" != 1 ] || fail "the first mate rewrote the proxy's port"
-  pass "in the real sandboxed session, a command started through tmux reaches nothing but the proxy, plants nothing that runs outside, and cannot rewrite the first mate's instructions, skills, docs, or plugins, a worker still commits in its own copy and in a new slot of the home's own pool, and the first mate cannot stop or rewrite the proxy"
+  pass "in the real sandboxed session, a command started through tmux reaches nothing but the proxy, plants nothing that runs outside, and cannot rewrite the first mate's instructions, skills, docs, or plugins in the checkout or the helm, a worker still commits in its own copy and in a new slot of the home's own pool, and the first mate cannot stop or rewrite the proxy"
 }
 
 test_session_first_mate_owns_the_lock_and_a_plain_shell_does_not() {
@@ -1105,7 +1215,7 @@ test_session_first_mate_owns_the_lock_and_a_plain_shell_does_not() {
   # so a command run from it has no writable current directory to fall back on.
   outside=$(mktemp -d /tmp/pv-checkout.XXXXXX)
   root="$outside/root"
-  fm_git_init_commit "$root"
+  make_checkout "$root"
   mkdir -p "$dir/sailor/v1" "$dir/bin"
   printf '{"data":[{"id":"coder"}]}\n' > "$dir/sailor/v1/models"
   read -r spid sport < <(serve_dir "$dir/sailor" "$dir/sailor.log")
@@ -1455,6 +1565,8 @@ test_start_refuses_with_a_forbidden_file
 test_start_refuses_without_a_first_mate_line
 test_start_passes_only_the_allowlist
 test_start_denies_the_instructions_of_a_checkout_that_is_the_home
+test_start_renders_the_helm_afresh
+test_start_refuses_without_the_rulebook
 test_start_refuses_when_the_proxy_cannot_bind
 test_proxy_forwards_only_allowed_destinations
 test_session_sandbox_holds_every_command

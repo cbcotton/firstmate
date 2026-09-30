@@ -130,7 +130,7 @@ Facts the quarantine design depends on:
 
 - OpenCode honors `HTTP_PROXY` and `HTTPS_PROXY`, for its loopback sailor as well as for hosted services: its model request, catalog fetch, and plugin-package install all arrived at the egress proxy, so the proxy's allowlist, not the sandbox's port rules, decides which hosts it reaches.
 - The sandbox is what holds a client that ignores those variables: a direct connection fails even to the loopback sailor, so nothing leaves except through the proxy.
-- `tests/fm-privateer.test.sh` re-proves the rest of the confinement against the real sandbox and tmux without a model: a command the first mate starts through `tmux new-window` is denied a direct connection, is refused by the proxy for an unlisted host, and can still write the workers' OpenCode data and the checkout's `.opencode/` scratch, but, with the checkout inside the home, can neither create, rewrite, nor move aside any path in the checkout that the first mate's OpenCode loads from, including the `.claude/skills` link and the `.claude` and `.opencode` entries, while the first mate can neither signal the proxy nor rewrite its port.
+- `tests/fm-privateer.test.sh` re-proves the rest of the confinement against the real sandbox and tmux without a model: a command the first mate starts through `tmux new-window` is denied a direct connection, is refused by the proxy for an unlisted host, and can still write the workers' OpenCode data and the checkout's `.opencode/` scratch, but, with the checkout inside the home, can neither create, rewrite, nor move aside any path in the checkout that an OpenCode first mate loads or the helm is rendered from, including the `.claude/skills` link and the `.claude` and `.opencode` entries, nor any path in the helm or a directory leading to it, while the first mate can neither signal the proxy nor rewrite its port.
 - OpenCode loads plugins from more places than `.opencode/plugins/`: on 2026-09-30 with OpenCode 1.18.32, `opencode debug config` in a scratch Git repository with its four `XDG_*` directories isolated listed, as its `plugin` array, one file placed in each of `$XDG_CONFIG_HOME/opencode/plugin/`, `.opencode/plugins/`, and `.opencode/plugin/`, which is why `../configuration.md` names OpenCode's own directories as a remaining limit.
 - The same run found the checkout's other load paths: `opencode debug config` merged the `instructions` of both the root `opencode.json` and `.opencode/opencode.json` and listed agents from `.opencode/agent/`, `.opencode/agents/`, `.opencode/mode/`, and `.opencode/modes/` and commands from `.opencode/command/` and `.opencode/commands/`, and `opencode debug skill` listed a skill from each of `.opencode/skill/`, `.opencode/skills/`, `.claude/skills/`, and `.agents/skills/`.
 - OpenCode 1.18.32's bundled source also reads `AGENTS.md`, `CLAUDE.md`, and `CONTEXT.md` as instructions, `tui.json` and `tui.jsonc` at the root and in `.opencode/` for TUI plugins, and custom tools from `.opencode/tool/` and `.opencode/tools/`, which is why the launcher denies all of those paths in a checkout inside the home.
@@ -180,6 +180,32 @@ Facts the plugin depends on:
 - OpenCode 1.18.33 allocates a user message's id before it triggers `chat.message` and saves the message only after the hook returns, so a digest queued from the hook's wait lands after the captain's message in history but before the model's first call.
 - `experimental.session.compacting` receives `{ context, prompt }` for the compaction prompt itself, so a digest added there would be summarized, which is why the plugin uses `session.compacted` and `promptAsync`.
 - `tests/fm-sessionstart-nudge.test.sh` re-proves the event mapping, the wait, and the 512 KiB bound without a model.
+
+## A Privateer first mate sees only its helm
+
+Verified 2026-09-30 on macOS 26.6 with OpenCode 1.18.33 and tmux 3.7c by `FM_PRIVATEER_EGRESS_LIVE=1 tests/fm-privateer-egress-live-e2e.test.sh`, the egress audit, which also checks the helm that `../configuration.md` ("How a Privateer session runs") describes.
+The audit ran `bin/fm-privateer.sh start` for real with a fixture clone of the checkout carrying the working tree's scripts, plugins, and Privateer rulebook, and with `HOME` set to a stand-in captain home holding `~/.claude/CLAUDE.md` and one decoy skill in each of `~/.claude/skills`, `~/.agents/skills`, and `~/.opencode/skills`.
+Its scripted sailor recorded the system text and the offered skills of every chat request.
+
+| Observation | Result |
+| --- | --- |
+| The system text of the first request that offered the first mate's tools | Began with the `privateer` agent's prompt, and named `Instructions from: <home>/state/privateer/helm/AGENTS.md` as its only instructions |
+| The checkout's `AGENTS.md` and the stand-in `~/.claude/CLAUDE.md` | Absent from that system text |
+| The skills that request offered | Exactly the seven under `docs/privateer/skills/`, and none of the three decoys |
+| That request's arrival | 85 seconds after start, answering the prompt the audit typed into the pane |
+
+`FM_PRIVATEER_SESSION_LOCK_LIVE=1 tests/fm-privateer-session-lock-live-e2e.test.sh` also passed with the first mate in the helm: session start ran as `bin/fm-session-start.sh` through the helm's `bin/`, took the fleet lock for the OpenCode process, and printed the OpenCode supervision block, 606 seconds after start on a machine under load (load averages between 6 and 10).
+
+Facts the helm depends on, each observed in a scratch Git repository with OpenCode's four `XDG_*` directories isolated and a scripted model that logged each request:
+
+- A directory that is its own Git repository, even one with no commit, is OpenCode's project root: `opencode debug scrap` named it as the worktree, and an `AGENTS.md` and `.agents/skills/` in a directory above it did not load.
+- A custom agent's Markdown body replaces OpenCode's build prompt: the system text began with that body.
+- Without the two switches below, OpenCode appended `~/.claude/CLAUDE.md` as instructions and offered skills from `~/.claude/skills`, `~/.agents/skills`, and `~/.opencode/skills`.
+- `OPENCODE_DISABLE_EXTERNAL_SKILLS=1` drops `.claude/skills` and `.agents/skills` everywhere, including a project's own, and keeps `.opencode/skills`, which is why the helm's skills live there; `OPENCODE_DISABLE_CLAUDE_CODE=1` drops `~/.claude/CLAUDE.md`.
+- An agent whose `permission.skill` denies `"*"` and allows named skills is offered only those, so the captain's `~/.opencode/skills` and the built-in `customize-opencode` skill are hidden.
+- OpenCode writes `.opencode/.gitignore` in its project at start when that file is missing, and a sandbox refusal of the write stopped it with `Error: Unexpected server error` from `Config.loadInstanceState`; a refusal by file mode did not, and an existing `.gitignore` of any content was left alone, which is why the launcher renders that file into the helm.
+
+Refresh this record with the audit after an OpenCode upgrade.
 
 ## The seal plugin holds against the real OpenCode
 
