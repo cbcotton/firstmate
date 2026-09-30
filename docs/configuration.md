@@ -1274,6 +1274,9 @@ A sailor is a named machine serving local models through an OpenAI-compatible en
 `bin/fm-sailor.sh` owns the checks below and its header owns their mechanics.
 
 - `sailors` maps each sailor's name (lowercase letters, digits, and single dashes) to its `endpoint`, its `status`, and the `models` it may be asked for; `title`, `host`, and `max_concurrent` (default 1) are optional.
+- A sailor may also carry `model_settings`, a map from a listed model to that model's own behavior settings, in OpenCode's field names: a `limit` object holding `context` and `output` (positive whole numbers), and an `options` object of string, number, or boolean values such as `reasoningEffort` (camelCase), `enable_thinking`, `temperature`, `top_p`, and `top_k`.
+  `bin/fm-sailor.sh provider-json` emits them under that model, so every worker launch and the Privateer first mate get the same settings from the same place, whatever the home's global OpenCode configuration says; an entry without `model_settings` launches exactly as before.
+  Settings change only at the next launch, so a Privateer first mate needs a restart.
 - A profile with `sailor` must use the `opencode` harness and name a `model` from that sailor's list; `fm-spawn.sh --sailor` then points the worker's OpenCode at that endpoint.
 - A `placeholder` sailor is never dispatched, even when something answers at its address; only the captain changes its status to `live`.
 - A `live` sailor is eligible only while `bin/fm-sailor.sh check <sailor> <model>` passes: its endpoint must answer within a few seconds and list the model, and this home must hold fewer than `max_concurrent` tasks on it.
@@ -1284,6 +1287,7 @@ A sailor is a named machine serving local models through an OpenAI-compatible en
   - `add --from-mlx-serve <server-id>` takes the endpoint and the live model list from that server's entry in the local mlx-serve registry, `~/.mlx-serve/servers.json`; it only reads the registry and never loads, unloads, or starts a server.
   - `set` changes a sailor's endpoint, title, host, capacity, or status; in a Privateer home it refuses to make the first mate's sailor a `placeholder`.
   - `set-model` adds a model to a sailor, `--replace <old>` also moves every rule and default profile on that sailor from the old model to the new one, and `--first-mate` moves a [Privateer](#privateer-quarantine-configprivateer) first mate onto it.
+  - `set-model --model-limit <context>:<output>` and `--model-options '<json object>'` record the model's `model_settings`, each replacing only the field it names; `--replace` drops the old model's settings with it, and `add` takes no such flags, so a new sailor's settings are a hand edit or a following `set-model`.
   - `retire` removes a sailor and every profile naming it, with any rule or default left without a profile.
 - Each edit writes nothing unless the whole result validates and keeps a dated copy of the file it replaces; `set-model --dry-run` only prints the change, and refuses `--warm`, which would load the model.
   `set-model --replace` and `retire` refuse while a task still runs on what they would remove, and `set-model` refuses a model a live sailor does not serve.
