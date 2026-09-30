@@ -103,6 +103,7 @@
 # each with a `loaded` flag) loads it now, and a load or memory refusal
 # surfaces here rather than in a worker's first request. --dry-run prints the
 # change and writes nothing. It refuses:
+#   - --warm with --dry-run, since a warm-up loads the model;
 #   - an unknown sailor, or --replace naming a model the sailor does not list
 #     or <model> itself;
 #   - --replace while a task record carries sailor=<sailor> and model=<old>,
@@ -721,6 +722,7 @@ cmd_set_model() {
       *) usage ;;
     esac
   done
+  [ "$warm" = 0 ] || [ "$DRY_RUN" = 0 ] || refuse "--dry-run loads nothing, so it takes no --warm"
   begin_edit
   status=$(sailor_field "$name" '.status')
   [ -n "$status" ] || refuse "unknown sailor $name"

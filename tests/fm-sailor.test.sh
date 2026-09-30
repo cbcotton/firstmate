@@ -432,6 +432,12 @@ test_set_model_refusals_write_nothing() {
   assert_contains "$out" '+        "qwen-next"' "a dry run must print the change"
   assert_contains "$out" "dry run: nothing written" "a dry run must say it wrote nothing"
   assert_unchanged "a dry run"
+  : > "$STUB_DIR/requests.log"
+  out=$(run_real set-model tiller qwen-next --warm --dry-run)
+  expect_code 1 "$?" "a dry run must refuse --warm"
+  assert_contains "$out" "refused: --dry-run loads nothing" "dry-run warm refusal missing"
+  assert_no_grep "POST" "$STUB_DIR/requests.log" "a dry run must not ask the server to load a model"
+  assert_unchanged "a dry run with --warm"
   pass "set-model refuses an unserved model, a failed warm-up, a replace under a running task, and misplaced flags, writing nothing, and --dry-run only prints"
 }
 

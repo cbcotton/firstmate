@@ -1260,7 +1260,7 @@ A sailor is a named machine serving local models through an OpenAI-compatible en
   - `set` changes a sailor's endpoint, title, host, capacity, or status; in a Privateer home it refuses to make the first mate's sailor a `placeholder`.
   - `set-model` adds a model to a sailor, `--replace <old>` also moves every rule and default profile on that sailor from the old model to the new one, and `--first-mate` moves a [Privateer](#privateer-quarantine-configprivateer) first mate onto it.
   - `retire` removes a sailor and every profile naming it, with any rule or default left without a profile.
-- Each edit writes nothing unless the whole result validates and keeps a dated copy of the file it replaces; `set-model --dry-run` only prints the change.
+- Each edit writes nothing unless the whole result validates and keeps a dated copy of the file it replaces; `set-model --dry-run` only prints the change, and refuses `--warm`, which would load the model.
   `set-model --replace` and `retire` refuse while a task still runs on what they would remove, and `set-model` refuses a model a live sailor does not serve.
   A change reaches each worker at its next spawn, while running workers keep what they launched with.
 - `set-model --warm` asks the model for one token, so a server that loads models on demand loads it now and a failed load shows up then rather than in a worker's first request.
