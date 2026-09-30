@@ -27,8 +27,8 @@
 #                    [--warm] [--dry-run]
 #   fm-sailor.sh retire <sailor>
 #
-# `model_settings` maps a listed model id to {limit, options}: limit holds only
-# context and output, each a positive whole number; options is an object of
+# `model_settings` maps a listed model id to {limit, options}: limit holds both
+# context and output and nothing else, each a positive whole number; options is an object of
 # string, number, or boolean values (for example reasoningEffort, temperature,
 # top_p, top_k, enable_thinking). validate refuses any other shape, and a
 # sailor without model_settings behaves as it always has.
