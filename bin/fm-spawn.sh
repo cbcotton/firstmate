@@ -309,8 +309,8 @@
 #   Names are read once per spawn; values are expanded in the destination pane,
 #   not copied from the invoking process or written into the launch text.
 #   Unset names stay unset and empty values stay empty.
-#   The fixed operational floor is HOME PATH USER LOGNAME SHELL TERM TERMINFO
-#   TERMINFO_DIRS COLORTERM LANG LC_ALL LC_CTYPE TMPDIR TMP TEMP GOTMPDIR, plus backend identity/routing:
+#   The fixed operational floor is HOME PATH USER LOGNAME SHELL TERM COLORTERM
+#   LANG LC_ALL LC_CTYPE TMPDIR TMP TEMP GOTMPDIR, plus backend identity/routing:
 #   TMUX TMUX_PANE HERDR_ENV HERDR_SESSION HERDR_SOCKET_PATH HERDR_PANE_ID
 #   CMUX_WORKSPACE_ID CMUX_SURFACE_ID CMUX_TAB_ID CMUX_PANEL_ID CMUX_SOCKET_PATH
 #   ZELLIJ ZELLIJ_SESSION_NAME ZELLIJ_PANE_ID FM_ZELLIJ_SESSION, plus the task
@@ -5507,7 +5507,7 @@ if [ "$LAUNCH_ENV_ENABLED" = 1 ]; then
   # COMPACT_ADVISER_DISABLE is the intentional declarative floor-membership
   # entry; the explicit COMPACT_ADVISER_DISABLE=1 assignment below is the
   # authoritative setter.
-  for env_name in HOME PATH USER LOGNAME SHELL TERM TERMINFO TERMINFO_DIRS COLORTERM LANG LC_ALL LC_CTYPE \
+  for env_name in HOME PATH USER LOGNAME SHELL TERM COLORTERM LANG LC_ALL LC_CTYPE \
     TMPDIR TMP TEMP GOTMPDIR TMUX TMUX_PANE HERDR_ENV HERDR_SESSION HERDR_SOCKET_PATH \
     HERDR_PANE_ID CMUX_WORKSPACE_ID CMUX_SURFACE_ID CMUX_TAB_ID CMUX_PANEL_ID \
     CMUX_SOCKET_PATH ZELLIJ ZELLIJ_SESSION_NAME ZELLIJ_PANE_ID FM_ZELLIJ_SESSION \
