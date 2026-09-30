@@ -238,8 +238,8 @@ test_seal_holds_inside_the_session() {
       cd "$home" || exit 1
       env -u TMUX -u FM_HOME "${oc_env[@]}" perl -e 'alarm shift; exec @ARGV' 180 "${attach[@]}" "$message"
     ) < /dev/null > "$dir/run.out" 2>&1
-    attach+=(--continue)
     rc=$?
+    attach+=(--continue)
     [ "$rc" = 0 ] || guard_fail "opencode run --attach '$message' exited $rc: $(tail -c 600 "$dir/run.out")"
   done
   kill "$SERVE_PID" 2>/dev/null
