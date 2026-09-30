@@ -1,0 +1,46 @@
+
+$ shasum /Users/cotton/.mlx-serve/servers.json
+0769f74474868aeb4117042a957c12faef7ac51a  /Users/cotton/.mlx-serve/servers.json
+
+$ fm-sailor.sh add tiller2 --from-mlx-serve mlx-serve --models Qwen3.8-27B-TURBO-Fable-Cold-Fusion-735-882-Heretic-Uncensored-NM-DAU-mlx-oQ8e-1M --title Tiller via mlx-serve registry
+wrote config/crew-dispatch.json (previous copy: crew-dispatch.json.bak-20260930-113023)
+added sailor tiller2 (placeholder) at http://127.0.0.1:11234/v1 serving Qwen3.8-27B-TURBO-Fable-Cold-Fusion-735-882-Heretic-Uncensored-NM-DAU-mlx-oQ8e-1M
+workers: the change applies from each worker's next spawn; running workers keep what they launched with
+[exit 0]
+
+$ fm-sailor.sh add ghost --from-mlx-serve no-such-server
+refused: /Users/cotton/.mlx-serve/servers.json has no server no-such-server (it lists: mlx-serve, mlx-vlm)
+[exit 1]
+
+$ shasum /Users/cotton/.mlx-serve/servers.json
+0769f74474868aeb4117042a957c12faef7ac51a  /Users/cotton/.mlx-serve/servers.json
+
+$ fm-sailor.sh check tiller2 Qwen3.8-27B-TURBO-Fable-Cold-Fusion-735-882-Heretic-Uncensored-NM-DAU-mlx-oQ8e-1M
+refused: sailor tiller2 is a placeholder; it is dispatched only after the captain marks it live
+[exit 1]
+
+$ fm-sailor.sh retire tiller2
+wrote config/crew-dispatch.json (previous copy: crew-dispatch.json.bak-20260930-113023-2)
+retired sailor tiller2 and the 0 profile(s) naming it
+workers: the change applies from each worker's next spawn; running workers keep what they launched with
+[exit 0]
+
+$ fm-sailor.sh add stub --endpoint http://127.0.0.1:18765/v1 --models m-loaded --live
+wrote config/crew-dispatch.json (previous copy: crew-dispatch.json.bak-20260930-113023-3)
+added sailor stub (live) at http://127.0.0.1:18765/v1 serving m-loaded
+workers: the change applies from each worker's next spawn; running workers keep what they launched with
+[exit 0]
+
+$ grep -c chat/completions /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.RFiAzU/stub.log
+3
+
+$ fm-sailor.sh set-model stub m-oom --warm --dry-run
+refused: sailor stub could not load m-oom: HTTP 507: insufficient memory to load m-oom (needs 48 GB, 12 GB free)
+[exit 1]
+
+$ grep -c chat/completions /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.RFiAzU/stub.log
+4
+
+$ fm-sailor.sh check stub m-cold
+refused: model m-cold is not listed for sailor stub
+[exit 1]

@@ -1,0 +1,45 @@
+
+$ fm-sailor.sh add stub --endpoint http://127.0.0.1:18765/v1 --models m-loaded --title Lab stub --host localhost --max-concurrent 2
+wrote config/crew-dispatch.json (previous copy: crew-dispatch.json.bak-20260930-112954)
+added sailor stub (placeholder) at http://127.0.0.1:18765/v1 serving m-loaded
+workers: the change applies from each worker's next spawn; running workers keep what they launched with
+[exit 0]
+
+$ fm-sailor.sh add stub --endpoint http://127.0.0.1:18765/v1 --models m-loaded
+refused: sailor stub already exists; change it with set or set-model
+[exit 1]
+
+$ fm-sailor.sh add bad --endpoint ftp://x --models a
+refused: sailor bad needs an http(s) endpoint
+[exit 1]
+
+$ fm-sailor.sh add stub2 --endpoint http://127.0.0.1:18765/v1 --models m-loaded --dry-run
+usage: fm-sailor.sh validate | list | status [--all]
+       fm-sailor.sh check <sailor> <model> [--task <id>]
+       fm-sailor.sh provider-json <sailor> <model>
+       fm-sailor.sh add <sailor> (--endpoint <url> --models <ids> | --from-mlx-serve <server-id> [--models <ids>])
+                    [--title <text>] [--host <text>] [--max-concurrent <n>] [--live | --placeholder]
+       fm-sailor.sh set <sailor> [--endpoint <url>] [--title <text>] [--host <text>] [--max-concurrent <n>] [--live | --placeholder]
+       fm-sailor.sh set-model <sailor> <model> [--replace <old>] [--first-mate] [--warm] [--dry-run]
+       fm-sailor.sh retire <sailor>
+[exit 2]
+
+$ fm-sailor.sh set stub --live
+wrote config/crew-dispatch.json (previous copy: crew-dispatch.json.bak-20260930-112954-2)
+workers: the change applies from each worker's next spawn; running workers keep what they launched with
+[exit 0]
+
+$ fm-sailor.sh list
+tiller status=live endpoint=http://127.0.0.1:11234/v1 max_concurrent=1 models=Qwen3.8-27B-TURBO-Fable-Cold-Fusion-735-882-Heretic-Uncensored-NM-DAU-mlx-oQ8e-1M
+stub status=live endpoint=http://127.0.0.1:18765/v1 max_concurrent=2 models=m-loaded
+[exit 0]
+
+$ fm-sailor.sh status --all
+tiller live answering endpoint=http://127.0.0.1:11234/v1 tasks=0/1 running=2 waiting=0 models=Qwen3.8-27B-TURBO-Fable-Cold-Fusion-735-882-Heretic-Uncensored-NM-DAU-mlx-oQ8e-1M(loaded)
+stub live answering endpoint=http://127.0.0.1:18765/v1 tasks=0/2 running=2 waiting=3 models=m-loaded(loaded)
+[exit 0]
+
+$ ls /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.RFiAzU/config
+crew-dispatch.json
+crew-dispatch.json.bak-20260930-112954
+crew-dispatch.json.bak-20260930-112954-2

@@ -1,0 +1,86 @@
+=== S1: add from real mlx-serve registry (~/.mlx-serve/servers.json, read-only)
+$ fm-sailor.sh add tiller --from-mlx-serve mlx-serve --title Tiller --live
+wrote config/crew-dispatch.json (previous copy: crew-dispatch.json.bak-20260930-113305)
+added sailor tiller (live) at http://127.0.0.1:11234/v1 serving Qwen3.8-27B-TURBO-Fable-Cold-Fusion-735-882-Heretic-Uncensored-NM-DAU-mlx-oQ8e-1M,mlx-community/Qwen3-Embedding-0.6B-8bit,lmstudio-community/Qwen3.5-9B-MLX-4bit,YCF-AI/CyberTiel-Coder-35B-MLX,ARC4NUM/Qwen3.8-Flash-Next-Uncensored-MLX-Serve-4bit
+workers: the change applies from each worker's next spawn; running workers keep what they launched with
+[exit 0]
+=== S1b: add stub sailor by endpoint, placeholder by default
+$ fm-sailor.sh add stub --endpoint http://127.0.0.1:53620/v1 --models qwen-coder,qwen-big --title Stub --max-concurrent 2
+wrote config/crew-dispatch.json (previous copy: crew-dispatch.json.bak-20260930-113305-2)
+added sailor stub (placeholder) at http://127.0.0.1:53620/v1 serving qwen-coder,qwen-big
+workers: the change applies from each worker's next spawn; running workers keep what they launched with
+[exit 0]
+$ fm-sailor.sh add stub --endpoint http://127.0.0.1:53620/v1 --models qwen-coder
+refused: sailor stub already exists; change it with set or set-model
+[exit 1]
+$ fm-sailor.sh set stub --live
+wrote config/crew-dispatch.json (previous copy: crew-dispatch.json.bak-20260930-113305-3)
+workers: the change applies from each worker's next spawn; running workers keep what they launched with
+[exit 0]
+$ fm-sailor.sh list
+tiller status=live endpoint=http://127.0.0.1:11234/v1 max_concurrent=1 models=Qwen3.8-27B-TURBO-Fable-Cold-Fusion-735-882-Heretic-Uncensored-NM-DAU-mlx-oQ8e-1M,mlx-community/Qwen3-Embedding-0.6B-8bit,lmstudio-community/Qwen3.5-9B-MLX-4bit,YCF-AI/CyberTiel-Coder-35B-MLX,ARC4NUM/Qwen3.8-Flash-Next-Uncensored-MLX-Serve-4bit
+stub status=live endpoint=http://127.0.0.1:53620/v1 max_concurrent=2 models=qwen-coder,qwen-big
+[exit 0]
+=== S1c: --dry-run refused on add/set/retire
+$ fm-sailor.sh add x --endpoint http://127.0.0.1:53620/v1 --models a --dry-run
+usage: fm-sailor.sh validate | list | status [--all]
+       fm-sailor.sh check <sailor> <model> [--task <id>]
+       fm-sailor.sh provider-json <sailor> <model>
+       fm-sailor.sh add <sailor> (--endpoint <url> --models <ids> | --from-mlx-serve <server-id> [--models <ids>])
+                    [--title <text>] [--host <text>] [--max-concurrent <n>] [--live | --placeholder]
+       fm-sailor.sh set <sailor> [--endpoint <url>] [--title <text>] [--host <text>] [--max-concurrent <n>] [--live | --placeholder]
+       fm-sailor.sh set-model <sailor> <model> [--replace <old>] [--first-mate] [--warm] [--dry-run]
+       fm-sailor.sh retire <sailor>
+[exit 2]
+$ fm-sailor.sh set stub --title Y --dry-run
+usage: fm-sailor.sh validate | list | status [--all]
+       fm-sailor.sh check <sailor> <model> [--task <id>]
+       fm-sailor.sh provider-json <sailor> <model>
+       fm-sailor.sh add <sailor> (--endpoint <url> --models <ids> | --from-mlx-serve <server-id> [--models <ids>])
+                    [--title <text>] [--host <text>] [--max-concurrent <n>] [--live | --placeholder]
+       fm-sailor.sh set <sailor> [--endpoint <url>] [--title <text>] [--host <text>] [--max-concurrent <n>] [--live | --placeholder]
+       fm-sailor.sh set-model <sailor> <model> [--replace <old>] [--first-mate] [--warm] [--dry-run]
+       fm-sailor.sh retire <sailor>
+[exit 2]
+$ fm-sailor.sh retire stub --dry-run
+usage: fm-sailor.sh validate | list | status [--all]
+       fm-sailor.sh check <sailor> <model> [--task <id>]
+       fm-sailor.sh provider-json <sailor> <model>
+       fm-sailor.sh add <sailor> (--endpoint <url> --models <ids> | --from-mlx-serve <server-id> [--models <ids>])
+                    [--title <text>] [--host <text>] [--max-concurrent <n>] [--live | --placeholder]
+       fm-sailor.sh set <sailor> [--endpoint <url>] [--title <text>] [--host <text>] [--max-concurrent <n>] [--live | --placeholder]
+       fm-sailor.sh set-model <sailor> <model> [--replace <old>] [--first-mate] [--warm] [--dry-run]
+       fm-sailor.sh retire <sailor>
+[exit 2]
+=== S2: status --all (real Tiller + stub with metrics)
+$ fm-sailor.sh status --all
+tiller live answering endpoint=http://127.0.0.1:11234/v1 tasks=0/1 running=3 waiting=0 models=Qwen3.8-27B-TURBO-Fable-Cold-Fusion-735-882-Heretic-Uncensored-NM-DAU-mlx-oQ8e-1M(loaded),mlx-community/Qwen3-Embedding-0.6B-8bit(loaded),lmstudio-community/Qwen3.5-9B-MLX-4bit(loaded),YCF-AI/CyberTiel-Coder-35B-MLX(unloaded),ARC4NUM/Qwen3.8-Flash-Next-Uncensored-MLX-Serve-4bit(unloaded)
+stub live answering endpoint=http://127.0.0.1:53620/v1 tasks=0/2 running=2 waiting=1 models=qwen-coder(loaded),qwen-big(unloaded)
+[exit 0]
+--- stub requests:
+GET /v1/models
+GET /v1/models
+GET /metrics
+=== S3: check loaded vs listed; check --warm refused
+$ fm-sailor.sh check tiller Qwen3.8-27B-TURBO-Fable-Cold-Fusion-735-882-Heretic-Uncensored-NM-DAU-mlx-oQ8e-1M
+ok: sailor tiller serves Qwen3.8-27B-TURBO-Fable-Cold-Fusion-735-882-Heretic-Uncensored-NM-DAU-mlx-oQ8e-1M at http://127.0.0.1:11234/v1 (0 of 1 tasks busy; model loaded)
+[exit 0]
+$ fm-sailor.sh check stub qwen-coder
+ok: sailor stub serves qwen-coder at http://127.0.0.1:53620/v1 (0 of 2 tasks busy; model loaded)
+[exit 0]
+$ fm-sailor.sh check stub qwen-big
+ok: sailor stub serves qwen-big at http://127.0.0.1:53620/v1 (0 of 2 tasks busy; model listed but not loaded, so the first request loads it)
+[exit 0]
+$ fm-sailor.sh check stub qwen-big --warm
+usage: fm-sailor.sh validate | list | status [--all]
+       fm-sailor.sh check <sailor> <model> [--task <id>]
+       fm-sailor.sh provider-json <sailor> <model>
+       fm-sailor.sh add <sailor> (--endpoint <url> --models <ids> | --from-mlx-serve <server-id> [--models <ids>])
+                    [--title <text>] [--host <text>] [--max-concurrent <n>] [--live | --placeholder]
+       fm-sailor.sh set <sailor> [--endpoint <url>] [--title <text>] [--host <text>] [--max-concurrent <n>] [--live | --placeholder]
+       fm-sailor.sh set-model <sailor> <model> [--replace <old>] [--first-mate] [--warm] [--dry-run]
+       fm-sailor.sh retire <sailor>
+[exit 2]
+--- stub requests:
+GET /v1/models
+GET /v1/models

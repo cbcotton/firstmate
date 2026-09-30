@@ -1,0 +1,98 @@
+
+$ fm-sailor.sh set-model tiller Qwen3.8-27B-TURBO-Fable-Cold-Fusion-735-882-Heretic-Uncensored-NM-DAU-mlx-oQ8e-1M --first-mate
+refused: --first-mate needs a Privateer home; config/privateer is absent, and this command never creates it
+[exit 1]
+
+$ printf 'tiller/%s
+' Qwen3.8-27B-TURBO-Fable-Cold-Fusion-735-882-Heretic-Uncensored-NM-DAU-mlx-oQ8e-1M > /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.RFiAzU/config/privateer
+
+$ env -u FM_ROOT_OVERRIDE -u FM_STATE_OVERRIDE -u FM_CONFIG_OVERRIDE FM_HOME=/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.RFiAzU bin/fm-privateer.sh check; echo [privateer check exit $?]
+config/crew-harness must hold opencode
+config/sailor-sandbox is absent; every Privateer sailor runs inside the sandbox
+config/crew-dispatch.json declares sailor_fallback; Privateer work queues when every sailor is down instead of falling back
+(eval):1: bad pattern: [privateer
+
+$ cp /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.RFiAzU/config/crew-dispatch.json /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.RFiAzU/before.json
+
+$ fm-sailor.sh set tiller --placeholder
+refused: the first mate runs on tiller/Qwen3.8-27B-TURBO-Fable-Cold-Fusion-735-882-Heretic-Uncensored-NM-DAU-mlx-oQ8e-1M, and the first mate runs only on a live sailor
+[exit 1]
+
+$ cmp /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.RFiAzU/config/crew-dispatch.json /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.RFiAzU/before.json && echo crew-dispatch.json unchanged; cat /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.RFiAzU/config/privateer
+crew-dispatch.json unchanged
+tiller/Qwen3.8-27B-TURBO-Fable-Cold-Fusion-735-882-Heretic-Uncensored-NM-DAU-mlx-oQ8e-1M
+
+$ fm-sailor.sh set-model stub m-cold
+wrote config/crew-dispatch.json (previous copy: crew-dispatch.json.bak-20260930-113036)
+sailor stub lists m-cold
+workers: the change applies from each worker's next spawn; running workers keep what they launched with
+note: the Privateer quarantine still reports:
+  config/crew-harness must hold opencode
+  config/sailor-sandbox is absent; every Privateer sailor runs inside the sandbox
+  config/crew-dispatch.json declares sailor_fallback; Privateer work queues when every sailor is down instead of falling back
+[exit 0]
+
+$ fm-sailor.sh set-model stub m-loaded --first-mate
+wrote config/privateer (previous copy: privateer.bak-20260930-113036)
+sailor stub lists m-loaded
+config/privateer names stub/m-loaded for the first mate
+first mate: restart the Privateer session to switch (fm-privateer.sh stop, then start; stop waits until no task is in flight, 0 now)
+note: the Privateer quarantine still reports:
+  config/crew-harness must hold opencode
+  config/sailor-sandbox is absent; every Privateer sailor runs inside the sandbox
+  config/crew-dispatch.json declares sailor_fallback; Privateer work queues when every sailor is down instead of falling back
+[exit 0]
+
+$ cat /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.RFiAzU/config/privateer; ls /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.RFiAzU/config
+stub/m-loaded
+crew-dispatch.json
+crew-dispatch.json.bak-20260930-112954
+crew-dispatch.json.bak-20260930-112954-2
+crew-dispatch.json.bak-20260930-113005
+crew-dispatch.json.bak-20260930-113006
+crew-dispatch.json.bak-20260930-113006-2
+crew-dispatch.json.bak-20260930-113006-3
+crew-dispatch.json.bak-20260930-113023
+crew-dispatch.json.bak-20260930-113023-2
+crew-dispatch.json.bak-20260930-113023-3
+crew-dispatch.json.bak-20260930-113036
+privateer
+privateer.bak-20260930-113036
+
+$ fm-sailor.sh set stub --placeholder
+refused: the first mate runs on stub/m-loaded, and the first mate runs only on a live sailor
+[exit 1]
+
+$ fm-sailor.sh set tiller --placeholder
+wrote config/crew-dispatch.json (previous copy: crew-dispatch.json.bak-20260930-113036-2)
+workers: the change applies from each worker's next spawn; running workers keep what they launched with
+note: the Privateer quarantine still reports:
+  config/crew-harness must hold opencode
+  config/sailor-sandbox is absent; every Privateer sailor runs inside the sandbox
+  config/crew-dispatch.json declares sailor_fallback; Privateer work queues when every sailor is down instead of falling back
+[exit 0]
+
+$ fm-sailor.sh set-model stub m-cold --replace m-loaded
+refused: the first mate runs on stub/m-loaded; add --first-mate to move it too, or drop --replace
+[exit 1]
+
+$ fm-sailor.sh set-model stub m-cold --replace m-loaded --first-mate
+wrote config/crew-dispatch.json (previous copy: crew-dispatch.json.bak-20260930-113037)
+wrote config/privateer (previous copy: privateer.bak-20260930-113037)
+sailor stub lists m-cold in place of m-loaded
+replaced stub/m-loaded with stub/m-cold in 0 profile(s)
+config/privateer names stub/m-cold for the first mate
+workers: the change applies from each worker's next spawn; running workers keep what they launched with
+first mate: restart the Privateer session to switch (fm-privateer.sh stop, then start; stop waits until no task is in flight, 0 now)
+note: the Privateer quarantine still reports:
+  config/crew-harness must hold opencode
+  config/sailor-sandbox is absent; every Privateer sailor runs inside the sandbox
+  config/crew-dispatch.json declares sailor_fallback; Privateer work queues when every sailor is down instead of falling back
+[exit 0]
+
+$ cat /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.RFiAzU/config/privateer
+stub/m-cold
+
+$ fm-sailor.sh status
+stub live answering endpoint=http://127.0.0.1:18765/v1 tasks=0/1 running=2 waiting=3 models=m-cold(loaded)
+[exit 0]

@@ -1,0 +1,142 @@
+
+$ fm-sailor.sh set-model stub m-cold
+wrote config/crew-dispatch.json (previous copy: crew-dispatch.json.bak-20260930-113005)
+sailor stub lists m-cold
+note: stub lists m-cold but has not loaded it, so the first request loads it; rerun with --warm to load it now
+workers: the change applies from each worker's next spawn; running workers keep what they launched with
+[exit 0]
+
+$ jq -c .sailors.stub.models /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.RFiAzU/config/crew-dispatch.json
+["m-loaded","m-cold"]
+
+$ fm-sailor.sh set-model stub m-nope
+refused: sailor stub at http://127.0.0.1:18765/v1 does not serve m-nope
+[exit 1]
+
+$ fm-sailor.sh set-model stub m-oom --warm
+refused: sailor stub could not load m-oom: HTTP 507: insufficient memory to load m-oom (needs 48 GB, 12 GB free)
+[exit 1]
+
+$ jq -c .sailors.stub.models /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.RFiAzU/config/crew-dispatch.json
+["m-loaded","m-cold"]
+
+$ fm-sailor.sh set-model stub m-cold --warm --dry-run
+sailor stub already lists m-cold; nothing written
+stub has loaded m-cold
+[exit 0]
+
+$ grep -c chat/completions /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.RFiAzU/stub.log
+2
+
+$ fm-sailor.sh set-model stub m-cold --warm
+sailor stub already lists m-cold; nothing written
+stub has loaded m-cold
+[exit 0]
+
+$ grep chat/completions /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.RFiAzU/stub.log
+REQ POST /v1/chat/completions
+REQ POST /v1/chat/completions
+REQ POST /v1/chat/completions
+
+$ fm-sailor.sh status --all
+tiller live answering endpoint=http://127.0.0.1:11234/v1 tasks=0/1 running=2 waiting=0 models=Qwen3.8-27B-TURBO-Fable-Cold-Fusion-735-882-Heretic-Uncensored-NM-DAU-mlx-oQ8e-1M(loaded)
+stub live answering endpoint=http://127.0.0.1:18765/v1 tasks=0/2 running=2 waiting=3 models=m-loaded(loaded),m-cold(loaded)
+[exit 0]
+
+$ printf 'harness=opencode
+sailor=stub
+model=m-loaded
+' > /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.RFiAzU/state/busy-x1.meta
+
+$ fm-sailor.sh set-model stub m-cold --replace m-loaded
+refused: task(s) busy-x1 run stub/m-loaded, and relaunching them needs it listed; replace it once they land, or add m-cold without --replace
+[exit 1]
+
+$ fm-sailor.sh retire stub
+refused: task(s) busy-x1 run on stub; retire it once they land
+[exit 1]
+
+$ rm /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.RFiAzU/state/busy-x1.meta
+
+$ fm-sailor.sh set-model stub m-cold --replace m-loaded --dry-run
+--- config/crew-dispatch.json
++++ config/crew-dispatch.json (after)
+@@ -15,7 +15,6 @@
+       "endpoint": "http://127.0.0.1:18765/v1",
+       "status": "live",
+       "models": [
+-        "m-loaded",
+         "m-cold"
+       ],
+       "max_concurrent": 2
+@@ -38,7 +37,7 @@
+         {
+           "harness": "opencode",
+           "sailor": "stub",
+-          "model": "m-loaded"
++          "model": "m-cold"
+         },
+         {
+           "harness": "opencode",
+@@ -53,7 +52,7 @@
+         {
+           "harness": "opencode",
+           "sailor": "stub",
+-          "model": "m-loaded"
++          "model": "m-cold"
+         }
+       ]
+     }
+@@ -66,7 +65,7 @@
+     {
+       "harness": "opencode",
+       "sailor": "stub",
+-      "model": "m-loaded"
++      "model": "m-cold"
+     }
+   ]
+ }
+dry run: nothing written
+[exit 0]
+
+$ jq -c '[.rules[].use, .default]' /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.RFiAzU/config/crew-dispatch.json
+[[{"harness":"opencode","sailor":"tiller","model":"Qwen3.8-27B-TURBO-Fable-Cold-Fusion-735-882-Heretic-Uncensored-NM-DAU-mlx-oQ8e-1M"}],[{"harness":"opencode","sailor":"stub","model":"m-loaded"},{"harness":"opencode","sailor":"tiller","model":"Qwen3.8-27B-TURBO-Fable-Cold-Fusion-735-882-Heretic-Uncensored-NM-DAU-mlx-oQ8e-1M"}],[{"harness":"opencode","sailor":"stub","model":"m-loaded"}],[{"harness":"opencode","sailor":"stub","model":"m-loaded"}]]
+
+$ fm-sailor.sh set-model stub m-cold --replace m-loaded
+wrote config/crew-dispatch.json (previous copy: crew-dispatch.json.bak-20260930-113006)
+sailor stub lists m-cold in place of m-loaded
+replaced stub/m-loaded with stub/m-cold in 3 profile(s)
+workers: the change applies from each worker's next spawn; running workers keep what they launched with
+[exit 0]
+
+$ jq -c '{stub: .sailors.stub.models, rules: [.rules[] | {when, use}], default}' /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.RFiAzU/config/crew-dispatch.json
+{"stub":["m-cold"],"rules":[{"when":"heretic work","use":[{"harness":"opencode","sailor":"tiller","model":"Qwen3.8-27B-TURBO-Fable-Cold-Fusion-735-882-Heretic-Uncensored-NM-DAU-mlx-oQ8e-1M"}]},{"when":"stub work","use":[{"harness":"opencode","sailor":"stub","model":"m-cold"},{"harness":"opencode","sailor":"tiller","model":"Qwen3.8-27B-TURBO-Fable-Cold-Fusion-735-882-Heretic-Uncensored-NM-DAU-mlx-oQ8e-1M"}]},{"when":"stub only","use":[{"harness":"opencode","sailor":"stub","model":"m-cold"}]}],"default":[{"harness":"opencode","sailor":"stub","model":"m-cold"}]}
+
+$ fm-sailor.sh set stub --placeholder
+wrote config/crew-dispatch.json (previous copy: crew-dispatch.json.bak-20260930-113006-2)
+workers: the change applies from each worker's next spawn; running workers keep what they launched with
+[exit 0]
+
+$ fm-sailor.sh set-model stub m-oom --warm
+refused: sailor stub is a placeholder, and a placeholder is never probed or warmed
+[exit 1]
+
+$ fm-sailor.sh retire stub
+wrote config/crew-dispatch.json (previous copy: crew-dispatch.json.bak-20260930-113006-3)
+retired sailor stub and the 3 profile(s) naming it
+removed rule "stub only", which offered only stub
+removed the default, which offered only stub
+workers: the change applies from each worker's next spawn; running workers keep what they launched with
+[exit 0]
+
+$ jq -c '{sailors: (.sailors|keys), rules: [.rules[] | {when, use}], default}' /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.RFiAzU/config/crew-dispatch.json
+{"sailors":["tiller"],"rules":[{"when":"heretic work","use":[{"harness":"opencode","sailor":"tiller","model":"Qwen3.8-27B-TURBO-Fable-Cold-Fusion-735-882-Heretic-Uncensored-NM-DAU-mlx-oQ8e-1M"}]},{"when":"stub work","use":[{"harness":"opencode","sailor":"tiller","model":"Qwen3.8-27B-TURBO-Fable-Cold-Fusion-735-882-Heretic-Uncensored-NM-DAU-mlx-oQ8e-1M"}]}],"default":null}
+
+$ ls /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.RFiAzU/config
+crew-dispatch.json
+crew-dispatch.json.bak-20260930-112954
+crew-dispatch.json.bak-20260930-112954-2
+crew-dispatch.json.bak-20260930-113005
+crew-dispatch.json.bak-20260930-113006
+crew-dispatch.json.bak-20260930-113006-2
+crew-dispatch.json.bak-20260930-113006-3

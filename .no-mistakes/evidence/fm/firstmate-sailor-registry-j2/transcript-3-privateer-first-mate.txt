@@ -1,0 +1,79 @@
+$ fm-sailor.sh add stub --endpoint http://127.0.0.1:53620/v1 --models qwen-coder,qwen-big --live
+wrote config/crew-dispatch.json (previous copy: crew-dispatch.json.bak-20260930-113359)
+added sailor stub (live) at http://127.0.0.1:53620/v1 serving qwen-coder,qwen-big
+workers: the change applies from each worker's next spawn; running workers keep what they launched with
+[exit 0]
+$ fm-sailor.sh add flint --endpoint http://127.0.0.1:1/v1 --models qwen-coder
+wrote config/crew-dispatch.json (previous copy: crew-dispatch.json.bak-20260930-113359-2)
+added sailor flint (placeholder) at http://127.0.0.1:1/v1 serving qwen-coder
+workers: the change applies from each worker's next spawn; running workers keep what they launched with
+[exit 0]
+=== P0: --first-mate outside a Privateer home is refused
+$ fm-sailor.sh set-model stub qwen-coder --first-mate
+refused: --first-mate needs a Privateer home; config/privateer is absent, and this command never creates it
+[exit 1]
+=== make this a Privateer home
+$ fm-privateer.sh check
+[exit 0]
+=== P1: set-model --first-mate writes config/privateer and says first mate needs restart
+$ fm-sailor.sh set-model stub qwen-coder --first-mate
+wrote config/privateer (previous copy: privateer.bak-20260930-113359)
+sailor stub lists qwen-coder
+config/privateer names stub/qwen-coder for the first mate
+first mate: restart the Privateer session to switch (fm-privateer.sh stop, then start; stop waits until no task is in flight, 0 now)
+[exit 0]
+b2fe42101bc8 privateer=[stub/qwen-coder] backups=8
+$ fm-privateer.sh check
+[exit 0]
+=== P2: set-model that only adds a model: no first-mate restart note
+$ fm-sailor.sh set-model stub qwen-next
+wrote config/crew-dispatch.json (previous copy: crew-dispatch.json.bak-20260930-113359-3)
+sailor stub lists qwen-next
+workers: the change applies from each worker's next spawn; running workers keep what they launched with
+[exit 0]
+=== P3: set --placeholder on the first mate's sailor refused, nothing written
+$ fm-sailor.sh set stub --placeholder
+refused: the first mate runs on stub/qwen-coder, and the first mate runs only on a live sailor
+[exit 1]
+before: ebc2d1a1b07b privateer=[stub/qwen-coder] backups=9
+after:  ebc2d1a1b07b privateer=[stub/qwen-coder] backups=9
+=== P3b: set --placeholder on a non-first-mate sailor is allowed
+$ fm-sailor.sh set tiller --placeholder
+wrote config/crew-dispatch.json (previous copy: crew-dispatch.json.bak-20260930-113400)
+workers: the change applies from each worker's next spawn; running workers keep what they launched with
+[exit 0]
+=== P4: --replace of first mate's own model without --first-mate refused
+$ fm-sailor.sh set-model stub qwen-next --replace qwen-coder
+refused: the first mate runs on stub/qwen-coder; add --first-mate to move it too, or drop --replace
+[exit 1]
+before: 25a1033ed346 privateer=[stub/qwen-coder] backups=10
+after:  25a1033ed346 privateer=[stub/qwen-coder] backups=10
+=== P5: --first-mate on a placeholder sailor refused; --warm on placeholder refused
+$ fm-sailor.sh set-model flint qwen-coder --first-mate
+refused: sailor flint is a placeholder, and the first mate runs only on a live sailor
+[exit 1]
+$ fm-sailor.sh set-model flint qwen-coder --warm
+refused: sailor flint is a placeholder, and a placeholder is never probed or warmed
+[exit 1]
+=== P6: endpoint change on first mate's sailor prints restart note
+$ fm-sailor.sh set stub --endpoint http://127.0.0.1:53620/v1/
+wrote config/crew-dispatch.json (previous copy: crew-dispatch.json.bak-20260930-113400-2)
+workers: the change applies from each worker's next spawn; running workers keep what they launched with
+first mate: restart the Privateer session to switch (fm-privateer.sh stop, then start; stop waits until no task is in flight, 0 now)
+egress: a running Privateer session allows a new endpoint only after fm-privateer.sh stop and start
+[exit 0]
+=== P7: replace with --first-mate moves first mate line
+$ fm-sailor.sh set-model stub qwen-next --replace qwen-coder --first-mate
+wrote config/crew-dispatch.json (previous copy: crew-dispatch.json.bak-20260930-113400-3)
+wrote config/privateer (previous copy: privateer.bak-20260930-113400)
+sailor stub lists qwen-next in place of qwen-coder
+replaced stub/qwen-coder with stub/qwen-next in 0 profile(s)
+config/privateer names stub/qwen-next for the first mate
+workers: the change applies from each worker's next spawn; running workers keep what they launched with
+first mate: restart the Privateer session to switch (fm-privateer.sh stop, then start; stop waits until no task is in flight, 0 now)
+[exit 0]
+25ea3261b825 privateer=[stub/qwen-next] backups=13
+--- stub requests:
+GET /v1/models
+GET /v1/models
+GET /v1/models

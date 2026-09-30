@@ -1,0 +1,15 @@
+
+$ cp /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.RFiAzU/config/crew-dispatch.json /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.RFiAzU/before2.json
+
+$ fm-sailor.sh add cloud --endpoint https://api.openai.com/v1 --models gpt-x --live
+refused: the change would break this home's Privateer quarantine:
+  config/crew-dispatch.json sailor cloud has endpoint 'https://api.openai.com/v1', which is not on this machine or the local network
+[exit 1]
+
+$ fm-sailor.sh set stub --endpoint https://api.openai.com/v1
+refused: the change would break this home's Privateer quarantine:
+  config/crew-dispatch.json sailor stub has endpoint 'https://api.openai.com/v1', which is not on this machine or the local network
+[exit 1]
+
+$ cmp /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.RFiAzU/config/crew-dispatch.json /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.RFiAzU/before2.json && echo crew-dispatch.json unchanged
+crew-dispatch.json unchanged

@@ -1,0 +1,134 @@
+=== S4: set-model --dry-run writes nothing, sends no request beyond probe
+$ fm-sailor.sh set-model stub qwen-new --replace qwen-coder --dry-run
+--- config/crew-dispatch.json
++++ config/crew-dispatch.json (after)
+@@ -17,7 +17,7 @@
+       "endpoint": "http://127.0.0.1:53620/v1",
+       "status": "live",
+       "models": [
+-        "qwen-coder",
++        "qwen-new",
+         "qwen-big",
+         "qwen-next"
+       ],
+@@ -31,7 +31,7 @@
+         {
+           "harness": "opencode",
+           "sailor": "stub",
+-          "model": "qwen-coder"
++          "model": "qwen-new"
+         },
+         {
+           "harness": "opencode",
+@@ -46,7 +46,7 @@
+         {
+           "harness": "opencode",
+           "sailor": "stub",
+-          "model": "qwen-coder"
++          "model": "qwen-new"
+         },
+         {
+           "harness": "opencode",
+@@ -68,7 +68,7 @@
+     {
+       "harness": "opencode",
+       "sailor": "stub",
+-      "model": "qwen-coder"
++      "model": "qwen-new"
+     }
+   ]
+ }
+dry run: nothing written
+note: stub lists qwen-new but has not loaded it, so the first request loads it; rerun with --warm to load it now
+[exit 0]
+file+backups before: ba5475756340
+3 | after: ba5475756340
+3
+--- stub requests:
+GET /v1/models
+=== S5: --warm --dry-run refused before any request
+$ fm-sailor.sh set-model stub qwen-big --warm --dry-run
+refused: --dry-run loads nothing, so it takes no --warm
+[exit 1]
+before: ba5475756340
+3 | after: ba5475756340
+3
+--- stub requests:
+=== S6: failed warm-up (server refuses with memory error) -> nothing written
+$ fm-sailor.sh set-model stub qwen-new --warm
+refused: sailor stub could not load qwen-new: HTTP 507: insufficient memory to load qwen-new
+[exit 1]
+before: ba5475756340
+3 | after: ba5475756340
+3
+--- stub requests:
+GET /v1/models
+POST /v1/chat/completions model=qwen-new max_tokens=1
+=== S7: set-model without --warm on unloaded model names --warm
+$ fm-sailor.sh set-model stub qwen-new --dry-run
+--- config/crew-dispatch.json
++++ config/crew-dispatch.json (after)
+@@ -19,7 +19,8 @@
+       "models": [
+         "qwen-coder",
+         "qwen-big",
+-        "qwen-next"
++        "qwen-next",
++        "qwen-new"
+       ],
+       "max_concurrent": 2
+     }
+dry run: nothing written
+note: stub lists qwen-new but has not loaded it, so the first request loads it; rerun with --warm to load it now
+[exit 0]
+--- stub requests:
+GET /v1/models
+=== S8: warm success + --replace qwen-coder->qwen-next rewrites rules/default, dedupes mixed rule
+before rules:
+[{"when":"clear-path code","use":[{"harness":"opencode","sailor":"stub","model":"qwen-coder"},{"harness":"opencode","sailor":"tiller","model":"lmstudio-community/Qwen3.5-9B-MLX-4bit"}]},{"when":"mixed","use":[{"harness":"opencode","sailor":"stub","model":"qwen-coder"},{"harness":"opencode","sailor":"stub","model":"qwen-next"}]},{"when":"stub only","use":{"harness":"opencode","sailor":"stub","model":"qwen-big"}}]
+[{"harness":"opencode","sailor":"stub","model":"qwen-coder"}]
+$ fm-sailor.sh set-model stub qwen-next --replace qwen-coder --warm
+wrote config/crew-dispatch.json (previous copy: crew-dispatch.json.bak-20260930-113341)
+sailor stub lists qwen-next in place of qwen-coder
+replaced stub/qwen-coder with stub/qwen-next in 3 profile(s)
+stub has loaded qwen-next
+workers: the change applies from each worker's next spawn; running workers keep what they launched with
+[exit 0]
+after sailor models: ["qwen-next","qwen-big"]
+after rules:
+[{"when":"clear-path code","use":[{"harness":"opencode","sailor":"stub","model":"qwen-next"},{"harness":"opencode","sailor":"tiller","model":"lmstudio-community/Qwen3.5-9B-MLX-4bit"}]},{"when":"mixed","use":[{"harness":"opencode","sailor":"stub","model":"qwen-next"}]},{"when":"stub only","use":{"harness":"opencode","sailor":"stub","model":"qwen-big"}}]
+[{"harness":"opencode","sailor":"stub","model":"qwen-next"}]
+crew-dispatch.json
+crew-dispatch.json.bak-20260930-113305
+crew-dispatch.json.bak-20260930-113305-2
+crew-dispatch.json.bak-20260930-113305-3
+crew-dispatch.json.bak-20260930-113341
+--- stub requests:
+GET /v1/models
+POST /v1/chat/completions model=qwen-next max_tokens=1
+=== S9: replace refused while a task record carries sailor+old model
+$ fm-sailor.sh set-model stub qwen-next --replace qwen-big
+refused: task(s) task-a1 run stub/qwen-big, and relaunching them needs it listed; replace it once they land, or add qwen-next without --replace
+[exit 1]
+before: cad4e6bd258f
+4 | after: cad4e6bd258f
+4
+=== S10: retire refused while a task carries the sailor
+$ fm-sailor.sh retire stub
+refused: task(s) task-a1 run on stub; retire it once they land
+[exit 1]
+before: cad4e6bd258f
+4 | after: cad4e6bd258f
+4
+=== S11: retire removes sailor, its profiles, empty rules and default
+$ fm-sailor.sh retire stub
+wrote config/crew-dispatch.json (previous copy: crew-dispatch.json.bak-20260930-113341-2)
+retired sailor stub and the 4 profile(s) naming it
+removed rule "mixed", which offered only stub
+removed rule "stub only", which offered only stub
+removed the default, which offered only stub
+workers: the change applies from each worker's next spawn; running workers keep what they launched with
+[exit 0]
+{"sailors":["tiller"],"rules":[{"when":"clear-path code","use":[{"harness":"opencode","sailor":"tiller","model":"lmstudio-community/Qwen3.5-9B-MLX-4bit"}]}],"default":null}
+$ fm-sailor.sh validate
+[exit 0]
