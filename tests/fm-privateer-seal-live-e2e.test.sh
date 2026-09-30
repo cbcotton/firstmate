@@ -207,7 +207,7 @@ test_seal_holds_inside_the_session() {
   dir="$TMP_ROOT/inside"
   mkdir -p "$dir"
   home=$(make_privateer_home "$dir")
-  socket=$(FM_HOME="$home" TMUX='' "$home/bin/fm-privateer.sh" launch-env 2>&1 | sed -n 's/.*(tmux socket \([^)]*\)).*/\1/p')
+  socket=$(. "$home/bin/fm-privateer-lib.sh" && fm_privateer_socket_name "$home")
   [ -n "$socket" ] || guard_fail "the home's session socket could not be read"
   start_model "$dir" '[
     [{"tool": "bash", "args": {"command": "tmux -L fm-seal-live-other list-sessions", "description": "other server"}},
