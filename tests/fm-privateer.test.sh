@@ -488,14 +488,16 @@ test_start_denies_the_instructions_of_a_checkout_that_is_the_home() {
   home_real=$(cd "$home" && pwd -P)
   [ -f "$dir/profile.sb" ] || fail "the tmux server never started inside the sandbox"
   deny=$(sed -n '/^(deny file-write\*$/,/^)$/p' "$dir/profile.sb")
-  for p in AGENTS.md .agents docs opencode.json opencode.jsonc .opencode/plugins; do
+  for p in AGENTS.md CLAUDE.md CONTEXT.md opencode.json opencode.jsonc tui.json tui.jsonc .agents docs \
+    .opencode/{opencode,tui}.{json,jsonc} .opencode/{agent,command,mode,plugin,skill,tool}{,s}; do
     assert_contains "$deny" "  (subpath \"$home_real/$p\")" "the sandbox must deny writes to the checkout's $p"
   done
   assert_contains "$deny" "  (regex #\"^$(rq "$home_real/.opencode")\$\")" "the sandbox must deny moving the .opencode entry above the plugins"
+  assert_contains "$deny" "  (regex #\"^$(rq "$home_real/.claude")(/skills)?\$\")" "the sandbox must deny replacing the .claude entry or its skills link"
   assert_not_contains "$deny" "(subpath \"$home_real/.opencode\")" "the rest of .opencode must stay OpenCode's scratch"
   out=$(run_launcher "$dir" "$home" "$home" stop)
   expect_code 0 "$?" "stop must end the session: $out"
-  pass "start denies writes to the instructions, skills, docs, root OpenCode config, and plugins of a checkout that is the home, and leaves the rest of .opencode writable"
+  pass "start denies writes to every path a checkout that is the home gives its first mate's OpenCode, and leaves the rest of .opencode writable"
 }
 
 test_start_refuses_when_the_proxy_cannot_bind() {
@@ -677,11 +679,13 @@ test_session_sandbox_holds_every_command() {
   root="$home/nest/checkout"
   mkdir -p "$home/nest"
   git -C "$dir/rootmain" worktree add -q -b pv-root "$root"
-  # The first mate's instructions, skills, docs, and plugins in that checkout.
-  mkdir -p "$root/.agents/skills/probe" "$root/docs" "$root/.opencode/plugins"
-  for f in AGENTS.md .agents/skills/probe/SKILL.md docs/probe.md opencode.json .opencode/plugins/probe.js; do
+  # Paths in that checkout the first mate's OpenCode loads from.
+  mkdir -p "$root/.agents/skills/probe" "$root/docs" "$root/.opencode/plugins" "$root/.opencode/skills/probe" "$root/.claude"
+  for f in AGENTS.md CLAUDE.md .agents/skills/probe/SKILL.md docs/probe.md opencode.json .opencode/opencode.json \
+    .opencode/plugins/probe.js .opencode/skills/probe/SKILL.md; do
     printf 'original\n' > "$root/$f"
   done
+  ln -s ../.agents/skills "$root/.claude/skills"
   mkdir -p "$dir/sailor/v1" "$dir/other"
   printf '{"data":[{"id":"coder"}]}\n' > "$dir/sailor/v1/models"
   printf 'reached\n' > "$dir/other/index.html"
@@ -727,12 +731,20 @@ planted=
 for t in '$proj/.git/hooks/post-checkout' '$proj/.git/config' '$wtgit/config.worktree' '$wtgit/hooks/post-checkout' \
   '$wtgit/commondir' '$wtgit/gitdir' '$home/config/probe' '$home/bin/probe' '$shared/.git' '$shared/README' "\$HOME/.treehouse/probe" \
   '$root/AGENTS.md' '$root/.agents/skills/probe/SKILL.md' '$root/.agents/skills/new.md' '$root/docs/probe.md' \
-  '$root/opencode.json' '$root/opencode.jsonc' '$root/.opencode/plugins/probe.js' '$root/.opencode/plugins/new.js'; do
+  '$root/CLAUDE.md' '$root/CONTEXT.md' '$root/opencode.json' '$root/opencode.jsonc' '$root/tui.json' '$root/tui.jsonc' \
+  '$root/.opencode/opencode.json' '$root/.opencode/opencode.jsonc' '$root/.opencode/tui.json' '$root/.opencode/tui.jsonc' \
+  '$root/.opencode/plugins/probe.js' '$root/.opencode/skills/probe/SKILL.md' '$root/.claude/skills/probe/SKILL.md' \
+  '$root/.claude/skills/new.md'; do
   ( : >> "\$t" ) 2>/dev/null && planted="\$planted \$t"
 done
-for t in '$root/AGENTS.md' '$root/.agents' '$root/docs' '$root/opencode.json' '$root/.opencode/plugins' '$root/.opencode'; do
+for d in agent agents command commands mode modes plugin plugins skill skills tool tools; do
+  ( mkdir -p '$root/.opencode/'"\$d" && : >> '$root/.opencode/'"\$d/new.md" ) 2>/dev/null && planted="\$planted $root/.opencode/\$d"
+done
+for t in '$root/AGENTS.md' '$root/CLAUDE.md' '$root/.agents' '$root/docs' '$root/opencode.json' '$root/.opencode/opencode.json' \
+  '$root/.opencode/plugins' '$root/.opencode/skills' '$root/.opencode' '$root/.claude/skills' '$root/.claude'; do
   mv "\$t" "\$t.aside" 2>/dev/null && planted="\$planted move:\$t"
 done
+rm '$root/.claude/skills' 2>/dev/null && planted="\$planted rm:$root/.claude/skills"
 mv '$proj/.git' '$proj/.git.aside' 2>/dev/null && planted="\$planted rename:$proj/.git"
 mv '$proj' '$home/moved' 2>/dev/null && planted="\$planted move:$proj" &&
   ( : >> '$home/moved/.git/hooks/post-checkout' ) 2>/dev/null && planted="\$planted hook:$home/moved"
