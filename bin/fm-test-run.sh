@@ -369,7 +369,7 @@ family_for_basename() {
     fm-opencode-primary-live-e2e.test.sh|fm-opencode-restricted-live-e2e.test.sh|\
     fm-sailor-sandbox-live-e2e.test.sh|fm-privateer-egress-live-e2e.test.sh|\
     fm-privateer-session-lock-live-e2e.test.sh|fm-privateer-sessionstart-live-e2e.test.sh|\
-    fm-privateer-seal-live-e2e.test.sh|\
+    fm-privateer-seal-live-e2e.test.sh|fm-helm-live-e2e.test.sh|\
     fm-pi-branch-live-e2e.test.sh|\
     fm-pi-branch-responsiveness-live-e2e.test.sh|\
     fm-pi-primary-live-e2e.test.sh|fm-pi-codex-native.test.sh|fm-omp-primary-live-e2e.test.sh|\
@@ -390,7 +390,7 @@ family_for_basename() {
     fm-herdr-session-cleanup.test.sh|fm-send-resolve-key.test.sh|fm-send-strict.test.sh|\
     fm-send-inbox.test.sh|fm-spawn-batch.test.sh|\
     fm-spawn-dispatch-profile.test.sh|fm-claude-trust.test.sh|\
-    fm-worker-account.test.sh|fm-privateer.test.sh|\
+    fm-worker-account.test.sh|fm-privateer.test.sh|fm-helm.test.sh|\
     fm-git-strip-ai-trailers.test.sh|\
     fm-trace-context-spawn.test.sh|fm-spawn-worktree-settle.test.sh|\
     fm-spawn-compact-adviser-disable.test.sh|\
@@ -1537,6 +1537,12 @@ families_for_changed_path() {
       printf '%s\n' "__script__:fm-bootstrap.test.sh"
       printf '%s\n' backend-dispatch
       printf '%s\n' live-harness-optin
+      ;;
+    bin/fm-helm.sh|.opencode/commands/*)
+      # The Privateer front door and the slash commands that run it: its own
+      # suite, and the live guard that the real OpenCode runs each command.
+      printf '%s\n' "__script__:fm-helm.test.sh"
+      printf '%s\n' "__script__:fm-helm-live-e2e.test.sh"
       ;;
     bin/fm-env-lib.sh)
       # The one .env accessor, sourced by bin/fm-x-lib.sh (Relay token) and

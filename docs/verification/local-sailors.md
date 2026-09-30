@@ -206,3 +206,28 @@ Facts the seal depends on:
 - `session.created` fires under `opencode run`, and a `promptAsync` from it reaches the model within the same run.
 
 Refresh this record by repeating the runs above after an OpenCode or model-server upgrade.
+
+## The front door's slash commands reach it through the real OpenCode
+
+Verified 2026-09-30 on macOS 26.6 with OpenCode 1.18.33 by `tests/fm-helm-live-e2e.test.sh`, which runs by default wherever `opencode` is installed because its model is a scripted OpenAI-compatible server on a loopback port.
+Its home is a fixture clone of the checkout, with the working tree's scripts and OpenCode files and a `config/privateer`, and its `bin/fm-helm.sh` is a probe that records its arguments, working directory, and standard input, and writes one line to stdout and one to stderr.
+It runs `opencode serve` with `TMUX` naming the home's socket and sends each command with `opencode run --attach --command <verb>`.
+
+| Command and words | Result |
+| --- | --- |
+| `/helm`, `/queue`, `/sailors`, `/wake` | The probe ran once, from the home, with only its verb |
+| `/scout app check why the captain's "build" fails; $(whoami) && echo no`, and `/ship`, `/steer`, and `/land` with words | The probe ran once, from the home, with `<verb> --stdin`, and its standard input was the words exactly, then `FM_HELM_END_OF_ARGUMENTS` |
+| Each command | The model's user message carried both probe lines and no text of the command's shell step |
+| ``/scout app fix `foo` now`` | The probe's standard input was `app fix ` with no end line |
+| `/scout app print $'x' then stop` | The probe's standard input was `app print `, then the end line |
+
+Facts the commands depend on:
+
+- OpenCode writes the words into the command's template as plain text, before it runs the template's shell step, so the commands carry them inside a quoted here-document.
+- The shell step ends at the first backtick, which is why a backtick cuts the words.
+- The words are written with JavaScript's `replaceAll`, which reads `$'` in them as the text of the template after the words, which is why `$'` cuts them and still leaves the end line.
+- The shell step runs from the server's working directory, which is the home, so `bin/fm-helm.sh` resolves there.
+- Only the shell step's standard output replaces it in the model's message, so each command sends standard error to standard output.
+- `opencode run --command` wraps each message argument holding a space in double quotes before joining them, so the guard sends the words one per argument, which joins them back to the words typed.
+
+Refresh this record by repeating the runs above after an OpenCode upgrade.
