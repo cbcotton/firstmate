@@ -1,0 +1,104 @@
+== 1. OUTSIDE the session (no TMUX), sealed home /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.EXGD7d ==
+[PASS] fm-tasks-axi.sh list                 rc=2 socket-leak=no
+      error: fm-tasks-axi.sh refused: this is a sealed Privateer home; attach with bin/fm-privateer.sh attach, and never drive its session from outside
+[PASS] fm-brief.sh probe-task               rc=2 socket-leak=no
+      error: fm-brief.sh refused: this is a sealed Privateer home; attach with bin/fm-privateer.sh attach, and never drive its session from outside
+[PASS] fm-send.sh fm-probe hello            rc=2 socket-leak=no
+      fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.EXGD7d
+error: fm-send.sh refused: this is a sealed Privateer home; attach with bin/fm-privateer.sh attach, and never drive its session from outside
+[PASS] fm-control.sh stop fm-probe          rc=2 socket-leak=no
+      fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.EXGD7d
+error: fm-control.sh refused: this is a sealed Privateer home; attach with bin/fm-privateer.sh attach, and never drive its session from outside
+[PASS] fm-captain-hold.sh open fm-probe     rc=2 socket-leak=no
+      error: fm-captain-hold.sh refused: this is a sealed Privateer home; attach with bin/fm-privateer.sh attach, and never drive its session from outside
+[PASS] fm-permission-grant.sh list          rc=2 socket-leak=no
+      error: fm-permission-grant.sh refused: this is a sealed Privateer home; attach with bin/fm-privateer.sh attach, and never drive its session from outside
+[PASS] fm-merge-local.sh fm-probe           rc=2 socket-leak=no
+      error: fm-merge-local.sh refused: this is a sealed Privateer home; attach with bin/fm-privateer.sh attach, and never drive its session from outside
+[PASS] fm-teardown.sh fm-probe              rc=2 socket-leak=no
+      error: fm-teardown.sh refused: this is a sealed Privateer home; attach with bin/fm-privateer.sh attach, and never drive its session from outside
+[PASS] fm-spawn.sh fm-probe                 rc=2 socket-leak=no
+      error: fm-spawn.sh refused: this is a sealed Privateer home; attach with bin/fm-privateer.sh attach, and never drive its session from outside
+[PASS] home tree byte-identical after all 9 refusals
+
+== 2. OUTSIDE, TMUX pointing at some OTHER tmux socket (e.g. captain's own tmux) ==
+[PASS] fm-tasks-axi.sh list rc=2: error: fm-tasks-axi.sh refused: this is a sealed Privateer home; attach with bin/fm-privateer.sh attach, and never drive its session from outside
+
+== 3. launch-env outside: refusal names no socket (the original leak) ==
+[PASS] rc=1: fm-privateer: refused: launch-env runs only inside the Privateer session, whose sandbox every worker inherits; this is a sealed Privateer home; attach with bin/fm-privateer.sh attach, and never drive its session from outside
+
+== 4. INSIDE a real tmux server on the home's socket (fm-privateer-475bf300c5b5) ==
+[PASS] inside: fm-tasks-axi.sh list (gate passed; script ran its own logic)
+      TMUX socket basename: fm-privateer-475bf300c5b5
+      count: 0
+      tasks: 0 tasks in this backlog
+      help[2]:
+      rc=0 END
+      bash-3.2$
+[PASS] inside: fm-brief.sh probe-task (gate passed; script ran its own logic)
+      TMUX socket basename: fm-privateer-475bf300c5b5
+      error: ship briefs require --mode <no-mistakes|direct-PR|local-only>; resolve it at intake from the captain's instruction and the project's registered posture in data/projects.md
+      rc=1 END
+      bash-3.2$
+[PASS] inside: fm-send.sh fm-probe hello (gate passed; script ran its own logic)
+      TMUX socket basename: fm-privateer-475bf300c5b5
+      fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.EXGD7d
+      error: no metadata for fm-probe in /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.EXGD7d/state (tried meta=/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.EXGD7d/state/fm-probe.meta
+      ; legacy-meta=/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.EXGD7d/state/probe.meta; backend=none); pass a well-formed explicit backend target only when targeting outside this firstmate hom
+      e
+      rc=1 END
+      bash-3.2$
+[PASS] inside: fm-control.sh stop fm-probe (gate passed; script ran its own logic)
+      TMUX socket basename: fm-privateer-475bf300c5b5
+      fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.EXGD7d
+      error: 'fm-probe' is not a control verb
+      allowed verbs:
+      rc=141 END
+      bash-3.2$
+[PASS] inside: fm-captain-hold.sh open fm-probe (gate passed; script ran its own logic)
+      TMUX socket basename: fm-privateer-475bf300c5b5
+      rc=1 END
+      bash-3.2$
+[PASS] inside: fm-permission-grant.sh list (gate passed; script ran its own logic)
+      TMUX socket basename: fm-privateer-475bf300c5b5
+      rc=0 END
+      bash-3.2$
+[PASS] inside: fm-merge-local.sh fm-probe (gate passed; script ran its own logic)
+      TMUX socket basename: fm-privateer-475bf300c5b5
+      error: no meta for task fm-probe at /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.EXGD7d/state/fm-probe.meta
+      rc=1 END
+      bash-3.2$
+[PASS] inside: fm-teardown.sh fm-probe (gate passed; script ran its own logic)
+      TMUX socket basename: fm-privateer-475bf300c5b5
+      fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.EXGD7d
+      error: teardown refused: task record is not a regular file at /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.EXGD7d/state/fm-probe.meta
+      rc=1 END
+      bash-3.2$
+[PASS] inside: fm-spawn.sh fm-probe (gate passed; script ran its own logic)
+      TMUX socket basename: fm-privateer-475bf300c5b5
+      fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.EXGD7d
+      error: ship spawns require --mode <no-mistakes|direct-PR|local-only>; resolve it at intake from the captain's instruction and the project's registered posture in data/projects.md
+      rc=1 END
+      bash-3.2$
+
+== 5. Captain-side commands OUTSIDE the session stay usable ==
+[PASS] fm-privateer.sh check rc=1
+      config/crew-harness must hold opencode
+      config/sailor-sandbox is absent; every Privateer sailor runs inside the sandbox
+      config/crew-dispatch.json is absent; a Privateer home dispatches only to the sailors it names
+[PASS] fm-sailor.sh list rc=2
+      fm-sailor: no config/crew-dispatch.json in this home
+[PASS] fm-update.sh --help rc=0: usage: fm-update.sh [--help]
+[PASS] fm-privateer.sh attach from outside: attached clients on session=privateer; outside terminal shows:
+      PRIVATEER-FIRSTMATE-PANE
+      bash-3.2$
+      [privateer0:bash*                                                                "Chriss-MacBook-Pro.lo" 17:49 30-Sep-26
+[PASS] fm-privateer.sh stop from outside rc=0 session-still-alive=no: privateer: stopped session privateer on tmux socket fm-privateer-475bf300c5b5
+
+== 6. Ordinary (non-Privateer) home: gate is a no-op ==
+[PASS] fm-tasks-axi.sh list rc=0: count: 0
+tasks: 0 tasks in this backlog
+help[2]:
+[PASS] fm-brief.sh probe-task rc=1: error: ship briefs require --mode <no-mistakes|direct-PR|local-only>; resolve it at intake from the captain's instruction and the project's registered posture in data/projects.md
+
+TOTAL FAILURES: 0
