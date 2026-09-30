@@ -99,9 +99,10 @@
 # slots there; the shared pool under ~/.treehouse, and every other home's
 # slots, are out of reach. Nothing inside may write this home's egress
 # directory, config/, or bin/; when this checkout is inside this home, its
-# AGENTS.md, .agents/, docs/, or .opencode/plugins/, or the .opencode entry
-# itself, so no worker can rewrite the first mate's instructions, skills,
-# docs, or plugins; the Git config or hooks of this checkout, of
+# AGENTS.md, .agents/, docs/, root opencode.json or opencode.jsonc, or
+# .opencode/plugins/, or the .opencode entry itself, so no worker can rewrite
+# the first mate's instructions, skills, docs, root OpenCode config, or the
+# plugins there; the Git config or hooks of this checkout, of
 # any clone under projects/, or of any linked worktree or submodule of those
 # (git dirs under .git/worktrees/<name>/ and .git/modules/<path>/); the git
 # dir, commondir, or gitdir of a linked worktree that lives outside this
@@ -629,11 +630,13 @@ cmd_start() {
     esac
   done
   # A checkout inside the home is writable, so its first mate's instructions,
-  # skills, docs, and plugins are taken back, with the .opencode entry above
-  # the plugins; the rest of .opencode stays OpenCode's scratch.
+  # skills, docs, root OpenCode config, and plugins are taken back, with the
+  # .opencode entry above the plugins; the rest of .opencode stays OpenCode's
+  # scratch.
   case "$root_real" in
     "$home_real" | "$home_real"/*)
       sandbox_args+=(--deny-write "$root_real/AGENTS.md" --deny-write "$root_real/.agents" --deny-write "$root_real/docs"
+        --deny-write "$root_real/opencode.json" --deny-write "$root_real/opencode.jsonc"
         --deny-write "$root_real/.opencode/plugins" --deny-write-regex "^$(regex_quote "$root_real/.opencode")\$")
       ;;
     *) sandbox_args+=(--write "$root_real/.opencode") ;;

@@ -488,14 +488,14 @@ test_start_denies_the_instructions_of_a_checkout_that_is_the_home() {
   home_real=$(cd "$home" && pwd -P)
   [ -f "$dir/profile.sb" ] || fail "the tmux server never started inside the sandbox"
   deny=$(sed -n '/^(deny file-write\*$/,/^)$/p' "$dir/profile.sb")
-  for p in AGENTS.md .agents docs .opencode/plugins; do
+  for p in AGENTS.md .agents docs opencode.json opencode.jsonc .opencode/plugins; do
     assert_contains "$deny" "  (subpath \"$home_real/$p\")" "the sandbox must deny writes to the checkout's $p"
   done
   assert_contains "$deny" "  (regex #\"^$(rq "$home_real/.opencode")\$\")" "the sandbox must deny moving the .opencode entry above the plugins"
   assert_not_contains "$deny" "(subpath \"$home_real/.opencode\")" "the rest of .opencode must stay OpenCode's scratch"
   out=$(run_launcher "$dir" "$home" "$home" stop)
   expect_code 0 "$?" "stop must end the session: $out"
-  pass "start denies writes to the instructions, skills, docs, and plugins of a checkout that is the home, and leaves the rest of .opencode writable"
+  pass "start denies writes to the instructions, skills, docs, root OpenCode config, and plugins of a checkout that is the home, and leaves the rest of .opencode writable"
 }
 
 test_start_refuses_when_the_proxy_cannot_bind() {
@@ -679,7 +679,7 @@ test_session_sandbox_holds_every_command() {
   git -C "$dir/rootmain" worktree add -q -b pv-root "$root"
   # The first mate's instructions, skills, docs, and plugins in that checkout.
   mkdir -p "$root/.agents/skills/probe" "$root/docs" "$root/.opencode/plugins"
-  for f in AGENTS.md .agents/skills/probe/SKILL.md docs/probe.md .opencode/plugins/probe.js; do
+  for f in AGENTS.md .agents/skills/probe/SKILL.md docs/probe.md opencode.json .opencode/plugins/probe.js; do
     printf 'original\n' > "$root/$f"
   done
   mkdir -p "$dir/sailor/v1" "$dir/other"
@@ -727,10 +727,10 @@ planted=
 for t in '$proj/.git/hooks/post-checkout' '$proj/.git/config' '$wtgit/config.worktree' '$wtgit/hooks/post-checkout' \
   '$wtgit/commondir' '$wtgit/gitdir' '$home/config/probe' '$home/bin/probe' '$shared/.git' '$shared/README' "\$HOME/.treehouse/probe" \
   '$root/AGENTS.md' '$root/.agents/skills/probe/SKILL.md' '$root/.agents/skills/new.md' '$root/docs/probe.md' \
-  '$root/.opencode/plugins/probe.js' '$root/.opencode/plugins/new.js'; do
+  '$root/opencode.json' '$root/opencode.jsonc' '$root/.opencode/plugins/probe.js' '$root/.opencode/plugins/new.js'; do
   ( : >> "\$t" ) 2>/dev/null && planted="\$planted \$t"
 done
-for t in '$root/AGENTS.md' '$root/.agents' '$root/docs' '$root/.opencode/plugins' '$root/.opencode'; do
+for t in '$root/AGENTS.md' '$root/.agents' '$root/docs' '$root/opencode.json' '$root/.opencode/plugins' '$root/.opencode'; do
   mv "\$t" "\$t.aside" 2>/dev/null && planted="\$planted move:\$t"
 done
 mv '$proj/.git' '$proj/.git.aside' 2>/dev/null && planted="\$planted rename:$proj/.git"

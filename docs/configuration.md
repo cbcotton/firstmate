@@ -952,7 +952,7 @@ The sandbox holds the session's whole tmux server, so every pane and every comma
 Everything inside can write only to the home, the checkout's `.opencode/` scratch, firstmate's per-task temp roots, and the server's own socket.
 Workers' copies live in the home's own Treehouse pool, `state/privateer/treehouse`, which the session names as `TREEHOUSE_ROOT`, so `treehouse` creates and hands out slots there and the shared pool under `~/.treehouse`, with every other home's slots, is out of reach.
 It can never write the home's egress directory, `config/`, or `bin/`, or the Git config or hooks of the checkout, of any clone under `projects/`, or of any linked worktree or submodule of those.
-When the checkout is inside the home, it also cannot write the checkout's `AGENTS.md`, `.agents/`, `docs/`, or `.opencode/plugins/`, or move the `.opencode` entry, so no worker can rewrite the first mate's instructions, skills, docs, or plugins; the rest of `.opencode/` stays OpenCode's scratch.
+When the checkout is inside the home, it also cannot write the checkout's `AGENTS.md`, `.agents/`, `docs/`, root `opencode.json` or `opencode.jsonc`, or `.opencode/plugins/`, or move the `.opencode` entry, so no worker can rewrite the first mate's instructions, skills, docs, root OpenCode config, or the plugins in `.opencode/plugins/`; the rest of `.opencode/` stays OpenCode's scratch.
 It can neither rename, replace, or create any `.git` entry in the checkout or in a clone, nor redirect or relabel the git dir, `commondir`, or `gitdir` of a linked worktree that lives outside the home's pool.
 It also cannot write the `projects/` directory entry, any clone's directory entry, the entry of the top-level git dir of the checkout or of any clone, or any directory between the home and the checkout's git dir, so none of those can be moved aside, changed, and moved back.
 It can connect only to the egress proxy, the DNS resolver, and that socket, so a client that ignores the proxy variables reaches nothing remote at all.
@@ -971,7 +971,7 @@ Version 1 has these remaining limits:
 - OpenCode also loads plugins and configuration from the rest of `.opencode/`, such as `.opencode/plugin/`, and from its own directories under `state/privateer/opencode/`, which stay writable, so a worker can still add one there that the first mate loads at its next start.
 - A checkout nested below the home, rather than being the home, keeps its own `bin/` writable from inside the session.
 - The sandbox is not a boundary against same-user system services that start programs outside it, as `bin/fm-sandbox-exec.sh` states.
-- No first mate can update its own checkout's instructions, skills, docs, or plugins from inside its session; update the checkout from outside, as [setting up a home](#setting-up-a-home) describes.
+- No first mate can update its own checkout's instructions, skills, docs, root OpenCode config, or plugins from inside its session; update the checkout from outside, as [setting up a home](#setting-up-a-home) describes.
 - Git over SSH needs a key file, because no agent socket enters the environment.
 
 ### Egress audit
