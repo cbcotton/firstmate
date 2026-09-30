@@ -336,10 +336,12 @@
 #   isolation assignments `fm-privateer.sh launch-env` prints, so a worker's
 #   OpenCode reads no config, login, session, or cache of the captain's own and
 #   sends its traffic to the session's egress proxy; its OPENCODE_CONFIG_CONTENT
-#   also turns auto-update off and disables sharing. A spawn is refused unless
-#   it runs inside the Privateer session with its proxy running, because the
-#   worker then runs inside that session's sandbox (bin/fm-privateer.sh owns
-#   it), in place of the sailor sandbox, which macOS cannot nest inside it; the
+#   also turns auto-update off and disables sharing. A spawn from outside the
+#   Privateer session is refused (exit 2) before anything is read or written
+#   (bin/fm-privateer-lib.sh), and one inside it is refused while its proxy is
+#   not running, because the worker then runs inside that session's sandbox
+#   (bin/fm-privateer.sh owns it), in place of the sailor sandbox, which macOS
+#   cannot nest inside it; the
 #   record still gets sandbox=seatbelt. With the flag absent nothing here
 #   changes.
 # Claude permission mode (config/claude-permission-mode):
@@ -558,6 +560,9 @@ STATE="${FM_STATE_OVERRIDE:-$FM_HOME/state}"
 DATA="${FM_DATA_OVERRIDE:-$FM_HOME/data}"
 PROJECTS="${FM_PROJECTS_OVERRIDE:-$FM_HOME/projects}"
 CONFIG="${FM_CONFIG_OVERRIDE:-$FM_HOME/config}"
+# shellcheck source=bin/fm-privateer-lib.sh
+. "$SCRIPT_DIR/fm-privateer-lib.sh"
+fm_privateer_refuse_outside "$FM_HOME" "$CONFIG"
 # shellcheck source=bin/fm-config-inherit-lib.sh
 . "$SCRIPT_DIR/fm-config-inherit-lib.sh"
 if ! LAUNCH_ENV_ENABLED=$(fm_config_source_present "$CONFIG/launch-env-allowlist"); then

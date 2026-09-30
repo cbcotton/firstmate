@@ -969,7 +969,13 @@ It can neither rename, replace, or create any `.git` entry in the checkout or in
 It also cannot write the `projects/` directory entry, any clone's directory entry, the entry of the top-level git dir of the checkout or of any clone, or any directory between the home and the checkout's git dir, so none of those can be moved aside, changed, and moved back.
 It can connect only to the egress proxy, the DNS resolver, and that socket, so a client that ignores the proxy variables reaches nothing remote at all.
 It can signal only processes inside the same sandbox, so nothing in the session can stop the proxy, and the egress directory's port and process record are out of its reach.
-A spawn is refused unless it runs inside the home's Privateer session with its proxy running, so a worker can never land in an unsandboxed tmux server.
+
+The home's own scripts act on it only from inside its session.
+`bin/fm-spawn.sh`, `bin/fm-tasks-axi.sh`, `bin/fm-brief.sh`, `bin/fm-send.sh`, `bin/fm-control.sh`, `bin/fm-captain-hold.sh`, `bin/fm-permission-grant.sh`, `bin/fm-merge-local.sh`, and `bin/fm-teardown.sh` each refuse from anywhere else before reading or writing anything, with exit status 2 and `this is a sealed Privateer home; attach with bin/fm-privateer.sh attach, and never drive its session from outside`.
+The refusal names no socket, port, or path, so a session outside the quarantine, such as the captain's own OpenCode opened in the home's directory, can neither file backlog rows, write briefs, steer, stop, or spawn workers, record holds or grants, land work, or clean up in the home, nor learn where the session is.
+A spawn inside the session is also refused while its egress proxy is not running, so a worker can never land in an unsandboxed tmux server.
+The captain's own commands stay usable outside the session: `bin/fm-privateer.sh` `check`, `start`, `stop`, and `attach`, the [named sailor](#crew-dispatch-profiles-configcrew-dispatchjson) commands of `bin/fm-sailor.sh`, and `bin/fm-update.sh`.
+`bin/fm-privateer-lib.sh` owns the inside-session test and the refusal.
 
 Version 1 has these remaining limits:
 
@@ -983,6 +989,7 @@ Version 1 has these remaining limits:
 - OpenCode also loads plugins and configuration from its own directories under `state/privateer/opencode/`, which stay writable, so a worker can still add one there that the first mate loads at its next start.
 - A checkout nested below the home, rather than being the home, keeps its own `bin/` writable from inside the session.
 - The sandbox is not a boundary against same-user system services that start programs outside it, as `bin/fm-sandbox-exec.sh` states.
+- The session gate on the home's scripts prevents mistakes; it is not a security boundary: it reads the `TMUX` variable, which any same-user process can set, and tmux lets any same-user process drive the session's socket directly.
 - No first mate can update its own checkout's instructions, docs, config, skills, agents, commands, modes, plugins, or tools from inside its session; update the checkout from outside, as [setting up a home](#setting-up-a-home) describes.
 - Git over SSH needs a key file, because no agent socket enters the environment.
 

@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
-# tests/fm-privateer.test.sh - the Privateer quarantine through its three
-# entry points: bin/fm-privateer.sh check names every forbidden file, key,
+# tests/fm-privateer.test.sh - the Privateer quarantine through its entry
+# points: bin/fm-privateer.sh check names every forbidden file, key,
 # profile, and endpoint; bin/fm-spawn.sh refuses each forbidden spawn in a
-# Privateer home and clears the environment of the one it allows; and the
+# Privateer home and clears the environment of the one it allows; every
+# script the session gate (bin/fm-privateer-lib.sh) covers refuses the home
+# from outside its session, naming no socket, and runs inside it; and the
 # launcher, run with a stub first mate that prints its environment, passes no
 # ANTHROPIC_*, CLAUDE_*, or CLAUDECODE variable, refuses without the flag or
 # with a forbidden file, starts the real egress proxy (bin/fm-privateer-proxy.py)
@@ -302,20 +304,22 @@ test_endpoint_rule() {
   pass "check accepts loopback, private, tailnet, .local, and .ts.net endpoints and refuses the rest, including an authority hidden behind ?, #, a backslash, or userinfo"
 }
 
-# session_socket <home>: the tmux socket name of <home>'s Privateer session, as
-# launch-env's refusal outside that session names it.
+# session_socket <home>: the tmux socket name of <home>'s Privateer session.
 session_socket() {
-  FM_HOME="$1" TMUX='' "$PRIVATEER" launch-env 2>&1 | sed -n 's/.*(tmux socket \([^)]*\)).*/\1/p'
+  ( . "$ROOT/bin/fm-privateer-lib.sh" && fm_privateer_socket_name "$1" )
 }
+
+SEALED_REFUSAL='this is a sealed Privateer home; attach with bin/fm-privateer.sh attach, and never drive its session from outside'
 
 test_launch_env_lives_inside_the_home() {
   local home out status socket
   home=$(make_home launch-env)
+  socket=$(session_socket "$home")
   out=$(FM_HOME="$home" TMUX=/tmp/tmux-501/default,1,0 "$PRIVATEER" launch-env 2>&1)
   status=$?
   expect_code 1 "$status" "launch-env must refuse outside the Privateer session"
-  assert_contains "$out" "launch-env runs only inside the Privateer session (tmux socket fm-privateer-" "the refusal must name the session"
-  socket=$(session_socket "$home")
+  assert_contains "$out" "launch-env runs only inside the Privateer session, whose sandbox every worker inherits; $SEALED_REFUSAL" "the refusal must say what to do instead"
+  assert_not_contains "$out" "$socket" "the refusal must not name the session's socket"
   out=$(FM_HOME="$home" TMUX="/tmp/tmux-501/$socket,1,0" "$PRIVATEER" launch-env 2>&1)
   status=$?
   expect_code 1 "$status" "launch-env must refuse while no egress proxy runs"
@@ -975,8 +979,127 @@ test_spawn_refuses_outside_the_session() {
   out=$(TMUX=/tmp/tmux-fake/default,1,0 FM_FAKE_LAUNCH_LOG="$LAUNCH_LOG" \
     fm_test_run_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$id" "$PROJ_DIR" --mode local-only --yolo off --harness opencode --model coder --sailor tiller)
   status=$?
-  assert_refused_spawn "$id" "$status" "$out" "error: the Privateer quarantine refuses this spawn: launch-env runs only inside the Privateer session" "a spawn from outside the session"
-  pass "a Privateer home refuses every spawn from outside its sandboxed session"
+  expect_code 2 "$status" "a spawn from outside the session must be refused"$'\n'"$out"
+  assert_contains "$out" "error: fm-spawn.sh refused: $SEALED_REFUSAL" "a spawn from outside the session: refusal text"
+  assert_not_contains "$out" "$(session_socket "$HOME_DIR")" "a spawn from outside the session must not learn the session's socket"
+  [ ! -e "$HOME_DIR/state/$id.meta" ] || fail "a refused spawn must leave no task record"
+  [ ! -s "$LAUNCH_LOG" ] || fail "a refused spawn must launch nothing"
+  pass "a Privateer home refuses every spawn from outside its sandboxed session without naming the session"
+}
+
+# --- session gate -------------------------------------------------------------
+
+# One call per gated script that would change the home, and whose own
+# refusal inside the session is not the gate's. fm-spawn is proved by the spawn
+# cases above, which run it inside and outside the session with a fake launch.
+GATED_CALLS=(
+  "fm-tasks-axi.sh add pv-gate Gate"
+  "fm-brief.sh pv-gate proj --scout"
+  "fm-send.sh pv-gate hello"
+  "fm-control.sh pv-gate interrupt"
+  "fm-captain-hold.sh open pv-gate"
+  "fm-permission-grant.sh list"
+  "fm-merge-local.sh pv-gate"
+  "fm-teardown.sh pv-gate"
+)
+
+# make_gate_fakebin <dir>: a tasks-axi that records each call to <dir>/tasks-axi.log
+# and a tmux that reaches no server; prints the fakebin.
+make_gate_fakebin() {
+  local fakebin
+  fakebin=$(fm_fakebin "$1")
+  cat > "$fakebin/tasks-axi" <<SH
+#!/usr/bin/env bash
+printf '%s\\n' "\$*" >> '$1/tasks-axi.log'
+SH
+  printf '#!/bin/sh\nexit 1\n' > "$fakebin/tmux"
+  chmod +x "$fakebin/tasks-axi" "$fakebin/tmux"
+  printf '%s\n' "$fakebin"
+}
+
+# home_snapshot <home>: every path under <home> with each file's checksum.
+home_snapshot() {
+  find "$1" -print | LC_ALL=C sort
+  find "$1" -type f -exec cksum {} + | LC_ALL=C sort
+}
+
+# run_gated <fakebin> <home> <tmux> <call>: one gated call against <home>
+# with TMUX set to <tmux>.
+run_gated() {
+  local -a words
+  read -ra words <<< "$4"
+  PATH="$1:$PATH" TMUX=$3 FM_HOME="$2" "$ROOT/bin/${words[0]}" "${words[@]:1}" 2>&1
+}
+
+test_gated_scripts_refuse_outside_the_session() {
+  local dir home fakebin socket call script before out status
+  dir="$TMP_ROOT/gate-outside"
+  home=$(make_home gate-outside)
+  fakebin=$(make_gate_fakebin "$dir")
+  socket=$(session_socket "$home")
+  before=$(home_snapshot "$home")
+  for call in "${GATED_CALLS[@]}"; do
+    script=${call%% *}
+    out=$(run_gated "$fakebin" "$home" /tmp/tmux-501/default,1,0 "$call")
+    status=$?
+    expect_code 2 "$status" "$script must refuse outside the Privateer session: $out"
+    assert_equals "error: $script refused: $SEALED_REFUSAL" "$out" "$script must say only what to do instead"
+    assert_not_contains "$out" "$socket" "$script must not name the session's socket"
+  done
+  out=$(run_gated "$fakebin" "$home" '' "fm-permission-grant.sh list")
+  expect_code 2 "$?" "a caller outside every tmux server must be refused: $out"
+  [ ! -e "$dir/tasks-axi.log" ] || fail "a refused call reached tasks-axi: $(cat "$dir/tasks-axi.log")"
+  assert_equals "$before" "$(home_snapshot "$home")" "a refused call must leave the home exactly as it was"
+  pass "every gated script refuses a sealed Privateer home from outside its session, names no socket, and changes nothing"
+}
+
+test_gated_scripts_run_inside_the_session() {
+  local dir home fakebin inside call script out
+  dir="$TMP_ROOT/gate-inside"
+  home=$(make_home gate-inside)
+  fakebin=$(make_gate_fakebin "$dir")
+  inside="/tmp/tmux-fake/$(session_socket "$home"),1,0"
+  for call in "${GATED_CALLS[@]}"; do
+    script=${call%% *}
+    out=$(run_gated "$fakebin" "$home" "$inside" "$call")
+    assert_not_contains "$out" "sealed Privateer home" "$script must run inside the Privateer session"
+  done
+  assert_equals "add pv-gate Gate" "$(cat "$dir/tasks-axi.log" 2>/dev/null)" "the backlog call must reach tasks-axi inside the session"
+  pass "every gated script runs inside the home's own Privateer session"
+}
+
+test_the_gate_is_keyed_to_the_home() {
+  local dir home other fakebin out status
+  dir="$TMP_ROOT/gate-keyed"
+  home=$(make_home gate-keyed)
+  other=$(make_home gate-keyed-other)
+  fakebin=$(make_gate_fakebin "$dir")
+  out=$(run_gated "$fakebin" "$home" "/tmp/tmux-fake/$(session_socket "$other"),1,0" "fm-permission-grant.sh list")
+  status=$?
+  expect_code 2 "$status" "another home's Privateer session is outside this one: $out"
+  mkdir -p "$dir/config"
+  mv "$home/config/privateer" "$dir/config/privateer"
+  out=$(FM_CONFIG_OVERRIDE="$dir/config" run_gated "$fakebin" "$home" /tmp/tmux-501/default,1,0 "fm-permission-grant.sh list")
+  status=$?
+  expect_code 2 "$status" "the flag in an overridden config directory must seal the home: $out"
+  out=$(run_gated "$fakebin" "$home" /tmp/tmux-501/default,1,0 "fm-permission-grant.sh list")
+  status=$?
+  expect_code 0 "$status" "a home without config/privateer must be untouched by the gate: $out"
+  assert_not_contains "$out" "sealed Privateer home" "a home without config/privateer must never be refused"
+  pass "the gate seals only a home whose config holds the flag, and only its own session is inside"
+}
+
+test_captain_side_commands_stay_usable_outside() {
+  local home out status
+  home=$(make_home gate-captain)
+  out=$(TMUX=/tmp/tmux-501/default,1,0 FM_HOME="$home" "$PRIVATEER" check 2>&1)
+  status=$?
+  expect_code 0 "$status" "check must run from outside the session: $out"
+  out=$(TMUX=/tmp/tmux-501/default,1,0 FM_HOME="$home" "$ROOT/bin/fm-sailor.sh" list 2>&1)
+  status=$?
+  expect_code 0 "$status" "the sailor registry must be readable from outside the session: $out"
+  assert_contains "$out" "tiller" "the sailor registry must list the home's sailor"
+  pass "the quarantine check and the sailor registry stay usable from the captain's own shell"
 }
 
 test_spawn_refuses_while_no_egress_proxy_runs() {
@@ -1017,5 +1140,9 @@ test_spawn_refuses_while_a_forbidden_file_exists
 test_spawn_allows_a_local_only_sailor_with_a_cleared_environment
 test_spawn_refuses_while_no_egress_proxy_runs
 test_spawn_refuses_outside_the_session
+test_gated_scripts_refuse_outside_the_session
+test_gated_scripts_run_inside_the_session
+test_the_gate_is_keyed_to_the_home
+test_captain_side_commands_stay_usable_outside
 
 echo "# all fm-privateer tests passed"

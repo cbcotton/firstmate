@@ -120,6 +120,8 @@
 # a later scout promotion could not outrank), stops the scaffold before
 # anything is written. Secondmate charters never take it.
 # Refuses to overwrite an existing brief.
+# Refuses (exit 2) in a sealed Privateer home outside its session
+# (bin/fm-privateer-lib.sh).
 set -eu
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -180,6 +182,9 @@ else
 fi
 CONFIG="${FM_CONFIG_OVERRIDE:-$FM_HOME/config}"
 case "$CONFIG" in /*) ;; *) CONFIG="$PWD/$CONFIG" ;; esac
+# shellcheck source=bin/fm-privateer-lib.sh
+. "$SCRIPT_DIR/fm-privateer-lib.sh"
+fm_privateer_refuse_outside "$FM_HOME" "$CONFIG"
 KIND=ship
 HERDR_LAB=0
 NO_PROJECTS=0
