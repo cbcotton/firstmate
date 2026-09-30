@@ -6,23 +6,36 @@
       alt="Platform"
       src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux-blue?style=flat-square"
   /></a>
-  <a href="https://x.com/kunchenguid"
-    ><img
-      alt="X"
-      src="https://img.shields.io/badge/X-@kunchenguid-black?style=flat-square"
-  /></a>
-  <a href="https://discord.gg/Wsy2NpnZDu"
-    ><img
-      alt="Discord"
-      src="https://img.shields.io/discord/1439901831038763092?style=flat-square&label=discord"
-  /></a>
 </p>
 
 <h3 align="center">Talk to one agent. Ship with a crew.</h3>
 
+<p align="center">A fork of <a href="https://github.com/kunchenguid/firstmate">kunchenguid/firstmate</a></p>
+
 <p align="center">
   <img alt="firstmate - talk to one agent, ship with a crew" src="assets/banner.png" width="100%" />
 </p>
+
+## About this fork
+
+This repository is an independent fork of [kunchenguid/firstmate](https://github.com/kunchenguid/firstmate), created by Kun Chen and released under the MIT licence.
+All of the core design - the first mate, crewmates, scouts, secondmates, the supervision watcher, and the project delivery modes - comes from the original, and the rest of this README describes that design.
+The fork tracks the original but is maintained separately: it adds the capabilities listed below, and changes made here stay in this fork and are not sent back to the original.
+For the original project, its community, and its own releases, go to the [upstream repository](https://github.com/kunchenguid/firstmate).
+
+### What the fork adds
+
+- **Pinnace phone channel and away-mode reach** - orders sent from a phone companion app arrive as captain notes tagged with the channel they came through, and `/afk` records the pinnace as its reach channel when `config/pinnace` exists; see the [pinnace reach channel](docs/configuration.md#pinnace-reach-channel-configpinnace).
+- **Cast Off and Make Fast** - `/castoff` mirrors each turn's final reply to the phone chat, kept extra concise, and `/makefast` stops it; see the [phone mirror](docs/configuration.md#phone-mirror-cast-off-and-make-fast).
+- **Named local sailors** - crew dispatch can name local model endpoints as sailors and launch OpenCode workers on them, with `bin/fm-sailor.sh` to manage sailors and swap their models.
+- **Restricted OpenCode permissions** - a selectable default-deny permission profile for OpenCode workers, captain-granted widenings or narrowings recorded with the captain's exact words, and an optional macOS sandbox floor under every sailor launch; see [permission grants](docs/configuration.md#permission-grants-statepermission-grantsjsonl), the [sailor sandbox](docs/configuration.md#sailor-sandbox-configsailor-sandbox), and the [local sailor verification](docs/verification/local-sailors.md).
+- **Privateer mode** - a separate firstmate home that never reaches Anthropic: its first mate runs on OpenCode, its workers are sailors, egress goes through a host-allowlisting proxy, and work ships local-only; see the [Privateer quarantine](docs/configuration.md#privateer-quarantine-configprivateer).
+- **Richer fleet records** - the fleet ledger also records validation steps, pull request risk, the sailor a task was dispatched to, and answered captain calls, and the fleet snapshot carries decision cards and project charts.
+- **Gitea pull request links** - the fleet snapshot and inactive-task reconcile recognise Gitea `pulls/<n>` links alongside GitHub's.
+- **Pinned Pi in CI** - the behaviour test lanes install a fixed Pi package version, so a new Pi release cannot break every change at once.
+- **Fixes carried in the fork** - among them a wake for an idle primary when a captain note is queued behind a handling successor, and timeout and permission-grant portability fixes.
+
+The fork's own commits are the authoritative list: `git log upstream/main..main` in a clone with the original added as `upstream`.
 
 ## What it is
 
@@ -81,7 +94,7 @@ Launch it with `--trust`, or none of its project hooks load; it also has no turn
 
 ```sh
 gh auth login
-git clone https://github.com/kunchenguid/firstmate
+git clone https://github.com/cbcotton/firstmate
 cd firstmate
 ```
 
@@ -238,22 +251,13 @@ Firstmate's skills live in two separate places with different audiences:
 - [docs/scripts.md](docs/scripts.md) - the `bin/` toolbelt reference.
 - [docs/documentation-audiences.md](docs/documentation-audiences.md) - documentation audiences and the machine-checked placement boundary.
 - [`AGENTS.md`](AGENTS.md) - the supervisor contract, role boundary, and routing index for conditional procedures.
-- [CONTRIBUTING.md](CONTRIBUTING.md) - how to contribute, including the dev/test commands.
+- [CONTRIBUTING.md](CONTRIBUTING.md) - the dev/test commands and repo conventions, inherited unchanged from the original; its contribution workflow targets the original repository, not this fork.
 
 ## Contributing
 
-Contributions are welcome - see [CONTRIBUTING.md](CONTRIBUTING.md) for the workflow, repo conventions, and how to run the tests.
+This is a personal fork and does not take outside contributions. Contributions to firstmate itself belong in the original repository, [kunchenguid/firstmate](https://github.com/kunchenguid/firstmate), under its own contributing guide.
 
 ## License
 
 MIT - see [LICENSE](LICENSE).
-
-## Star History
-
-<a href="https://www.star-history.com/?repos=kunchenguid%2Ffirstmate&type=date&legend=top-left">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=kunchenguid/firstmate&type=date&theme=dark&legend=top-left" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=kunchenguid/firstmate&type=date&legend=top-left" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=kunchenguid/firstmate&type=date&legend=top-left" />
- </picture>
-</a>
+Copyright (c) 2026 Kun Chen, the author of the [original firstmate](https://github.com/kunchenguid/firstmate); the fork is distributed under the same licence.
