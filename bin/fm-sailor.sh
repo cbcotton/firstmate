@@ -23,8 +23,15 @@
 #   fm-sailor.sh set <sailor> [--endpoint <url>] [--title <text>] [--host <text>]
 #                    [--max-concurrent <n>] [--live | --placeholder]
 #   fm-sailor.sh set-model <sailor> <model> [--replace <old>] [--first-mate]
+#                    [--model-limit <context>:<output>] [--model-options <json>]
 #                    [--warm] [--dry-run]
 #   fm-sailor.sh retire <sailor>
+#
+# `model_settings` maps a listed model id to {limit, options}: limit holds both
+# context and output and nothing else, each a positive whole number; options is an object of
+# string, number, or boolean values (for example reasoningEffort, temperature,
+# top_p, top_k, enable_thinking). validate refuses any other shape, and a
+# sailor without model_settings behaves as it always has.
 #
 # validate is silent and exits 0 when config/crew-dispatch.json is absent or
 # declares no sailor anywhere; otherwise it checks the `sailors` map, every
@@ -49,9 +56,11 @@
 # is loaded or only listed.
 #
 # provider-json prints the compact OpenCode `provider` entry for the sailor
-# with just that model, keyed by the sailor's name, for bin/fm-spawn.sh to put
-# inside the OPENCODE_CONFIG_CONTENT it writes; OpenCode then addresses the
-# model as <sailor>/<model>.
+# with just that model, keyed by the sailor's name, for bin/fm-spawn.sh and
+# bin/fm-privateer.sh to put inside the OpenCode configuration they write;
+# OpenCode then addresses the model as <sailor>/<model>. The model carries the
+# sailor's optional `model_settings` for it: a `limit` object (context, output)
+# and an `options` object, in OpenCode's own field names.
 #
 # status prints one line per live sailor, or per sailor with --all: its status,
 # whether GET <endpoint>/models answers, this home's tasks on it against its
@@ -92,8 +101,10 @@
 # sailor config/privateer names for the first mate, which runs only on a live
 # sailor.
 #
-# set-model adds <model> to the sailor's models. With --replace <old> it takes
-# <old> out of the list and rewrites every rule and default profile naming
+# set-model adds <model> to the sailor's models. --model-limit <context>:<output>
+# and --model-options <json object> record that model's model_settings, each
+# replacing the same field already recorded. With --replace <old> it takes
+# <old> out of the list, along with its model_settings, and rewrites every rule and default profile naming
 # <sailor> with <old> to name <model>, dropping a profile that then repeats
 # another in the same list. With --first-mate it writes <sailor>/<model> as the
 # first mate line of config/privateer, in place of the current one. With
@@ -147,7 +158,8 @@ usage: fm-sailor.sh validate | list | status [--all]
        fm-sailor.sh add <sailor> (--endpoint <url> --models <ids> | --from-mlx-serve <server-id> [--models <ids>])
                     [--title <text>] [--host <text>] [--max-concurrent <n>] [--live | --placeholder]
        fm-sailor.sh set <sailor> [--endpoint <url>] [--title <text>] [--host <text>] [--max-concurrent <n>] [--live | --placeholder]
-       fm-sailor.sh set-model <sailor> <model> [--replace <old>] [--first-mate] [--warm] [--dry-run]
+       fm-sailor.sh set-model <sailor> <model> [--replace <old>] [--first-mate] [--model-limit <context>:<output>]
+                    [--model-options <json>] [--warm] [--dry-run]
        fm-sailor.sh retire <sailor>
 EOF
   exit 2
@@ -207,6 +219,19 @@ validate_file() {
     def profiles($v): if ($v | type) == "array" then $v elif ($v | type) == "object" then [$v] else [] end;
     def uses: [(.rules // [])[]? | profiles(.use?)[]?] + [profiles(.default?)[]?];
     def safe_text: type == "string" and length > 0 and (test("[[:space:][:cntrl:]\"'"'"'\\\\]") | not);
+    def scalar: type == "string" or type == "number" or type == "boolean";
+    def settings_bad($n; $s):
+      ($s.model_settings) as $ms
+      | if ($ms | type) != "object" then "sailor \($n) model_settings must be an object"
+        else ([$ms | to_entries[] | . as $e | "sailor \($n) model_settings for \($e.key)" as $who
+          | if ($s.models | index($e.key)) == null then "sailor \($n) model_settings names \($e.key), which its models do not list"
+            elif ($e.value | type) != "object" then "\($who) must be an object"
+            elif (($e.value | keys) - ["limit", "options"] | length) > 0 then "\($who) may hold only limit and options"
+            elif ($e.value | has("limit")) and (($e.value.limit | type) != "object" or ($e.value.limit | keys) != ["context", "output"] or ([$e.value.limit[] | (type == "number" and . >= 1 and . == floor)] | all | not)) then "\($who) limit must hold both context and output and nothing else, each a positive whole number"
+            elif ($e.value | has("options")) and (($e.value.options | type) != "object" or ([$e.value.options[] | scalar] | all | not) or ($e.value.options | keys | any(length == 0))) then "\($who) options must be an object of strings, numbers and booleans"
+            else empty
+            end] | first // "")
+        end;
     def sailor_bad($n; $s):
       if ($n | test("^[a-z][a-z0-9]*(-[a-z0-9]+)*$") | not) then "sailor name \($n) must be lowercase letters, digits and single dashes"
       elif ($s | type) != "object" then "sailor \($n) must be an object"
@@ -217,6 +242,7 @@ validate_file() {
       elif ($s | has("max_concurrent")) and ((($s.max_concurrent | type) != "number") or $s.max_concurrent < 1 or ($s.max_concurrent | floor) != $s.max_concurrent) then "sailor \($n) max_concurrent must be a positive whole number"
       elif ($s | has("title")) and (($s.title | type) != "string") then "sailor \($n) title must be a string"
       elif ($s | has("host")) and (($s.host | type) != "string") then "sailor \($n) host must be a string"
+      elif ($s | has("model_settings")) and (settings_bad($n; $s) != "") then settings_bad($n; $s)
       else empty
       end;
     def ref_bad($map):
@@ -386,7 +412,7 @@ cmd_provider_json() {
   jq -c --arg s "$sailor" --arg m "$model" '
     .sailors[$s] as $x
     | {($s): {npm: "@ai-sdk/openai-compatible", name: ($x.title // $s),
-              options: {baseURL: $x.endpoint}, models: {($m): {name: $m}}}}' "$FILE"
+              options: {baseURL: $x.endpoint}, models: {($m): ({name: $m} + ($x.model_settings[$m] // {}))}}}' "$FILE"
 }
 
 cmd_status() {
@@ -543,10 +569,10 @@ commit() {
 
 # first_mate_view <dispatch-file> <line>: what of the file the first mate on
 # <line> depends on: its sailor's endpoint and status, and whether it lists
-# the model.
+# the model, and its settings.
 first_mate_view() {
   jq -c --arg s "${2%%/*}" --arg m "${2#*/}" '
-    (.sailors // {})[$s] // {} | {endpoint, status, serves: ((.models // []) | index($m) != null)}' "$1"
+    (.sailors // {})[$s] // {} | {endpoint, status, serves: ((.models // []) | index($m) != null), settings: (.model_settings[$m] // null)}' "$1"
 }
 
 # report_effects: when a written change applies, and what the quarantine
@@ -707,7 +733,7 @@ cmd_set() {
 }
 
 cmd_set_model() {
-  local name model old='' first_mate=0 warm=0 status endpoint replaced ids body state='' reason line
+  local name model old='' first_mate=0 warm=0 limit='' options='' settings status endpoint replaced ids body state='' reason line
   [ "$#" -ge 2 ] || usage
   name=$1 model=$2
   shift 2
@@ -717,12 +743,18 @@ cmd_set_model() {
     case "$1" in
       --replace) [ "$#" -ge 2 ] && [ -n "$2" ] || usage; old=$2; shift 2 ;;
       --first-mate) first_mate=1; shift ;;
+      --model-limit) [ "$#" -ge 2 ] || usage; limit=$2; shift 2 ;;
+      --model-options) [ "$#" -ge 2 ] || usage; options=$2; shift 2 ;;
       --warm) warm=1; shift ;;
       --dry-run) DRY_RUN=1; shift ;;
       *) usage ;;
     esac
   done
   [ "$warm" = 0 ] || [ "$DRY_RUN" = 0 ] || refuse "--dry-run loads nothing, so it takes no --warm"
+  settings=$(jq -nc --arg limit "$limit" --arg options "$options" '
+    (if $limit == "" then {} else ([$limit | capture("^(?<context>[0-9]+):(?<output>[0-9]+)$")] | if length == 0 then error("limit") else {limit: (.[0] | map_values(tonumber))} end) end)
+    + (if $options == "" then {} else {options: ($options | fromjson)} end)' 2>/dev/null) ||
+    refuse "--model-limit takes <context>:<output> and --model-options takes a JSON object"
   begin_edit
   status=$(sailor_field "$name" '.status')
   [ -n "$status" ] || refuse "unknown sailor $name"
@@ -748,11 +780,14 @@ cmd_set_model() {
     [((.rules // [])[]? | profiles(.use?)[]?), profiles(.default?)[]?
      | select(type == "object" and .sailor == $s and .model == $old)] | length' "$FILE")
   # shellcheck disable=SC2016 # jq, not the shell, expands the $ names.
-  compose --arg s "$name" --arg m "$model" --arg old "$old" '
+  compose --arg s "$name" --arg m "$model" --arg old "$old" --argjson settings "$settings" '
     def dedupe: reduce .[] as $p ([]; if any(.[]; . == $p) then . else . + [$p] end);
     def swap: if type == "object" and .sailor == $s and .model == $old then .model = $m else . end;
     def fix: if type == "array" then map(swap) | dedupe else swap end;
     .sailors[$s].models |= ((if $old != "" then map(if . == $old then $m else . end) else . end) + [$m] | dedupe)
+    | (if $old != "" and ((.sailors[$s].model_settings // null) != null) then .sailors[$s].model_settings |= del(.[$old]) else . end)
+    | (if $settings != {} then .sailors[$s].model_settings[$m] = ((.sailors[$s].model_settings[$m] // {}) + $settings) else . end)
+    | (if (.sailors[$s].model_settings // null) == {} then del(.sailors[$s].model_settings) else . end)
     | if $old == "" then .
       else (if (.rules | type) == "array" then .rules |= map(if type == "object" and has("use") then .use |= fix else . end) else . end)
         | (if has("default") then .default |= fix else . end)

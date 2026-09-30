@@ -139,6 +139,62 @@ test_provider_json_is_the_opencode_provider_entry() {
   pass "provider-json prints the OpenCode provider entry for exactly that sailor and model"
 }
 
+test_model_settings_travel_with_the_model() {
+  local out status settings
+  settings='{"qwen-coder":{"limit":{"context":131072,"output":16384},"options":{"reasoningEffort":"medium","enable_thinking":true,"temperature":0.6,"top_k":20}}}'
+  make_case settings "$(jq -c --argjson s "$settings" '.sailors.tiller.model_settings = $s' <<<"$MAP")"
+  out=$(run_sailor validate)
+  expect_code 0 "$?" "a well-formed model_settings must validate: $out"
+  out=$(run_sailor provider-json tiller qwen-coder)
+  assert_equals '{"name":"qwen-coder","limit":{"context":131072,"output":16384},"options":{"reasoningEffort":"medium","enable_thinking":true,"temperature":0.6,"top_k":20}}' "$(jq -c '.tiller.models["qwen-coder"]' <<<"$out")" "provider-json must emit the model's limit and options under that model"
+  out=$(run_sailor provider-json flint qwen-coder-large)
+  assert_equals '{"name":"qwen-coder-large"}' "$(jq -c '.flint.models["qwen-coder-large"]' <<<"$out")" "a model without settings must emit only its name"
+  local bad
+  for bad in \
+    '.sailors.tiller.model_settings = []|sailor tiller model_settings must be an object' \
+    '.sailors.tiller.model_settings = {"other":{}}|sailor tiller model_settings names other, which its models do not list' \
+    '.sailors.tiller.model_settings = {"qwen-coder":{"temp":1}}|sailor tiller model_settings for qwen-coder may hold only limit and options' \
+    '.sailors.tiller.model_settings = {"qwen-coder":{"limit":{"context":0,"output":8}}}|sailor tiller model_settings for qwen-coder limit must hold both context and output and nothing else, each a positive whole number' \
+    '.sailors.tiller.model_settings = {"qwen-coder":{"limit":{"context":131072}}}|sailor tiller model_settings for qwen-coder limit must hold both context and output and nothing else, each a positive whole number' \
+    '.sailors.tiller.model_settings = {"qwen-coder":{"limit":{}}}|sailor tiller model_settings for qwen-coder limit must hold both context and output and nothing else, each a positive whole number' \
+    '.sailors.tiller.model_settings = {"qwen-coder":{"limit":{"window":8}}}|sailor tiller model_settings for qwen-coder limit must hold both context and output and nothing else, each a positive whole number' \
+    '.sailors.tiller.model_settings = {"qwen-coder":{"limit":{"context":"big","output":8}}}|sailor tiller model_settings for qwen-coder limit must hold both context and output and nothing else, each a positive whole number' \
+    '.sailors.tiller.model_settings = {"qwen-coder":{"options":{"stop":["a"]}}}|sailor tiller model_settings for qwen-coder options must be an object of strings, numbers and booleans' \
+    '.sailors.tiller.model_settings = {"qwen-coder":{"options":3}}|sailor tiller model_settings for qwen-coder options must be an object of strings, numbers and booleans'; do
+    make_case settings-bad "$(jq -c "${bad%%|*}" <<<"$MAP")"
+    out=$(run_sailor validate)
+    status=$?
+    expect_code 1 "$status" "a malformed model_settings must be refused: ${bad%%|*}"
+    assert_contains "$out" "${bad#*|}" "validate must name the model_settings problem"
+  done
+  pass "model_settings rides provider-json under its model, an entry without it is unchanged, and validate refuses every malformed shape"
+}
+
+test_set_model_carries_settings_and_replace_swaps_them() {
+  local out status
+  stub_reset
+  make_stub_case settings "$(stub_map | jq '.sailors.tiller.models += ["qwen-next"]')"
+  out=$(run_real set-model tiller qwen-next --model-limit 65536:8192 --model-options '{"temperature":0.6,"enable_thinking":true}')
+  expect_code 0 "$?" "set-model must record settings: $out"
+  assert_equals '{"qwen-next":{"limit":{"context":65536,"output":8192},"options":{"temperature":0.6,"enable_thinking":true}}}' "$(dispatch '.sailors.tiller.model_settings')" "settings must be recorded under the model"
+  out=$(run_real set-model tiller qwen-next --model-options '{"top_k":20}')
+  expect_code 0 "$?" "a later set-model may replace one field: $out"
+  assert_equals '{"context":65536,"output":8192}' "$(dispatch '.sailors.tiller.model_settings["qwen-next"].limit')" "a field not given must be kept"
+  assert_equals '{"top_k":20}' "$(dispatch '.sailors.tiller.model_settings["qwen-next"].options')" "a field given must replace the recorded one"
+  out=$(run_real set-model tiller qwen-big --replace qwen-next)
+  expect_code 0 "$?" "replace must succeed: $out"
+  assert_equals 'null' "$(dispatch '.sailors.tiller.model_settings')" "replacing a model must drop its settings and leave no empty map"
+  out=$(run_real set-model tiller qwen-big --model-limit big)
+  expect_code 1 "$?" "a malformed limit must be refused"
+  assert_contains "$out" "refused: --model-limit takes <context>:<output> and --model-options takes a JSON object" "limit refusal missing"
+  out=$(run_real set-model tiller qwen-big --model-options '{"a":[1]}')
+  expect_code 1 "$?" "a non-scalar option must be refused by validation"
+  assert_contains "$out" "options must be an object of strings, numbers and booleans" "options refusal must carry validate's reason"
+  out=$(run_real set-model tiller qwen-big --model-options nope)
+  expect_code 1 "$?" "a non-JSON options value must be refused"
+  pass "set-model records limit and options, merges per field, drops them on --replace, and refuses malformed values"
+}
+
 test_validate_is_silent_without_sailors_and_names_the_first_problem() {
   local out status
   make_case absent ""
@@ -521,6 +577,9 @@ test_privateer_first_mate_sailor_stays_live_and_restarts_only_when_it_changes() 
   out=$(run_real set tiller --endpoint "http://localhost:${STUB##*:}/v1")
   expect_code 0 "$?" "an endpoint change to this machine must succeed: $out"
   assert_contains "$out" "first mate: restart the Privateer session to switch" "an endpoint change must ask for a first-mate restart"
+  out=$(run_real set-model tiller qwen-coder --model-options '{"temperature":0.6}')
+  expect_code 0 "$?" "a settings change must succeed: $out"
+  assert_contains "$out" "first mate: restart the Privateer session to switch" "a settings change on the first mate's model must ask for a restart"
   pass "in a Privateer home the first mate's sailor cannot be parked, and only changes to what the first mate uses ask for a restart"
 }
 
@@ -630,11 +689,13 @@ test_endpoint_without_the_model_is_refused
 test_unlisted_model_and_unknown_sailor_are_refused
 test_capacity_counts_live_task_records
 test_provider_json_is_the_opencode_provider_entry
+test_model_settings_travel_with_the_model
 test_validate_is_silent_without_sailors_and_names_the_first_problem
 test_check_says_loaded_or_listed
 test_status_shows_answer_tasks_queue_and_models
 test_set_model_replace_moves_every_profile_of_that_sailor
 test_set_model_refusals_write_nothing
+test_set_model_carries_settings_and_replace_swaps_them
 test_set_model_says_when_the_model_is_only_listed
 test_privateer_home_moves_the_first_mate_and_guards_the_quarantine
 test_privateer_first_mate_sailor_stays_live_and_restarts_only_when_it_changes
