@@ -92,8 +92,7 @@ test_privateer_home_refuses_directory_outside_projects() {
   outside="$case_dir/elsewhere"
   mkdir -p "$outside"
   : > "$home/config/privateer"
-  out=$(spawn_in "$rec" "$id" "$outside" --mode local-only --yolo off)
-  [ $? -ne 0 ] || fail "a sealed home should refuse a directory outside projects/"
+  out=$(spawn_in "$rec" "$id" "$outside" --mode local-only --yolo off) && fail "a sealed home should refuse a directory outside projects/"
   assert_contains "$out" "outside projects/" "refusal did not explain the projects/ rule"
   out=$(spawn_in "$rec" "$id" alpha --mode local-only --yolo off)
   case "$out" in *"outside projects/"*) fail "a project under projects/ was refused as outside: $out" ;; esac
@@ -130,12 +129,10 @@ test_brief_refuses_keyword_ids_and_unknown_flags() {
   [ "$status" -ne 0 ] || fail "a task id of scout should be refused"
   assert_contains "$out" "did you mean" "brief did not offer a correction"
   case "$out" in *"ship briefs require --mode"*) fail "the misleading mode error came back: $out" ;; esac
-  out=$(FM_HOME="$home" "$ROOT/bin/fm-brief.sh" ship alpha --mode no-mistakes 2>&1)
-  [ $? -ne 0 ] || fail "a task id of ship should be refused"
+  out=$(FM_HOME="$home" "$ROOT/bin/fm-brief.sh" ship alpha --mode no-mistakes 2>&1) && fail "a task id of ship should be refused"
   assert_contains "$out" "did you mean" "brief did not offer a correction for ship"
   for kw in scout ship secondmate; do
-    out=$(FM_HOME="$home" "$ROOT/bin/fm-brief.sh" "$kw" my-task alpha 2>&1)
-    [ $? -ne 0 ] || fail "a verb-first '$kw' call without --mode should be refused"
+    out=$(FM_HOME="$home" "$ROOT/bin/fm-brief.sh" "$kw" my-task alpha 2>&1) && fail "a verb-first '$kw' call without --mode should be refused"
     assert_contains "$out" "did you mean" "verb-first '$kw' without --mode did not offer a correction"
     case "$out" in *"require --mode"*|*"applies only to"*) fail "a mode error preceded the keyword refusal: $out" ;; esac
   done
