@@ -94,6 +94,9 @@
 # The digest is therefore composed from bounded local reads and local
 # subprocesses only, while slow network or inactive-state reconciliation delays
 # a reported check rather than startup.
+# The one exception is step 8, in a Privateer home only: fm-sailor.sh status
+# probes each declared sailor's own endpoint on the blocking path, each request
+# bounded by FM_SAILOR_PROBE_TIMEOUT.
 # What this deliberately trades: on a slow network the digest prints "IN
 # PROGRESS" and names exactly which checks are not yet confirmed, instead of
 # waiting for them. It never reports an unconfirmed check as passed.
