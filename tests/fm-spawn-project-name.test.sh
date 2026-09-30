@@ -11,6 +11,10 @@ set -u
 TMP_ROOT=$(fm_test_tmproot fm-spawn-project-name)
 unset LAVISH_AXI_HOST
 
+session_socket() {
+  ( . "$ROOT/bin/fm-privateer-lib.sh" && fm_privateer_socket_name "$1" )
+}
+
 # make_case <name>: prints "case_dir|home|fakebin|worktree|task-id".
 make_case() {
   local name=$1 case_dir home fakebin
@@ -32,6 +36,9 @@ field() { # <record> <1-based index>
 spawn_in() { # <record> <args...>
   local rec=$1
   shift
+  # A sealed Privateer home answers only from inside its own session, so the
+  # fake TMUX names that session's socket; other homes ignore it.
+  TMUX="/tmp/tmux-fake/$(session_socket "$(field "$rec" 2)"),1,0" \
   fm_test_run_spawn "$(field "$rec" 2)" "$(field "$rec" 4)" "$(field "$rec" 3)" "$@"
 }
 
@@ -153,7 +160,7 @@ test_brief_checks_repo_name_against_registry() {
   [ "$(printf '%s\n' "$out" | grep -c 'not a registered project')" -eq 1 ] || fail "expected one warning line, got: $out"
   [ -f "$home/data/reg-warn/brief.md" ] || fail "the warned brief was not written"
   : > "$home/config/privateer"
-  out=$(FM_HOME="$home" "$ROOT/bin/fm-brief.sh" reg-refuse nosuchrepo --scout 2>&1)
+  out=$(FM_HOME="$home" TMUX="/tmp/tmux-fake/$(session_socket "$home"),1,0" "$ROOT/bin/fm-brief.sh" reg-refuse nosuchrepo --scout 2>&1)
   status=$?
   [ "$status" -ne 0 ] || fail "a Privateer home should refuse an unregistered repo"
   assert_contains "$out" "not a registered project" "Privateer refusal did not name the registry"
