@@ -11,20 +11,20 @@
 # Usage:
 #   fm-sailor.sh validate
 #   fm-sailor.sh list
-#   fm-sailor.sh check <sailor> <model> [--task <id>] [--warm]
+#   fm-sailor.sh check <sailor> <model> [--task <id>]
 #   fm-sailor.sh provider-json <sailor> <model>
 #   fm-sailor.sh status [--all]
 #   fm-sailor.sh add <sailor> --endpoint <url> --models <id>[,<id>...]
 #                    [--title <text>] [--host <text>] [--max-concurrent <n>]
-#                    [--live | --placeholder] [--dry-run]
+#                    [--live | --placeholder]
 #   fm-sailor.sh add <sailor> --from-mlx-serve <server-id> [--models <id>[,<id>...]]
 #                    [--title <text>] [--host <text>] [--max-concurrent <n>]
-#                    [--live | --placeholder] [--dry-run]
+#                    [--live | --placeholder]
 #   fm-sailor.sh set <sailor> [--endpoint <url>] [--title <text>] [--host <text>]
-#                    [--max-concurrent <n>] [--live | --placeholder] [--dry-run]
+#                    [--max-concurrent <n>] [--live | --placeholder]
 #   fm-sailor.sh set-model <sailor> <model> [--replace <old>] [--first-mate]
 #                    [--warm] [--dry-run]
-#   fm-sailor.sh retire <sailor> [--dry-run]
+#   fm-sailor.sh retire <sailor>
 #
 # validate is silent and exits 0 when config/crew-dispatch.json is absent or
 # declares no sailor anywhere; otherwise it checks the `sailors` map, every
@@ -43,12 +43,7 @@
 #   3. fewer than max_concurrent (default 1) task records in state/ carry
 #      sailor=<name>, not counting --task <id>, the task being relaunched;
 #   4. GET <endpoint>/models answers within FM_SAILOR_PROBE_TIMEOUT seconds
-#      (default 3) with an OpenAI-style model list that includes <model>;
-#   5. with --warm, POST <endpoint>/chat/completions asking <model> for one
-#      token answers with a completion within FM_SAILOR_WARM_TIMEOUT seconds
-#      (default 600), so a server that loads models on demand (mlx-serve lists
-#      every pulled model, each with a `loaded` flag) loads it now, and a load
-#      or memory refusal surfaces here rather than in a worker's first request.
+#      (default 3) with an OpenAI-style model list that includes <model>.
 # It prints `ok: ...` and exits 0, or prints `refused: ...` and exits 1. When
 # the model list carries a `loaded` flag, the ok line says whether the model
 # is loaded or only listed.
@@ -74,7 +69,7 @@
 # violation for it that it does not already report for the current files.
 # They stop, as a configuration error, on a current map validate rejects.
 # A written file keeps a dated copy beside it (<file>.bak-<YYYYMMDD-HHMMSS>)
-# and is replaced atomically; --dry-run prints the change and writes nothing.
+# and is replaced atomically.
 # The file is rewritten in jq's formatting, and a missing file is never
 # created, because its presence changes how every spawn is dispatched. Inside a
 # Privateer session config/ is unwritable, so run them from the captain's own
@@ -93,13 +88,21 @@
 # servers.json and never loads, unloads, or starts a server.
 #
 # set changes the given fields of an existing sailor; its models change only
-# through set-model.
+# through set-model. In a Privateer home it refuses --placeholder on the
+# sailor config/privateer names for the first mate, which runs only on a live
+# sailor.
 #
 # set-model adds <model> to the sailor's models. With --replace <old> it takes
 # <old> out of the list and rewrites every rule and default profile naming
 # <sailor> with <old> to name <model>, dropping a profile that then repeats
 # another in the same list. With --first-mate it writes <sailor>/<model> as the
-# first mate line of config/privateer, in place of the current one. It refuses:
+# first mate line of config/privateer, in place of the current one. With
+# --warm, POST <endpoint>/chat/completions asking <model> for one token must
+# answer with a completion within FM_SAILOR_WARM_TIMEOUT seconds (default 600),
+# so a server that loads models on demand (mlx-serve lists every pulled model,
+# each with a `loaded` flag) loads it now, and a load or memory refusal
+# surfaces here rather than in a worker's first request. --dry-run prints the
+# change and writes nothing. It refuses:
 #   - an unknown sailor, or --replace naming a model the sailor does not list
 #     or <model> itself;
 #   - --replace while a task record carries sailor=<sailor> and model=<old>,
@@ -108,7 +111,7 @@
 #   - --first-mate outside a Privateer home, or on a placeholder sailor;
 #   - --warm on a placeholder sailor;
 #   - for a live sailor, an endpoint that does not answer or does not list
-#     <model>, and with --warm, a failed warm-up (check step 5).
+#     <model>, and with --warm, a failed warm-up.
 # A placeholder is not probed. When the server lists <model> as not loaded
 # and --warm is absent, it says so and names --warm.
 #
@@ -138,13 +141,13 @@ DRY_RUN=0
 usage() {
   cat >&2 <<'EOF'
 usage: fm-sailor.sh validate | list | status [--all]
-       fm-sailor.sh check <sailor> <model> [--task <id>] [--warm]
+       fm-sailor.sh check <sailor> <model> [--task <id>]
        fm-sailor.sh provider-json <sailor> <model>
        fm-sailor.sh add <sailor> (--endpoint <url> --models <ids> | --from-mlx-serve <server-id> [--models <ids>])
-                    [--title <text>] [--host <text>] [--max-concurrent <n>] [--live | --placeholder] [--dry-run]
-       fm-sailor.sh set <sailor> [--endpoint <url>] [--title <text>] [--host <text>] [--max-concurrent <n>] [--live | --placeholder] [--dry-run]
+                    [--title <text>] [--host <text>] [--max-concurrent <n>] [--live | --placeholder]
+       fm-sailor.sh set <sailor> [--endpoint <url>] [--title <text>] [--host <text>] [--max-concurrent <n>] [--live | --placeholder]
        fm-sailor.sh set-model <sailor> <model> [--replace <old>] [--first-mate] [--warm] [--dry-run]
-       fm-sailor.sh retire <sailor> [--dry-run]
+       fm-sailor.sh retire <sailor>
 EOF
   exit 2
 }
@@ -350,7 +353,7 @@ server_queue() {
 }
 
 cmd_check() {
-  local sailor=$1 model=$2 exclude=$3 warm=$4 endpoint status max busy body state note reason
+  local sailor=$1 model=$2 exclude=$3 endpoint status max busy body state note
   sailor_load "$sailor" "$model"
   endpoint=$(sailor_field "$sailor" '.endpoint')
   status=$(sailor_field "$sailor" '.status')
@@ -373,10 +376,6 @@ cmd_check() {
     unloaded) note="; model listed but not loaded, so the first request loads it" ;;
     *) note= ;;
   esac
-  if [ "$warm" = 1 ]; then
-    reason=$(warm_model "$endpoint" "$model") || refuse "sailor $sailor could not load $model: $reason"
-    note="; model warmed"
-  fi
   echo "ok: sailor $sailor serves $model at $endpoint ($busy of $max tasks busy$note)"
 }
 
@@ -541,18 +540,26 @@ commit() {
   fi
 }
 
-# report_effects [<sailor>]: when a written change applies, and what the
-# quarantine still reports. The first mate needs a restart when its line
-# changed or its own sailor's entry did.
+# first_mate_view <dispatch-file> <line>: what of the file the first mate on
+# <line> depends on: its sailor's endpoint and status, and whether it lists
+# the model.
+first_mate_view() {
+  jq -c --arg s "${2%%/*}" --arg m "${2#*/}" '
+    (.sailors // {})[$s] // {} | {endpoint, status, serves: ((.models // []) | index($m) != null)}' "$1"
+}
+
+# report_effects: when a written change applies, and what the quarantine
+# still reports. The first mate needs a restart when its line changed or its
+# sailor's endpoint, status, or listing of its model did.
 report_effects() {
-  local sailor=${1:-} line
+  local line
   [ "$WROTE_DISPATCH$WROTE_PRIVATEER" != 00 ] || return 0
   [ "$WROTE_DISPATCH" = 0 ] ||
     echo "workers: the change applies from each worker's next spawn; running workers keep what they launched with"
   privateer_on || return 0
   line=$(first_mate_line)
-  if [ "$WROTE_PRIVATEER" = 1 ] || { [ -n "$sailor" ] && [ "${line%%/*}" = "$sailor" ] &&
-    ! cmp -s <(jq -c --arg s "$sailor" '.sailors[$s]' "$WORK/current.json") <(jq -c --arg s "$sailor" '.sailors[$s]' "$FILE"); }; then
+  if [ "$WROTE_PRIVATEER" = 1 ] || { [ -n "$line" ] &&
+    [ "$(first_mate_view "$WORK/current.json" "$line")" != "$(first_mate_view "$FILE" "$line")" ]; }; then
     echo "first mate: restart the Privateer session to switch (fm-privateer.sh stop, then start; stop waits until no task is in flight, $(task_count) now)"
   fi
   if ! cmp -s <(jq -c '[(.sailors // {})[] | .endpoint] | sort' "$WORK/current.json") <(jq -c '[(.sailors // {})[] | .endpoint] | sort' "$FILE"); then
@@ -613,7 +620,6 @@ cmd_add() {
       --from-mlx-serve) [ "$#" -ge 2 ] && [ -n "$2" ] || usage; from=$2; shift 2 ;;
       --live) status=live; shift ;;
       --placeholder) status=placeholder; shift ;;
-      --dry-run) DRY_RUN=1; shift ;;
       *) usage ;;
     esac
   done
@@ -646,12 +652,12 @@ cmd_add() {
   compose --arg s "$name" --argjson e "$entry" '.sailors = ((.sailors // {}) + {($s): $e})'
   guard_candidate
   commit || true
-  [ "$DRY_RUN" = 1 ] || echo "added sailor $name ($status) at $endpoint serving $(jq -r 'join(",")' <<<"$models_array")"
+  echo "added sailor $name ($status) at $endpoint serving $(jq -r 'join(",")' <<<"$models_array")"
   report_effects
 }
 
 cmd_set() {
-  local name patch='{}' key value runs
+  local name patch='{}' key value runs line
   [ "$#" -ge 2 ] || usage
   name=$1
   shift
@@ -675,25 +681,28 @@ cmd_set() {
         patch=$(jq -c --arg v "$value" '. + {status: $v}' <<<"$patch")
         shift
         ;;
-      --dry-run) DRY_RUN=1; shift ;;
       *) usage ;;
     esac
   done
   [ "$patch" != '{}' ] || usage
   begin_edit
   [ -n "$(sailor_field "$name" '.endpoint')" ] || refuse "unknown sailor $name"
+  line=$(first_mate_line)
+  if [ "$(jq -r '.status // empty' <<<"$patch")" = placeholder ] && privateer_on && [ "${line%%/*}" = "$name" ]; then
+    refuse "the first mate runs on $line, and the first mate runs only on a live sailor"
+  fi
   # shellcheck disable=SC2016 # jq, not the shell, expands the $ names.
   compose --arg s "$name" --argjson p "$patch" '.sailors[$s] += $p'
   guard_candidate
   if ! commit; then
-    [ "$DRY_RUN" = 1 ] || echo "sailor $name already reads that way; nothing written"
+    echo "sailor $name already reads that way; nothing written"
     return 0
   fi
   if [ "$(jq -r '.status // empty' <<<"$patch")" = placeholder ]; then
     runs=$(busy_count "$name" "")
     [ "$runs" = 0 ] || echo "note: $runs task(s) still run on $name; as a placeholder it takes no new work"
   fi
-  report_effects "$name"
+  report_effects
 }
 
 cmd_set_model() {
@@ -776,21 +785,14 @@ cmd_set_model() {
   fi
   [ "$state" != unloaded ] || echo "note: $name lists $model but has not loaded it, so the first request loads it; rerun with --warm to load it now"
   [ "$state" != warmed ] || echo "$name has loaded $model"
-  report_effects "$name"
+  report_effects
 }
 
 cmd_retire() {
   local name ids removed
-  [ "$#" -ge 1 ] || usage
+  [ "$#" -eq 1 ] || usage
   name=$1
-  shift
   case "$name" in '' | -*) usage ;; esac
-  while [ "$#" -gt 0 ]; do
-    case "$1" in
-      --dry-run) DRY_RUN=1; shift ;;
-      *) usage ;;
-    esac
-  done
   begin_edit
   [ -n "$(sailor_field "$name" '.endpoint')" ] || refuse "unknown sailor $name"
   ids=$(sailor_tasks "$name" "" | paste -sd, -)
@@ -823,10 +825,8 @@ cmd_retire() {
        else . end)'
   guard_candidate
   commit || true
-  if [ "$DRY_RUN" = 0 ]; then
-    echo "retired sailor $name and the $removed profile(s) naming it"
-    cat "$WORK/emptied"
-  fi
+  echo "retired sailor $name and the $removed profile(s) naming it"
+  cat "$WORK/emptied"
   report_effects
 }
 
@@ -843,16 +843,15 @@ case "$1" in
   check)
     shift
     [ "$#" -ge 2 ] || usage
-    sailor=$1 model=$2 exclude='' warm=0
+    sailor=$1 model=$2 exclude=''
     shift 2
     while [ "$#" -gt 0 ]; do
       case "$1" in
         --task) [ "$#" -ge 2 ] && [ -n "$2" ] || usage; exclude=$2; shift 2 ;;
-        --warm) warm=1; shift ;;
         *) usage ;;
       esac
     done
-    cmd_check "$sailor" "$model" "$exclude" "$warm"
+    cmd_check "$sailor" "$model" "$exclude"
     ;;
   provider-json)
     [ "$#" -eq 3 ] || usage

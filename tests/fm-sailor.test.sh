@@ -322,7 +322,7 @@ assert_unchanged() {  # <msg>
   [ -z "$(backups)" ] || fail "$1: a backup was written, so something was replaced"
 }
 
-test_check_says_loaded_or_listed_and_warms_on_request() {
+test_check_says_loaded_or_listed() {
   local out status
   stub_reset
   make_stub_case warm "$(stub_map)"
@@ -334,21 +334,10 @@ test_check_says_loaded_or_listed_and_warms_on_request() {
   status=$?
   expect_code 0 "$status" "a listed but unloaded model still passes, because the server loads it on demand"
   assert_contains "$out" "model listed but not loaded, so the first request loads it" "check must say an unloaded model is only listed"
-  assert_no_grep "POST" "$STUB_DIR/requests.log" "check without --warm must never ask the model for a completion"
-
-  out=$(run_real check tiller qwen-big --warm)
-  status=$?
-  expect_code 0 "$status" "a warm-up the server answers must pass"
-  assert_contains "$out" "; model warmed)" "check --warm must say the model was warmed"
-  assert_grep "POST /v1/chat/completions model=qwen-big max_tokens=1" "$STUB_DIR/requests.log" "--warm must ask the model for exactly one token"
-
-  printf '507' > "$STUB_DIR/chat.code"
-  printf '{"error":{"message":"not enough free memory to load qwen-big"}}' > "$STUB_DIR/chat.body"
-  out=$(run_real check tiller qwen-big --warm)
-  status=$?
-  expect_code 1 "$status" "a failed warm-up must be refused"
-  assert_contains "$out" "refused: sailor tiller could not load qwen-big: HTTP 507: not enough free memory to load qwen-big" "the warm-up refusal must carry the server's reason"
-  pass "check says whether the model is loaded or only listed, and --warm loads it now or refuses with the server's reason"
+  assert_no_grep "POST" "$STUB_DIR/requests.log" "check must never ask the model for a completion"
+  run_real check tiller qwen-big --warm >/dev/null
+  expect_code 2 "$?" "check takes no --warm; set-model owns the warm-up"
+  pass "check says whether the model is loaded or only listed, and never loads it"
 }
 
 test_status_shows_answer_tasks_queue_and_models() {
@@ -411,11 +400,11 @@ test_set_model_refusals_write_nothing() {
   assert_contains "$out" "refused: sailor tiller at $STUB/v1 does not serve qwen-absent" "unserved-model refusal missing"
 
   printf '507' > "$STUB_DIR/chat.code"
-  printf '{"error":{"message":"not enough free memory"}}' > "$STUB_DIR/chat.body"
+  printf '{"error":{"message":"not enough free memory to load qwen-next"}}' > "$STUB_DIR/chat.body"
   out=$(run_real set-model tiller qwen-next --warm)
   status=$?
   expect_code 1 "$status" "a failed warm-up must refuse the swap"
-  assert_contains "$out" "refused: sailor tiller could not load qwen-next: HTTP 507: not enough free memory" "warm-up refusal missing"
+  assert_contains "$out" "refused: sailor tiller could not load qwen-next: HTTP 507: not enough free memory to load qwen-next" "the warm-up refusal must carry the server's reason"
 
   fm_write_meta "$CASE_DIR/state/busy-a1.meta" harness=opencode sailor=tiller model=qwen-coder
   out=$(run_real set-model tiller qwen-next --replace qwen-coder)
@@ -505,6 +494,30 @@ tiller/qwen-next" "$(cat "$CASE_DIR/config/privateer")" "the first mate line mus
   pass "in a Privateer home set-model --first-mate moves the first mate's line, and any change the quarantine would report is refused"
 }
 
+test_privateer_first_mate_sailor_stays_live_and_restarts_only_when_it_changes() {
+  local out status
+  stub_reset
+  make_privateer_case fmlive
+  out=$(run_real set tiller --placeholder)
+  status=$?
+  expect_code 1 "$status" "parking the first mate's sailor must be refused"
+  assert_contains "$out" "refused: the first mate runs on tiller/qwen-coder, and the first mate runs only on a live sailor" "placeholder refusal missing"
+  assert_unchanged "the placeholder refusal"
+
+  out=$(run_real set-model tiller qwen-next)
+  status=$?
+  expect_code 0 "$status" "adding a model to the first mate's sailor must succeed: $out"
+  assert_contains "$out" "workers: the change applies from each worker's next spawn" "set-model must say when workers switch"
+  assert_not_contains "$out" "first mate:" "only adding a model must not ask for a first-mate restart"
+  out=$(run_real set tiller --host "this Mac")
+  expect_code 0 "$?" "a host change must succeed: $out"
+  assert_not_contains "$out" "first mate:" "a host change must not ask for a first-mate restart"
+  out=$(run_real set tiller --endpoint "http://localhost:${STUB##*:}/v1")
+  expect_code 0 "$?" "an endpoint change to this machine must succeed: $out"
+  assert_contains "$out" "first mate: restart the Privateer session to switch" "an endpoint change must ask for a first-mate restart"
+  pass "in a Privateer home the first mate's sailor cannot be parked, and only changes to what the first mate uses ask for a restart"
+}
+
 test_retire_refuses_busy_sailors_and_removes_emptied_rules() {
   local out status
   make_stub_case retire "$(stub_map | jq '.sailors.tiller.endpoint = "http://127.0.0.1:1/v1"')"
@@ -565,6 +578,8 @@ test_add_and_set_edit_one_sailor() {
   assert_contains "$out" "sailor stoker already reads that way; nothing written" "a no-op set must not rewrite the file"
   run_real set stoker >/dev/null
   expect_code 2 "$?" "set with no field is a usage error"
+  run_real set stoker --live --dry-run >/dev/null
+  expect_code 2 "$?" "only set-model takes --dry-run"
   pass "add registers a placeholder with the given fields and refuses a taken or malformed one; set changes only the given fields"
 }
 
@@ -610,12 +625,13 @@ test_unlisted_model_and_unknown_sailor_are_refused
 test_capacity_counts_live_task_records
 test_provider_json_is_the_opencode_provider_entry
 test_validate_is_silent_without_sailors_and_names_the_first_problem
-test_check_says_loaded_or_listed_and_warms_on_request
+test_check_says_loaded_or_listed
 test_status_shows_answer_tasks_queue_and_models
 test_set_model_replace_moves_every_profile_of_that_sailor
 test_set_model_refusals_write_nothing
 test_set_model_says_when_the_model_is_only_listed
 test_privateer_home_moves_the_first_mate_and_guards_the_quarantine
+test_privateer_first_mate_sailor_stays_live_and_restarts_only_when_it_changes
 test_retire_refuses_busy_sailors_and_removes_emptied_rules
 test_add_and_set_edit_one_sailor
 test_add_from_mlx_serve_reads_the_registry_and_nothing_more
