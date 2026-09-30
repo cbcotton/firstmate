@@ -1,0 +1,19 @@
+Note: switching to 'e2ea1dc21ec716c67950f5611d7cd94f653601e3'.
+
+You are in 'detached HEAD' state. You can look around, make experimental
+changes and commit them, and you can discard any commits you make in this
+state without impacting any branches by switching back to a branch.
+
+If you want to create a new branch to retain commits you create, you may
+do so (now or later) by using -c with the switch command. Example:
+
+  git switch -c <new-branch-name>
+
+Or undo this operation with:
+
+  git switch -
+
+Turn off this advice by setting config variable advice.detachedHead to false
+
+ok - opencode 1.18.33 as a Privateer first mate received the session-start digest in its first answering request, with the captain's first message (after 11s), which took the fleet lock for its own OpenCode process (pid 69612), and received the re-emitted digest after /compact
+# all fm-privateer-sessionstart-live-e2e tests passed
