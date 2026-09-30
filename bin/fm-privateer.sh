@@ -77,8 +77,9 @@
 # bin/fm-sandbox-exec.sh, whose session `privateer` runs the OpenCode primary
 # in window `firstmate`, in this checkout with FM_HOME set to this home. The
 # server, and again the primary itself, start from an empty environment plus
-# exactly: HOME PATH USER LOGNAME SHELL TERM COLORTERM LANG LC_ALL LC_CTYPE
-# TMPDIR TMP TEMP TMUX_TMPDIR as the launcher saw them, FM_HOME, and the
+# exactly: HOME PATH USER LOGNAME SHELL TERM TERMINFO TERMINFO_DIRS COLORTERM LANG
+# LC_ALL LC_CTYPE TMPDIR TMP TEMP TMUX_TMPDIR as the launcher saw them (TERMINFO
+# and TERMINFO_DIRS only name where terminal descriptions are read from), FM_HOME, and the
 # launch-env assignments above; the primary adds OPENCODE_CONFIG_CONTENT, which
 # pins the model to the first mate's sailor as the only provider, allows every
 # tool as a secondmate primary is allowed, turns auto-update off, and disables
@@ -575,7 +576,7 @@ cmd_start() {
   mkdir -p "$OPENCODE_ROOT/config" "$OPENCODE_ROOT/data" "$OPENCODE_ROOT/state" "$OPENCODE_ROOT/cache" "$POOL" ||
     die "cannot create $OPENCODE_ROOT"
   # The allowlist: the launcher's own values, captured once, and nothing else.
-  for name in HOME PATH USER LOGNAME SHELL TERM COLORTERM LANG LC_ALL LC_CTYPE TMPDIR TMP TEMP TMUX_TMPDIR; do
+  for name in HOME PATH USER LOGNAME SHELL TERM TERMINFO TERMINFO_DIRS COLORTERM LANG LC_ALL LC_CTYPE TMPDIR TMP TEMP TMUX_TMPDIR; do
     [ -n "${!name+x}" ] || continue
     value=${!name}
     env_args+=("$name=$value")
