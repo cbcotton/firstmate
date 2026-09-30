@@ -1,0 +1,14 @@
+## 1. unsealed home (no config/privateer), caller outside any tmux
+exit=3
+## 2. sealed home, caller outside any tmux
+fm-privateer: refused: this is a sealed Privateer home, and this process runs outside its session, so it may act on nothing here; stop, and tell the captain to attach with bin/fm-privateer.sh attach and give the ask to the Privateer first mate there; never drive the Privateer session from outside
+exit=1
+## 3. sealed home, caller inside a tmux server on another socket (fm-lab-other)
+exit=1
+fm-privateer: refused: this is a sealed Privateer home, and this process runs outside its session, so it may act on nothing here; stop, and tell the captain to attach with bin/fm-privateer.sh attach and give the ask to the Privateer first mate there; never drive the Privateer session from outside
+## 4. sealed home, caller inside the home's own session socket (fm-privateer-a3459de0a668)
+exit=0
+stderr bytes:        0
+## 5. extra argument
+usage: fm-privateer.sh check | inside | launch-env | start | attach | stop
+exit=2
