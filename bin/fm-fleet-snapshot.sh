@@ -74,6 +74,12 @@
 #   scout_reports[]: present data/<id>/report.md pointers.
 #   charts[]: {project,path,data} for each data/charts/<project>.json, sorted by
 #     project; data is the file's parsed JSON. Empty when the directory is absent.
+#   sailors[]: {name,status,answering,endpoint,tasks,capacity,line} - one row per
+#     live named sailor, parsed from bin/fm-sailor.sh status (which owns the
+#     probe and the line); line is its raw text. answering is true, false, or
+#     null when the line is unrecognized. Empty when the home declares no
+#     sailors. privateer: {active,first_mate,active_project} - active is true
+#     while config/privateer exists; the other two are null when unset.
 #   main_inventory: {valid,reason,orphan_in_flight[],unstructured_current_count} -
 #     main-home current-inventory checks shared with secondmate_home_summary_json
 #     (orphan structured in-flight ids with no state/<id>.meta, and unstructured
@@ -2012,6 +2018,34 @@ project_charts_json() {
     | jq -s 'sort_by(.project)'
 }
 
+sailors_json() {
+  local out
+  out=$(FM_HOME="$FM_HOME" FM_CONFIG_OVERRIDE="$CONFIG" FM_STATE_OVERRIDE="$STATE" \
+    "$SCRIPT_DIR/fm-sailor.sh" status 2>/dev/null) || out=
+  printf '%s\n' "$out" | jq -R -s '
+    split("\n") | map(select(length > 0 and . != "no live sailors" and . != "no sailors"))
+    | map(. as $line | split(" ") as $f
+      | ($f | map(select(startswith("tasks=")))[0] // "tasks=") as $t
+      | ($t | ltrimstr("tasks=") | split("/")) as $tc
+      | {name:$f[0], status:($f[1] // null),
+         answering:(if $f[2] == "answering" then true elif $f[2] == "not-answering" then false else null end),
+         endpoint:($f | map(select(startswith("endpoint=")))[0] // null | if . then ltrimstr("endpoint=") else null end),
+         tasks:($tc[0] | tonumber? // null), capacity:($tc[1] // null | tonumber? // null),
+         line:$line})'
+}
+
+privateer_json() {
+  local first_mate='' active_project=''
+  local active=false
+  if [ -e "$CONFIG/privateer" ] || [ -L "$CONFIG/privateer" ]; then
+    active=true
+    first_mate=$(sed -n '1{s/^[[:space:]]*//;s/[[:space:]]*$//;p;}' "$CONFIG/privateer" 2>/dev/null || true)
+  fi
+  [ ! -f "$CONFIG/active-project" ] || active_project=$(sed -n '1{s/^[[:space:]]*//;s/[[:space:]]*$//;p;}' "$CONFIG/active-project" 2>/dev/null || true)
+  jq -n --argjson active "$active" --arg fm "$first_mate" --arg ap "$active_project" \
+    '{active:$active, first_mate:(if $fm == "" then null else $fm end), active_project:(if $ap == "" then null else $ap end)}'
+}
+
 contribution_tasks_json() {
   local meta id merge_authority
   for meta in "$STATE"/*.meta; do
@@ -2045,12 +2079,19 @@ SCOUT_REPORTS_JSON_FILE="$JSON_TRANSPORT_DIR/scout-reports.json"
 SECONDMATE_CURRENT_JSON_FILE="$JSON_TRANSPORT_DIR/secondmate-current.json"
 SECONDMATE_LANDED_JSON_FILE="$JSON_TRANSPORT_DIR/secondmate-landed.json"
 CHARTS_JSON_FILE="$JSON_TRANSPORT_DIR/charts.json"
+SAILORS_JSON_FILE="$JSON_TRANSPORT_DIR/sailors.json"
+PRIVATEER_JSON_FILE="$JSON_TRANSPORT_DIR/privateer.json"
 printf '%s\n' "$BACKLOG_JSON" > "$BACKLOG_JSON_FILE" \
   || { echo "fm-fleet-snapshot: temporary backlog file write failed" >&2; exit 1; }
 printf '%s\n' "$TASKS_JSON" > "$TASKS_JSON_FILE" \
   || { echo "fm-fleet-snapshot: temporary task file write failed" >&2; exit 1; }
 project_charts_json > "$CHARTS_JSON_FILE" \
   || { echo "fm-fleet-snapshot: project charts read failed" >&2; exit 1; }
+
+sailors_json > "$SAILORS_JSON_FILE" \
+  || { echo "fm-fleet-snapshot: sailor status read failed" >&2; exit 1; }
+privateer_json > "$PRIVATEER_JSON_FILE" \
+  || { echo "fm-fleet-snapshot: privateer read failed" >&2; exit 1; }
 
 CONTRIBUTIONS_JSON_FILE="$JSON_TRANSPORT_DIR/contributions.json"
 CONTRIBUTION_TASKS_JSON=$(contribution_tasks_json) \
@@ -2094,6 +2135,8 @@ jq -n \
   --slurpfile secondmate_current "$SECONDMATE_CURRENT_JSON_FILE" \
   --slurpfile secondmate_landed "$SECONDMATE_LANDED_JSON_FILE" \
   --slurpfile charts "$JSON_TRANSPORT_DIR/charts.json" \
+  --slurpfile sailors "$SAILORS_JSON_FILE" \
+  --slurpfile privateer "$PRIVATEER_JSON_FILE" \
   '($backlog[0]) as $backlog
    | ($tasks[0]) as $tasks
    | ($main_inventory[0]) as $main_inventory
@@ -2115,6 +2158,8 @@ jq -n \
      contributions:$contributions[0],
      scout_reports:($scout_reports | map(. + {kind:report_kind(.id)})),
      charts:$charts,
+     sailors:$sailors[0],
+     privateer:$privateer[0],
      secondmate_current:$secondmate_current,
      secondmate_landed:$secondmate_landed,
      secondmate_guidance:{

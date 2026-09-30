@@ -789,6 +789,34 @@ EOF
   pass "undated captain holds age after a configurable threshold, decided only from structured fields"
 }
 
+test_snapshot_reports_sailors_and_privateer() {
+  local home fakebin out
+  home=$(make_home sailors)
+  fakebin=$(make_fakebin "$home")
+  out=$(PATH="$fakebin:$PATH" FM_HOME="$home" "$SNAPSHOT" --json)
+  assert_equals "[]" "$(printf '%s' "$out" | jq -c '.sailors')" "a home with no sailors must report an empty sailors array"
+  assert_equals '{"active":false,"first_mate":null,"active_project":null}' "$(printf '%s' "$out" | jq -c '.privateer')" \
+    "a non-Privateer home must report an inactive privateer block"
+
+  printf '%s\n' '{"sailors":{"tiller":{"endpoint":"http://127.0.0.1:9/v1","status":"live","models":["qwen-coder"]},"stoker":{"endpoint":"http://127.0.0.1:9/v1","status":"placeholder","models":["qwen-coder"]}}}' \
+    > "$home/config/crew-dispatch.json"
+  printf '%s\n' 'tiller/qwen-coder' > "$home/config/privateer"
+  printf '%s\n' 'constellation' > "$home/config/active-project"
+  cat > "$fakebin/curl" <<'SH'
+#!/usr/bin/env bash
+printf '%s' '{"object":"list","data":[{"id":"qwen-coder"}]}'
+SH
+  chmod +x "$fakebin/curl"
+  out=$(PATH="$fakebin:$PATH" FM_HOME="$home" "$SNAPSHOT" --json)
+  assert_equals '[{"name":"tiller","status":"live","answering":true,"tasks":0,"capacity":1}]' \
+    "$(printf '%s' "$out" | jq -c '[.sailors[] | {name,status,answering,tasks,capacity}]')" \
+    "the snapshot must list each live sailor with its answer and capacity, and leave a placeholder out"
+  assert_equals '{"active":true,"first_mate":"tiller/qwen-coder","active_project":"constellation"}' \
+    "$(printf '%s' "$out" | jq -c '.privateer')" \
+    "the snapshot must name the first mate and the active project in a Privateer home"
+  pass "the snapshot reports live sailors and the Privateer first mate and active project"
+}
+
 test_view_renders_snapshot() {
   local home fakebin view
   home=$(make_home view)
@@ -1217,6 +1245,7 @@ test_completed_scout_report_is_pointer_not_pending
 test_parked_scout_decision_stays_pending
 test_scout_reports_include_teardown_reports
 test_backlog_tasks_axi_forms_and_overrides
+test_snapshot_reports_sailors_and_privateer
 test_view_renders_snapshot
 test_view_renders_dead_secondmate_agent_status
 test_milestone_waters_tags_leave_title

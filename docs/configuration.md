@@ -927,6 +927,12 @@ It is a separate home with its own `FM_HOME`, state, backlog, projects, and sess
 The local, gitignored `config/privateer` turns the quarantine on.
 Its one optional line, `<sailor>/<model>`, names the sailor and model the first mate itself runs on, both from the home's sailor map.
 
+### What a Privateer session sees at start
+
+In a Privateer home the session-start digest prints a `PRIVATEER` section before the curated context: the first mate's `<sailor>/<model>`, the delivery mode (`local-only`), each sailor's `bin/fm-sailor.sh status --all` line, the front door `bin/fm-helm.sh helm` once that script exists, and the active project when `config/active-project` exists.
+`bin/fm-fleet-snapshot.sh --json` carries the same facts as `sailors[]` and `privateer`.
+`bin/fm-session-start.sh`'s header owns the section's ordering and `bin/fm-fleet-snapshot.sh`'s header owns the snapshot fields.
+
 ### What the quarantine refuses
 
 `bin/fm-privateer.sh check` is the single owner of the rules, and its header lists them exactly.
