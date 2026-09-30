@@ -1,0 +1,23 @@
+ ▐▛███▛█   Claude Code v2.1.285
+▝▜██████▀  Opus 5.5 · Claude Max
+ ▝▝   ▝▝   ~/.no-mistakes/worktrees/e74e4e411ceb/01M3S3KYFVJADQA635BPG7CA8B
+  ⎿  SessionStart:startup says: The current Hindsight Claude Code plugin is DEPRECATED, replaced by the Coding Agents plugin.
+     One install now covers Claude Code, Codex, Cursor, Copilot, opencode, Kilo, Grok, Antigravity,
+     Devin and Cline, and they all share a single memory per repository, leveraging the Hindsight Knowledge Page (v0.9.x and onwards).
+     See the migration guide: https://hindsight.vectorize.io/sdks/integrations/coding-agents#migrating-from-the-per-agent-plugins
+     Your Hindsight server and token carry over automatically; past conversations are re-imported from
+     local transcripts. Silence this with "upgradeNotice": false in ~/.hindsight/claude-code.json
+❯ Captain here in a lab test: just reply with the single word ACK and do nothing else.
+⏺ ACK
+✻ Baked for 5s · done 2:15 PM
+❯ Lab test: run exactly bin/fm-session-start.sh once via Bash, then reply DONE with its exit status. No other actions.
+  Ran 1 shell command
+⏺ DONE, captain. The session-start script ran once and exited with status 0.
+✻ Worked for 10s · done 2:15 PM
+❯ Lab mirror probe: reply with the single word MIRRORED and do nothing else.
+⏺ MIRRORED
+✻ Churned for 1s · done 2:16 PM
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← 1 agent

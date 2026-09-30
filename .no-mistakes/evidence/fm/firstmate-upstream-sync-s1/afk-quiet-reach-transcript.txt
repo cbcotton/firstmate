@@ -1,0 +1,68 @@
+## lab home with config/pinnace (fork reach channel opt-in)
+## 1. quiet entry
+$ env FM_AFK_MODE=quiet bin/fm-afk-contract.sh enter
+Quiet mode recorded at 2026-09-30T12:14:29Z: you are present, so nothing waits for your return: every action you ask for, a local landing or a merge included, proceeds now under ordinary attended authority, and quiet mode changes only which updates reach this conversation. Only an explicit /quiet off ends it.
+Quiet mode (recorded):
+  entered: 2026-09-30T12:14:29Z
+  holds: none - you are present, so nothing waits for your return: every action you ask for, a local landing or a merge included, proceeds now under ordinary attended authority, and quiet mode changes only which updates reach this conversation.
+  your words: (none)
+[exit 0]
+$ bin/fm-afk-contract.sh mode
+quiet
+[exit 0]
+$ bin/fm-afk-contract.sh field reach_channels
+pinnace
+[exit 0]
+## 2. /afk entry with no words over the quiet record
+$ bin/fm-afk-contract.sh enter
+fm-afk-contract: quiet mode became the away posture; the quiet record is archived at /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.HYAJqH/state/afk-contracts/1790770469-superseded-1790770470.afk-contract
+Away posture recorded at 2026-09-30T12:14:30Z: the pinnace is the reach channel. Orders from your phone reach me while you are away, and anything that needs you is answered there. No away instructions were recorded; the away session acts on standing authority only. Destructive, irreversible, and security-sensitive actions are never pre-authorizable, whatever the words say. Expected return: not given. Spend cap: 4 concurrent workers.
+Away posture (recorded):
+  entered: 2026-09-30T12:14:30Z
+  expected return: not given
+  spend cap: 4 concurrent workers
+  reach: the pinnace is the reach channel. Orders from your phone reach me while you are away, and anything that needs you is answered there.
+  your words: (none)
+[exit 0]
+$ bin/fm-afk-contract.sh mode
+away
+[exit 0]
+$ bin/fm-afk-contract.sh field reach_channels
+pinnace
+[exit 0]
+$ bin/fm-afk-contract.sh readback
+Away posture (recorded):
+  entered: 2026-09-30T12:14:30Z
+  expected return: not given
+  spend cap: 4 concurrent workers
+  reach: the pinnace is the reach channel. Orders from your phone reach me while you are away, and anything that needs you is answered there.
+  your words: (none)
+[exit 0]
+## 3. adversarial: quiet entry over a standing away record must not turn it quiet
+$ env FM_AFK_MODE=quiet bin/fm-afk-contract.sh enter
+fm-afk-contract: away posture already recorded at 2026-09-30T12:14:30Z; a refresh leaves it untouched
+Away posture recorded at 2026-09-30T12:14:30Z: the pinnace is the reach channel. Orders from your phone reach me while you are away, and anything that needs you is answered there. No away instructions were recorded; the away session acts on standing authority only. Destructive, irreversible, and security-sensitive actions are never pre-authorizable, whatever the words say. Expected return: not given. Spend cap: 4 concurrent workers.
+Away posture (recorded):
+  entered: 2026-09-30T12:14:30Z
+  expected return: not given
+  spend cap: 4 concurrent workers
+  reach: the pinnace is the reach channel. Orders from your phone reach me while you are away, and anything that needs you is answered there.
+  your words: (none)
+[exit 0]
+$ bin/fm-afk-contract.sh mode
+away
+[exit 0]
+## 4. archive, then no-pinnace home: away record falls back to hold-for-return
+$ bin/fm-afk-contract.sh enter --words merge green PRs
+Away posture recorded at 2026-09-30T12:14:30Z: hold-for-return only. No phone channel is configured; anything that needs you waits for your return. Your away instructions are recorded verbatim; the away session will carry them out where it can. Destructive, irreversible, and security-sensitive actions are never pre-authorizable, whatever the words say. Expected return: not given. Spend cap: 4 concurrent workers.
+Away posture (recorded):
+  entered: 2026-09-30T12:14:30Z
+  expected return: not given
+  spend cap: 4 concurrent workers
+  reach: hold-for-return only. No phone channel is configured; anything that needs you waits for your return.
+  your words (verbatim):
+    merge green PRs
+[exit 0]
+$ bin/fm-afk-contract.sh field reach_channels
+none
+[exit 0]

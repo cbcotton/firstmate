@@ -1,0 +1,4 @@
+52c52
+<   : > "$root/config/supervision-host"
+---
+>   : # default-on variant: no config/supervision-host opt-in file
