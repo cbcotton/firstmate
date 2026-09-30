@@ -1,0 +1,44 @@
+## S5 adversarial: hand-edited partial/malformed model_settings refused by validate
+model_settings={"qwen-big":{"limit":{"context":131072}}}
+$ fm-sailor.sh validate
+sailor tiller model_settings for qwen-big limit must hold both context and output and nothing else, each a positive whole number
+[exit 1]
+model_settings={"qwen-big":{"limit":{}}}
+$ fm-sailor.sh validate
+sailor tiller model_settings for qwen-big limit must hold both context and output and nothing else, each a positive whole number
+[exit 1]
+model_settings={"qwen-big":{"limit":{"context":131072,"output":16384,"extra":1}}}
+$ fm-sailor.sh validate
+sailor tiller model_settings for qwen-big limit must hold both context and output and nothing else, each a positive whole number
+[exit 1]
+model_settings={"qwen-big":{"limit":{"context":1.5,"output":8}}}
+$ fm-sailor.sh validate
+sailor tiller model_settings for qwen-big limit must hold both context and output and nothing else, each a positive whole number
+[exit 1]
+model_settings={"qwen-big":{"options":{"stop":["x"]}}}
+$ fm-sailor.sh validate
+sailor tiller model_settings for qwen-big options must be an object of strings, numbers and booleans
+[exit 1]
+model_settings={"qwen-big":{"temperature":1}}
+$ fm-sailor.sh validate
+sailor tiller model_settings for qwen-big may hold only limit and options
+[exit 1]
+model_settings={"ghost":{"options":{"temperature":1}}}
+$ fm-sailor.sh validate
+sailor tiller model_settings names ghost, which its models do not list
+[exit 1]
+
+## S6 adversarial: set-model refuses malformed flags and writes nothing
+$ fm-sailor.sh set-model tiller qwen-big --model-limit 131072
+refused: --model-limit takes <context>:<output> and --model-options takes a JSON object
+[exit 1]
+$ fm-sailor.sh set-model tiller qwen-big --model-limit 0:8
+refused: sailor tiller model_settings for qwen-big limit must hold both context and output and nothing else, each a positive whole number
+[exit 1]
+$ fm-sailor.sh set-model tiller qwen-big --model-options [1]
+refused: sailor tiller model_settings for qwen-big options must be an object of strings, numbers and booleans
+[exit 1]
+$ fm-sailor.sh set-model tiller qwen-big --model-options not-json
+refused: --model-limit takes <context>:<output> and --model-options takes a JSON object
+[exit 1]
+crew-dispatch.json unchanged after refusals: yes

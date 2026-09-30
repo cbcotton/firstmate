@@ -1,0 +1,50 @@
+## S1 baseline: sailor without model_settings
+$ fm-sailor.sh validate
+[exit 0]
+$ fm-sailor.sh provider-json tiller qwen-coder
+{"tiller":{"npm":"@ai-sdk/openai-compatible","name":"Tiller","options":{"baseURL":"http://127.0.0.1:18765/v1"},"models":{"qwen-coder":{"name":"qwen-coder"}}}}
+[exit 0]
+
+## S2 set-model records limit + options
+$ fm-sailor.sh set-model tiller qwen-coder --model-limit 131072:16384 --model-options {"reasoningEffort":"medium","enable_thinking":true,"temperature":0.6,"top_p":0.95,"top_k":20}
+wrote config/crew-dispatch.json (previous copy: crew-dispatch.json.bak-20260930-151416)
+sailor tiller lists qwen-coder
+workers: the change applies from each worker's next spawn; running workers keep what they launched with
+[exit 0]
+persisted:
+{"qwen-coder":{"limit":{"context":131072,"output":16384},"options":{"reasoningEffort":"medium","enable_thinking":true,"temperature":0.6,"top_p":0.95,"top_k":20}}}
+$ fm-sailor.sh validate
+[exit 0]
+$ fm-sailor.sh provider-json tiller qwen-coder
+{"tiller":{"npm":"@ai-sdk/openai-compatible","name":"Tiller","options":{"baseURL":"http://127.0.0.1:18765/v1"},"models":{"qwen-coder":{"name":"qwen-coder","limit":{"context":131072,"output":16384},"options":{"reasoningEffort":"medium","enable_thinking":true,"temperature":0.6,"top_p":0.95,"top_k":20}}}}}
+[exit 0]
+
+## S3 per-field merge: options only
+$ fm-sailor.sh set-model tiller qwen-coder --model-options {"temperature":0.7}
+wrote config/crew-dispatch.json (previous copy: crew-dispatch.json.bak-20260930-151416-2)
+sailor tiller lists qwen-coder
+workers: the change applies from each worker's next spawn; running workers keep what they launched with
+[exit 0]
+{"qwen-coder":{"limit":{"context":131072,"output":16384},"options":{"temperature":0.7}}}
+
+## S4 swap model: --replace drops old settings, new settings attach
+$ fm-sailor.sh set-model tiller qwen-next --replace qwen-coder --model-limit 65536:8192 --model-options {"temperature":0.3}
+wrote config/crew-dispatch.json (previous copy: crew-dispatch.json.bak-20260930-151416-3)
+sailor tiller lists qwen-next in place of qwen-coder
+replaced tiller/qwen-coder with tiller/qwen-next in 1 profile(s)
+workers: the change applies from each worker's next spawn; running workers keep what they launched with
+[exit 0]
+{"models":["qwen-next"],"model_settings":{"qwen-next":{"limit":{"context":65536,"output":8192},"options":{"temperature":0.3}}},"default":{"harness":"opencode","sailor":"tiller","model":"qwen-next"}}
+$ fm-sailor.sh provider-json tiller qwen-next
+{"tiller":{"npm":"@ai-sdk/openai-compatible","name":"Tiller","options":{"baseURL":"http://127.0.0.1:18765/v1"},"models":{"qwen-next":{"name":"qwen-next","limit":{"context":65536,"output":8192},"options":{"temperature":0.3}}}}}
+[exit 0]
+$ fm-sailor.sh set-model tiller qwen-big --replace qwen-next
+wrote config/crew-dispatch.json (previous copy: crew-dispatch.json.bak-20260930-151416-4)
+sailor tiller lists qwen-big in place of qwen-next
+replaced tiller/qwen-next with tiller/qwen-big in 1 profile(s)
+workers: the change applies from each worker's next spawn; running workers keep what they launched with
+[exit 0]
+{"models":["qwen-big"],"model_settings":null}
+$ fm-sailor.sh provider-json tiller qwen-big
+{"tiller":{"npm":"@ai-sdk/openai-compatible","name":"Tiller","options":{"baseURL":"http://127.0.0.1:18765/v1"},"models":{"qwen-big":{"name":"qwen-big"}}}}
+[exit 0]

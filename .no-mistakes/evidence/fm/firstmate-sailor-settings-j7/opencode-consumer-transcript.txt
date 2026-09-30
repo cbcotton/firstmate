@@ -1,0 +1,8 @@
+## S7 real OpenCode 1.18.32 resolves the emitted settings (opencode debug config)
+OPENCODE_CONFIG_CONTENT={"autoupdate":false,"share":"disabled","model":"tiller/qwen-big","provider":{"tiller":{"npm":"@ai-sdk/openai-compatible","name":"Tiller","options":{"baseURL":"http://127.0.0.1:18765/v1"},"models":{"qwen-big":{"name":"qwen-big","limit":{"context":131072,"output":16384},"options":{"reasoningEffort":"medium","enable_thinking":true,"temperature":0.6,"top_k":20}}}}}}
+{"model":"tiller/qwen-big","tiller_model":{"name":"qwen-big","limit":{"context":131072,"output":16384},"options":{"reasoningEffort":"medium","enable_thinking":true,"temperature":0.6,"top_k":20}}}
+
+## S8 why the guard matters: OpenCode itself on a partial limit (what validate now refuses)
+[91m[1mError: [0mConfiguration is invalid at OPENCODE_CONFIG_CONTENT
+↳ Missing key provider.tiller.models.qwen-big.limit.output
+[exit ]
