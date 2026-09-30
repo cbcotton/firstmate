@@ -15,10 +15,13 @@
 # runs each new session's command in the background and records every call,
 # and a fake sandbox-exec records the profile it was given and runs the
 # command, so the launch shape is pinned on every platform. Where sandbox-exec
-# and tmux really run, one case starts the real session and proves that a
+# and tmux really run, two cases start the real session: one proves that a
 # command the first mate starts through tmux reaches nothing but the proxy and
-# cannot stop or rewrite it; the live egress audit
-# (tests/fm-privateer-egress-live-e2e.test.sh) runs the real OpenCode.
+# cannot stop or rewrite it, and one that a first mate running as opencode
+# detects its harness and owns the fleet lock while a plain shell in the same
+# session stays read-only. The live egress audit
+# (tests/fm-privateer-egress-live-e2e.test.sh) and session lock check
+# (tests/fm-privateer-session-lock-live-e2e.test.sh) run the real OpenCode.
 # docs/configuration.md ("Privateer quarantine") owns the contract.
 set -u
 

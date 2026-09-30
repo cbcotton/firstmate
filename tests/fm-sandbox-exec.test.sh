@@ -2,7 +2,8 @@
 # tests/fm-sandbox-exec.test.sh - bin/fm-sandbox-exec.sh: the Seatbelt profile
 # it renders, and, where macOS sandbox-exec is available, that a command run
 # inside it can write only where it was allowed and connect only where it was
-# allowed. docs/configuration.md ("Sailor sandbox") owns the contract.
+# allowed, while ps and stock macOS Bash here-documents still work there.
+# docs/configuration.md ("Sailor sandbox") owns the contract.
 set -u
 
 # shellcheck source=tests/lib.sh

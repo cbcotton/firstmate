@@ -26,8 +26,13 @@
 # The profile starts from the system default, then denies every file write and
 # every outbound network connection. Seatbelt lets a later rule win, so file
 # writes are allowed back in three layers, in this order:
-#   1. the caller's temporary directory ($TMPDIR, physical path), /dev/null, the
-#      terminal, the process's own file descriptors, and every --write directory;
+#   1. the caller's temporary directory ($TMPDIR, physical path), the files
+#      stock macOS Bash (3.2) creates for a here-document, /dev/null, the
+#      terminal, the process's own file descriptors, and every --write
+#      directory; that Bash ignores $TMPDIR for a here-document and writes it
+#      as /var/tmp/sh-thd* once it finds it may write /var/tmp, and otherwise
+#      in /tmp or the current directory, so the /var/tmp entry itself and
+#      those names are allowed and nothing else in /var/tmp is;
 #   2. every --deny-write path and --deny-write-regex match is denied again;
 #   3. every --write-prefix path is allowed again, so a caller can deny a whole
 #      directory and still expose the exact files it names.
@@ -38,7 +43,12 @@
 # any host.
 # With --confine-signals, a sandboxed process may signal only processes in the
 # same sandbox, so it cannot stop or signal anything the caller started outside.
-# Reads, process launches, and every other operation keep the system default.
+# Reads, process launches, and every other operation keep the system default,
+# except that macOS refuses a sandboxed process every setuid program. /bin/ps
+# is one, and without it nothing inside can read a process's name or parent,
+# which harness detection and the session lock need; so /bin/ps alone runs
+# outside the sandbox. It only reads process information and prints it to the
+# descriptors it inherits, and every other setuid program stays refused.
 # The sandbox therefore bounds where a sandboxed process can write and what it
 # can connect to; it does not stop it reading what the user can read, and it is
 # not a boundary against same-user system services that start programs outside
@@ -167,6 +177,7 @@ render_profile() {
   printf '%s\n' '(allow file-write*'
   printf '  (subpath "%s")\n' "$tmp"
   for p in "${WRITES[@]+"${WRITES[@]}"}"; do printf '  (subpath "%s")\n' "$p"; done
+  printf '%s\n' '  (literal "/private/var/tmp")' '  (regex #"^/private/var/tmp/sh-thd")'
   printf '%s\n' '  (literal "/dev/null")' '  (regex #"^/dev/tty")' '  (regex #"^/dev/fd/"))'
   if [ "${#DENIES[@]}" -gt 0 ] || [ "${#DENY_REGEXES[@]}" -gt 0 ]; then
     printf '%s\n' '(deny file-write*'
@@ -186,6 +197,7 @@ render_profile() {
     printf '(allow network-outbound (remote unix-socket (path-literal "%s")))\n' "$p"
   done
   [ "$CONFINE_SIGNALS" = 0 ] || printf '%s\n' '(deny signal)' '(allow signal (target same-sandbox))'
+  printf '%s\n' '(allow process-exec (literal "/bin/ps") (with no-sandbox))'
 }
 
 [ "$#" -ge 1 ] || usage
