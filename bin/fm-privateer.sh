@@ -9,6 +9,7 @@
 #
 # Usage:
 #   fm-privateer.sh check
+#   fm-privateer.sh inside
 #   fm-privateer.sh launch-env
 #   fm-privateer.sh start
 #   fm-privateer.sh attach
@@ -48,10 +49,18 @@
 #     anthropic.com, claude.ai, or claude.com; the egress proxy never allows
 #     such a host either.
 #
+# inside answers whether the calling process runs inside this home's Privateer
+# session, which is so when its TMUX names the session's socket. It exits 0,
+# silently, when it does; 3, silently, when config/privateer is absent, so there
+# is no session to be inside; and 1 otherwise, with one refusal line on stderr
+# that tells the caller to stop and hand back to the captain, who attaches with
+# `attach`, and names no socket or port the caller could drive. The OpenCode
+# seal plugin (.opencode/plugins/fm-privateer-seal.js) acts on that answer.
+#
 # launch-env prints the isolation assignments, one NAME=value per line, for
 # bin/fm-spawn.sh to export into every Privateer worker launch, and refuses
-# (exit 1) unless it runs inside this home's Privateer session (its TMUX names
-# the session's socket) and the session's egress proxy runs: XDG_CONFIG_HOME,
+# (exit 1) unless it runs inside this home's Privateer session, as inside
+# answers, and the session's egress proxy runs: XDG_CONFIG_HOME,
 # XDG_DATA_HOME, XDG_STATE_HOME, and XDG_CACHE_HOME under
 # state/privateer/opencode/, so the captain's own OpenCode config, logins,
 # sessions, and cache are invisible; OPENCODE_DISABLE_AUTOUPDATE=1;
@@ -163,8 +172,9 @@
 # FM_PROJECTS_OVERRIDE resolve the home exactly as the other bin/ scripts do. With FM_TEST_SEAM=1, FM_PRIVATEER_PRIMARY names a command to launch in
 # place of opencode, so a test can prove the launch environment with a stub.
 #
-# Exit status: 0 success, 1 refused (a violation, a missing prerequisite, or
-# work in flight), 2 usage or configuration error.
+# Exit status: 0 success, 1 refused (a violation, a missing prerequisite, work
+# in flight, or, for inside, a caller outside the session), 2 usage or
+# configuration error, 3 (inside only) no config/privateer.
 set -u
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -182,7 +192,7 @@ POOL="$STATE/privateer/treehouse"
 FORBIDDEN_NAME_RE='^(ANTHROPIC_[A-Za-z0-9_]*|CLAUDE_[A-Za-z0-9_]*|CLAUDECODE)$'
 
 usage() {
-  echo "usage: fm-privateer.sh check | launch-env | start | attach | stop" >&2
+  echo "usage: fm-privateer.sh check | inside | launch-env | start | attach | stop" >&2
   exit 2
 }
 
@@ -408,6 +418,14 @@ tmux_socket_path() {  # <socket-name>
 
 session_running() {  # <socket-name>
   tmux -L "$1" has-session -t "$SESSION" 2>/dev/null
+}
+
+# inside_session: whether this process runs inside this home's Privateer
+# session, whose server sets TMUX to <socket path>,<pid>,<index>.
+inside_session() {
+  local tmux_socket=${TMUX:-}
+  tmux_socket=${tmux_socket%%,*}
+  [ "${tmux_socket##*/}" = "$(socket_name)" ]
 }
 
 # forge_origins: one `<host>:<port>\t<repo>` line per forge origin: the origin
@@ -711,13 +729,16 @@ case "$cmd" in
     [ "$#" -eq 0 ] || usage
     cmd_check
     ;;
+  inside)
+    [ "$#" -eq 0 ] || usage
+    active || exit 3
+    inside_session ||
+      refuse "this is a sealed Privateer home, and this process runs outside its session, so it may act on nothing here; stop, and tell the captain to attach with bin/fm-privateer.sh attach and give the ask to the Privateer first mate there; never drive the Privateer session from outside"
+    ;;
   launch-env)
     [ "$#" -eq 0 ] || usage
-    socket=$(socket_name)
-    tmux_socket=${TMUX:-}
-    tmux_socket=${tmux_socket%%,*}
-    [ "${tmux_socket##*/}" = "$socket" ] ||
-      refuse "launch-env runs only inside the Privateer session (tmux socket $socket), whose sandbox every worker inherits"
+    inside_session ||
+      refuse "launch-env runs only inside the Privateer session (tmux socket $(socket_name)), whose sandbox every worker inherits"
     cmd_launch_env
     ;;
   start) cmd_start "$@" ;;
