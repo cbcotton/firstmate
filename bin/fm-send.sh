@@ -11,6 +11,8 @@
 # before anything is marked, recorded, or typed, because an empty marked
 # secondmate request delivers only marker and correlation bytes and leaves the
 # parent waiting on a reply to nothing.
+# A sealed Privateer home refuses every send (exit 2) from outside its session
+# (bin/fm-privateer-lib.sh).
 # Special keys instead of text: fm-send.sh <target> --key Enter
 # Key support is backend-specific: tmux/herdr support Escape, Enter, and C-c;
 # Orca currently supports Enter and C-c only, and rejects Escape.
@@ -240,6 +242,9 @@ if [ ! -d "$STATE" ]; then
   echo "error: state dir '$STATE' is missing; fm-send cannot resolve targets for FM_HOME '$FM_HOME'" >&2
   exit 1
 fi
+# shellcheck source=bin/fm-privateer-lib.sh
+. "$SCRIPT_DIR/fm-privateer-lib.sh"
+fm_privateer_refuse_outside "$FM_HOME" "${FM_CONFIG_OVERRIDE:-$FM_HOME/config}"
 
 # shellcheck source=bin/fm-backend.sh
 . "$SCRIPT_DIR/fm-backend.sh"

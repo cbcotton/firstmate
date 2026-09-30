@@ -45,7 +45,9 @@
 #     cannot be read (bin/fm-tasks-axi-lib.sh owns that diagnostic);
 #   - a markdown `<data>/backlog.md` that is itself a symlink, because the
 #     first write would replace the link with a private copy, exactly the fork
-#     this command exists to prevent. Lifecycle transitions refuse the same file.
+#     this command exists to prevent. Lifecycle transitions refuse the same file;
+#   - a sealed Privateer home, from outside its session
+#     (bin/fm-privateer-lib.sh).
 # Otherwise the exit status is tasks-axi's own.
 set -u
 
@@ -77,6 +79,10 @@ case "${1:-}" in
     exit 0
     ;;
 esac
+
+# shellcheck source=bin/fm-privateer-lib.sh disable=SC1091
+. "$SCRIPT_DIR/fm-privateer-lib.sh"
+fm_privateer_refuse_outside "$FM_HOME" "${FM_CONFIG_OVERRIDE:-$FM_HOME/config}"
 
 CALLER_DIR=$(pwd)
 

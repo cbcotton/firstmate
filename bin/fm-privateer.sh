@@ -50,8 +50,9 @@
 #
 # launch-env prints the isolation assignments, one NAME=value per line, for
 # bin/fm-spawn.sh to export into every Privateer worker launch, and refuses
-# (exit 1) unless it runs inside this home's Privateer session (its TMUX names
-# the session's socket) and the session's egress proxy runs: XDG_CONFIG_HOME,
+# (exit 1) unless it runs inside this home's Privateer session (the test
+# bin/fm-privateer-lib.sh owns, which also gates the home's other scripts) and
+# the session's egress proxy runs: XDG_CONFIG_HOME,
 # XDG_DATA_HOME, XDG_STATE_HOME, and XDG_CACHE_HOME under
 # state/privateer/opencode/, so the captain's own OpenCode config, logins,
 # sessions, and cache are invisible; OPENCODE_DISABLE_AUTOUPDATE=1;
@@ -73,7 +74,7 @@
 # first-mate line in config/privateer, and while the session already runs. It
 # probes the first mate's sailor with bin/fm-sailor.sh check, starts the egress
 # proxy, refusing and starting nothing else if the proxy cannot bind, then
-# starts a dedicated tmux server (socket fm-privateer-<home hash>) inside
+# starts a dedicated tmux server (the socket bin/fm-privateer-lib.sh names) inside
 # bin/fm-sandbox-exec.sh, whose session `privateer` runs the OpenCode primary
 # in window `firstmate`, in this checkout with FM_HOME set to this home. The
 # server, and again the primary itself, start from an empty environment plus
@@ -93,8 +94,9 @@
 # The sandbox holds the tmux server itself, so every pane and every command
 # started in the session inherits it: the first mate, each worker and its pane
 # shell, and anything the first mate asks tmux to run. Everything inside may
-# write only to this home, this checkout's .opencode/ scratch, firstmate's
-# per-task temp roots under /tmp/fm-*, and the server's own socket. Workers'
+# write only to this home, this checkout's .opencode/ scratch, the shared
+# temporary namespaces the remaining limits below name, and the server's own
+# socket. Workers'
 # copies live in this home's own Treehouse pool, state/privateer/treehouse,
 # which launch-env names as TREEHOUSE_ROOT, so treehouse creates and hands out
 # slots there; the shared pool under ~/.treehouse, and every other home's
@@ -121,7 +123,10 @@
 # It may connect only to the egress proxy, the DNS resolver, and that socket,
 # so a client that ignores the proxy variables reaches nothing remote at all,
 # and may signal only processes inside the same sandbox, so it can neither
-# stop the proxy nor rewrite its record.
+# stop the proxy nor rewrite its record. Process information stays readable,
+# as bin/fm-sandbox-exec.sh states, so the first mate finds its own OpenCode
+# process and owns this home's session lock, while a plain shell started in
+# the session finds no harness and stays read-only.
 #
 # Remaining limits, by design:
 #   - macOS cannot apply a second sandbox inside the first, so one session
@@ -130,9 +135,10 @@
 #   - a worker can therefore still write what the first mate's own fm-spawn
 #     and fm-permission-grant write from inside it: the task records
 #     state/<id>.meta and the grant ledger state/permission-grants.jsonl;
-#   - the per-task temp roots under /tmp/fm-*, and the user's own temporary
-#     directory ($TMPDIR), are namespaces shared by every home on this
-#     machine;
+#   - the per-task temp roots under /tmp/fm-*, the user's own temporary
+#     directory ($TMPDIR), and the flat here-document files stock macOS
+#     Bash writes directly in /var/tmp as sh-thd* are namespaces shared by
+#     every home on this machine;
 #   - clones under projects/ are added, moved, and removed outside the
 #     session, and a worktree the session creates in its own pool is meant
 #     for use only inside it;
@@ -173,6 +179,8 @@ FM_HOME="${FM_HOME:-${FM_ROOT_OVERRIDE:-$FM_ROOT}}"
 STATE="${FM_STATE_OVERRIDE:-$FM_HOME/state}"
 CONFIG="${FM_CONFIG_OVERRIDE:-$FM_HOME/config}"
 PROJECTS="${FM_PROJECTS_OVERRIDE:-$FM_HOME/projects}"
+# shellcheck source=bin/fm-privateer-lib.sh
+. "$SCRIPT_DIR/fm-privateer-lib.sh"
 FLAG="$CONFIG/privateer"
 DISPATCH="$CONFIG/crew-dispatch.json"
 SESSION=privateer
@@ -392,14 +400,7 @@ cmd_launch_env() {
 
 # socket_name: one tmux server per Privateer home, keyed by the home's path.
 socket_name() {
-  local root hash
-  root=$(cd "$FM_HOME" 2>/dev/null && pwd -P) || root=$FM_HOME
-  if command -v shasum >/dev/null 2>&1; then
-    hash=$(printf '%s' "$root" | shasum -a 256 | cut -c1-12)
-  else
-    hash=$(printf '%s' "$root" | sha256sum | cut -c1-12)
-  fi
-  printf 'fm-privateer-%s\n' "$hash"
+  fm_privateer_socket_name "$FM_HOME"
 }
 
 tmux_socket_path() {  # <socket-name>
@@ -713,11 +714,8 @@ case "$cmd" in
     ;;
   launch-env)
     [ "$#" -eq 0 ] || usage
-    socket=$(socket_name)
-    tmux_socket=${TMUX:-}
-    tmux_socket=${tmux_socket%%,*}
-    [ "${tmux_socket##*/}" = "$socket" ] ||
-      refuse "launch-env runs only inside the Privateer session (tmux socket $socket), whose sandbox every worker inherits"
+    fm_privateer_inside_session "$FM_HOME" ||
+      refuse "launch-env runs only inside the Privateer session, whose sandbox every worker inherits; $FM_PRIVATEER_SEALED_REFUSAL"
     cmd_launch_env
     ;;
   start) cmd_start "$@" ;;

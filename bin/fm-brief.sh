@@ -127,6 +127,8 @@
 # `fm-project-mode.sh --registered`: a home with config/privateer refuses an
 # unregistered name, and any other home prints one warning line and continues,
 # because homes legitimately brief repos they have not registered.
+# Refuses (exit 2) in a sealed Privateer home outside its session
+# (bin/fm-privateer-lib.sh).
 set -eu
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -187,6 +189,9 @@ else
 fi
 CONFIG="${FM_CONFIG_OVERRIDE:-$FM_HOME/config}"
 case "$CONFIG" in /*) ;; *) CONFIG="$PWD/$CONFIG" ;; esac
+# shellcheck source=bin/fm-privateer-lib.sh
+. "$SCRIPT_DIR/fm-privateer-lib.sh"
+fm_privateer_refuse_outside "$FM_HOME" "$CONFIG"
 KIND=ship
 HERDR_LAB=0
 NO_PROJECTS=0

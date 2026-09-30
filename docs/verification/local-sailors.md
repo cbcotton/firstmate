@@ -137,4 +137,28 @@ Facts the quarantine design depends on:
 - The launcher's allowlist is what keeps a credential out: the live run set a decoy `ANTHROPIC_API_KEY` in the launcher's environment and recorded no attempt to use it, and `tests/fm-privateer.test.sh` pins the exact environment a stub first mate receives, with no `ANTHROPIC_*`, `CLAUDE_*`, or `CLAUDECODE` name in it.
 - The two refused destinations are OpenCode's own startup traffic, not firstmate's; both were denied and the primary still answered its first turn.
 
+## A Privateer first mate owns its session lock
+
+Verified 2026-09-30 on macOS 26.6 with OpenCode 1.18.33, tmux 3.7c, and stock `/bin/bash` 3.2.57 as the scripts' Bash, by `FM_PRIVATEER_SESSION_LOCK_LIVE=1 tests/fm-privateer-session-lock-live-e2e.test.sh`, the session lock check that `../configuration.md` ("Privateer quarantine") names.
+The check ran `bin/fm-privateer.sh start` for real, with a throwaway home, a fixture clone of the checkout outside the home and outside every path the session may write, and a scripted sailor on a loopback port whose one tool call had the real OpenCode first mate run `bin/fm-session-start.sh` through its shell tool.
+
+| Observation | Result |
+| --- | --- |
+| Session start's lock section | `lock acquired: harness pid <pid>`, where the pid ran `opencode` |
+| Session start's harness line | `primary harness: opencode`, with no read-only banner |
+| A plain shell opened with `tmux new-window` in the same session | `bin/fm-harness.sh` printed `unknown` and `bin/fm-lock.sh` refused with `error: cannot locate harness process in ancestry`, leaving the first mate's lock in place |
+| When session start ran | 86 seconds after start, answering the prompt the check typed into the pane |
+
+The same check against the sandbox profile without the two allowances below reproduced the read-only start: `error: cannot locate harness process in ancestry`, `READ-ONLY SESSION - FLEET LOCK OWNERSHIP WAS NOT VERIFIED`, and `primary harness: unknown`.
+
+Facts the fix depends on:
+
+- `/bin/ps` is setuid root, and `sandbox-exec` refuses to run it under every profile, even `(version 1)(allow default)`: `execvp() of '/bin/ps' failed: Operation not permitted`.
+- `(allow process-exec (literal "/bin/ps") (with no-sandbox))` lets `/bin/ps` run, while `/usr/bin/top`, another setuid program, stays refused.
+- OpenCode 1.18.33's shell tool runs each command under the user's shell (`/bin/zsh` here) as a child of the `opencode` process, so `bin/fm-harness.sh ancestry` reported `comm opencode` once `ps` could run.
+- Stock macOS Bash 3.2.57 ignores `$TMPDIR` for a here-document: with only `$TMPDIR` writable, `cat <<EOF` failed with `cannot create temp file for here document: Operation not permitted`.
+- That Bash writes a here-document as a flat file `/var/tmp/sh-thd*` once it may write the `/var/tmp` entry itself, and otherwise falls back to `/tmp` and then the current directory; allowing both the `/var/tmp` entry and entries named `sh-thd*` directly in it, with nothing beneath them, was enough, and either alone was not.
+- With `ps` allowed but here-documents still refused, a first mate whose current directory the session could not write detected `opencode` but still could not take the lock, because `bin/fm-session-lock-lib.sh` reads the ancestry through here-documents.
+- `tests/fm-sandbox-exec.test.sh` re-proves both allowances against the real sandbox, and `tests/fm-privateer.test.sh` re-proves the whole lock path in a real session with a stub first mate running as `opencode`, both without a model.
+
 Refresh this record by repeating the runs above after an OpenCode or model-server upgrade.
