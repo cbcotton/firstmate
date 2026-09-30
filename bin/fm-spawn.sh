@@ -810,13 +810,8 @@ for a in "$@"; do
     TRACEPARENT_SET=1
     ;;
   --*)
-    case "$a" in
-    *' '*) POS+=("$a") ;; # a raw launch command, the unverified-adapter escape hatch
-    *)
-      echo "error: unknown flag '$a'; accepted flags: --scout --secondmate --relaunch --harness --model --effort --sailor --backend --mode --yolo --branch-prefix --traceparent (the project is a positional argument, never a flag)" >&2
-      exit 1
-      ;;
-    esac
+    echo "error: unknown flag '$a'; accepted flags: --scout --secondmate --relaunch --harness --model --effort --sailor --backend --mode --yolo --branch-prefix --traceparent (the project is a positional argument, never a flag)" >&2
+    exit 1
     ;;
   *) POS+=("$a") ;;
   esac

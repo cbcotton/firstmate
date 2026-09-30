@@ -75,6 +75,11 @@ test_unknown_flag_is_refused_not_read_as_harness() {
   status=$?
   [ "$status" -ne 0 ] || fail "a trailing unknown flag should be refused"
   assert_contains "$out" "unknown flag '--project'" "trailing flag not refused as unknown"
+  out=$(spawn_in "$rec" "$id" alpha '--project alpha' --mode no-mistakes --yolo off)
+  status=$?
+  [ "$status" -ne 0 ] || fail "a quoted '--project alpha' argument should be refused"
+  assert_contains "$out" "unknown flag '--project alpha'" "a -- argument with a space was not refused as unknown"
+  case "$out" in *"unknown harness"*|*"spawned $id"*) fail "the spaced flag was read as a harness: $out" ;; esac
   pass "fm-spawn.sh: an unknown --flag is refused with the accepted list, never read as a harness"
 }
 
@@ -128,8 +133,37 @@ test_brief_refuses_keyword_ids_and_unknown_flags() {
   out=$(FM_HOME="$home" "$ROOT/bin/fm-brief.sh" ship alpha --mode no-mistakes 2>&1)
   [ $? -ne 0 ] || fail "a task id of ship should be refused"
   assert_contains "$out" "did you mean" "brief did not offer a correction for ship"
+  for kw in scout ship secondmate; do
+    out=$(FM_HOME="$home" "$ROOT/bin/fm-brief.sh" "$kw" my-task alpha 2>&1)
+    [ $? -ne 0 ] || fail "a verb-first '$kw' call without --mode should be refused"
+    assert_contains "$out" "did you mean" "verb-first '$kw' without --mode did not offer a correction"
+    case "$out" in *"require --mode"*|*"applies only to"*) fail "a mode error preceded the keyword refusal: $out" ;; esac
+  done
   [ ! -e "$home/data/scout" ] && [ ! -e "$home/data/ship" ] || fail "a refused brief left a scaffold behind"
   pass "fm-brief.sh: keyword task ids and unknown flags are refused with a correction, writing nothing"
+}
+
+test_brief_checks_repo_name_against_registry() {
+  local home out status
+  home="$TMP_ROOT/brief-registry"
+  mkdir -p "$home/data" "$home/config"
+  printf '%s\n' '- alpha [no-mistakes] - x (added 2026-01-01)' > "$home/data/projects.md"
+  out=$(FM_HOME="$home" "$ROOT/bin/fm-brief.sh" reg-ok alpha --mode no-mistakes 2>&1)
+  expect_code 0 $? "a registered repo should scaffold: $out"
+  case "$out" in *warn:*) fail "a registered repo drew a warning: $out" ;; esac
+  out=$(FM_HOME="$home" "$ROOT/bin/fm-brief.sh" reg-warn nosuchrepo --mode no-mistakes 2>&1 >/dev/null)
+  expect_code 0 $? "an ordinary home should brief an unregistered repo: $out"
+  [ "$(printf '%s\n' "$out" | grep -c 'not a registered project')" -eq 1 ] || fail "expected one warning line, got: $out"
+  [ -f "$home/data/reg-warn/brief.md" ] || fail "the warned brief was not written"
+  : > "$home/config/privateer"
+  out=$(FM_HOME="$home" "$ROOT/bin/fm-brief.sh" reg-refuse nosuchrepo --scout 2>&1)
+  status=$?
+  [ "$status" -ne 0 ] || fail "a Privateer home should refuse an unregistered repo"
+  assert_contains "$out" "not a registered project" "Privateer refusal did not name the registry"
+  [ ! -e "$home/data/reg-refuse" ] || fail "a refused Privateer brief left a scaffold behind"
+  out=$(FM_HOME="$home" "$ROOT/bin/fm-brief.sh" reg-priv alpha --scout 2>&1)
+  expect_code 0 $? "a Privateer home should brief a registered repo: $out"
+  pass "fm-brief.sh: an unregistered repo warns in an ordinary home and is refused in a Privateer home"
 }
 
 test_registered_name_resolves_to_its_clone
@@ -138,5 +172,6 @@ test_unknown_flag_is_refused_not_read_as_harness
 test_privateer_home_refuses_directory_outside_projects
 test_project_mode_registered_query
 test_brief_refuses_keyword_ids_and_unknown_flags
+test_brief_checks_repo_name_against_registry
 
 echo "# all fm-spawn-project-name tests passed"

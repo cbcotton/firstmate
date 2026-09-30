@@ -123,6 +123,10 @@
 # Also refuses an unknown --flag (the project is the second positional argument,
 # never a flag) and a task id that is a keyword such as scout, ship, or mode,
 # which means the arguments were given in the wrong shape.
+# The <repo-name> of a ship or scout brief is checked with
+# `fm-project-mode.sh --registered`: a home with config/privateer refuses an
+# unregistered name, and any other home prints one warning line and continues,
+# because homes legitimately brief repos they have not registered.
 set -eu
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -236,6 +240,14 @@ for a in "$@"; do
 done
 [ -z "$want_value" ] || { echo "error: --$want_value requires a value" >&2; exit 1; }
 
+# A task id that is really a verb or a flag word means the arguments were given
+# in the wrong shape; name the right one instead of a misleading downstream error.
+case "${POS[0]:-}" in
+  scout|ship|secondmate|mode|forge|shape|yolo|project|herdr-lab|no-projects|branch-prefix)
+    echo "error: '${POS[0]}' is a keyword, not a task id; did you mean: fm-brief.sh <task-id> <repo-name> --mode <mode>  (or --scout for a scout brief)?" >&2
+    exit 1 ;;
+esac
+
 # Ship delivery mode is an explicit per-task decision (AGENTS.md section 7). A
 # missing or invalid value stops the scaffold rather than silently defaulting.
 if [ "$KIND" = ship ]; then
@@ -287,19 +299,26 @@ elif [ "$FORGE_SET" -eq 1 ] || [ "$SHAPE_SET" -eq 1 ]; then
   exit 1
 fi
 ID=${POS[0]}
-# A task id that is really a verb or a flag word means the arguments were given
-# in the wrong shape; name the right one instead of a misleading downstream error.
-case "$ID" in
-  scout|ship|secondmate|mode|forge|shape|yolo|project|herdr-lab|no-projects|branch-prefix)
-    echo "error: '$ID' is a keyword, not a task id; did you mean: fm-brief.sh <task-id> <repo-name> --mode <mode>  (or --scout for a scout brief)?" >&2
-    exit 1 ;;
-esac
 BRANCH="$BRANCH_PREFIX$ID"
 if ! git check-ref-format --branch "$BRANCH" >/dev/null 2>&1; then
   echo "error: --branch-prefix and task id must form a valid git branch (got '$BRANCH')" >&2
   exit 1
 fi
 printf -v BRANCH_Q '%q' "$BRANCH"
+
+# The repo name is checked against the registry before anything is written. A
+# sealed Privateer home works only on registered projects, so it refuses an
+# unregistered name; any other home may brief an unregistered repo and only warns.
+if [ "$KIND" != secondmate ]; then
+  REPO=${POS[1]}
+  if ! FM_HOME="$FM_HOME" FM_DATA_OVERRIDE="$DATA" "$SCRIPT_DIR/fm-project-mode.sh" --registered "$REPO"; then
+    if [ -e "$CONFIG/privateer" ] || [ -L "$CONFIG/privateer" ]; then
+      echo "error: '$REPO' is not a registered project in $DATA/projects.md; a Privateer home briefs only registered projects" >&2
+      exit 1
+    fi
+    echo "warn: '$REPO' is not a registered project in $DATA/projects.md; briefing it anyway" >&2
+  fi
+fi
 
 if [ "$KIND" = secondmate ] && [ "$HERDR_LAB" -eq 1 ]; then
   echo "error: --herdr-lab applies only to crewmate ship or scout briefs" >&2
@@ -469,8 +488,6 @@ else
 fi
 exit 0
 fi
-
-REPO=${POS[1]}
 
 if [ "$HERDR_LAB" -eq 1 ]; then
 HERDR_LAB_HELPER=$(shell_quote "$FM_ROOT/bin/fm-herdr-lab.sh")
