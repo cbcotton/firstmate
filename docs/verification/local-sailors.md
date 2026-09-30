@@ -161,4 +161,28 @@ Facts the fix depends on:
 - With `ps` allowed but here-documents still refused, a first mate whose current directory the session could not write detected `opencode` but still could not take the lock, because `bin/fm-session-lock-lib.sh` reads the ancestry through here-documents.
 - `tests/fm-sandbox-exec.test.sh` re-proves both allowances against the real sandbox, and `tests/fm-privateer.test.sh` re-proves the whole lock path in a real session with a stub first mate running as `opencode`, both without a model.
 
+## The seal plugin holds against the real OpenCode
+
+Verified 2026-09-30 on macOS 26.6 with OpenCode 1.18.33 by `tests/fm-privateer-seal-live-e2e.test.sh`, which runs by default wherever `opencode` is installed because its model is a scripted OpenAI-compatible server on a loopback port.
+Its home is a fixture clone of the checkout, with the working tree's scripts and plugins and a `config/privateer`, and its OpenCode directories are isolated under the fixture.
+Outside the session it runs `opencode run` with no `TMUX`, and inside it runs `opencode serve` with `TMUX` naming the home's socket and sends two captain messages with `opencode run --attach`.
+The probe `bin/fm-seal-probe.sh` writes its refusal to stderr, as the real firstmate scripts do, and counts its runs.
+
+| Observation | Result |
+| --- | --- |
+| Outside: the bash tool (`touch outside-probe`) and the read tool | Both refused; the tool result the model received was the launcher's refusal, and the file was not created |
+| Outside: the `privateer-seal` line | Reached the model as a user message carrying the launcher's refusal; the session-start nudge arrived beside it |
+| Inside: `tmux -L <other> list-sessions` | Refused with the seal's tmux refusal |
+| Inside: three runs of the probe | Each result the model received began with the probe's stderr refusal, and the third ended with the budget message |
+| Inside: a fourth run in the same captain turn | Refused with the budget message; the probe did not run |
+| Inside: one run after the next captain message | Ran, as the probe's fourth run |
+
+Facts the seal depends on:
+
+- `tool.execute.before` blocks every tool by throwing, not only bash, and the thrown message is the tool result the model sees.
+- The bash tool's result carries the command's stderr, so a refusal written to stderr is what `tool.execute.after` reads.
+- A plugin that changes `output.output` in `tool.execute.after` changes the tool result the model receives.
+- `chat.message` fires for a captain message sent to a running session, and the plugin's state lives in the OpenCode server process across messages.
+- `session.created` fires under `opencode run`, and a `promptAsync` from it reaches the model within the same run.
+
 Refresh this record by repeating the runs above after an OpenCode or model-server upgrade.

@@ -344,6 +344,260 @@ GIT_SSH_COMMAND=ssh -o ProxyCommand='/usr/bin/nc -X connect -x 127.0.0.1:18080 %
   pass "launch-env points every OpenCode directory inside the home, turns auto-update off, names the egress proxy, and refuses outside the session or without the proxy"
 }
 
+test_inside_answers_for_the_session() {
+  local home out status socket
+  home=$(make_home inside)
+  socket=$(session_socket "$home")
+  out=$(FM_HOME="$home" TMUX="/private/tmp/tmux-501/$socket,1,0" "$PRIVATEER" inside 2>&1)
+  status=$?
+  expect_code 0 "$status" "inside must answer yes inside the session: $out"
+  [ -z "$out" ] || fail "inside must be silent inside the session, got: $out"
+  for tmux in '' /tmp/tmux-501/default,1,0 "/tmp/tmux-501/$socket-other,1,0"; do
+    out=$(FM_HOME="$home" TMUX="$tmux" "$PRIVATEER" inside 2>&1)
+    status=$?
+    expect_code 1 "$status" "inside must answer no outside the session (TMUX '$tmux')"
+    assert_contains "$out" "fm-privateer: refused: this is a sealed Privateer home, and this process runs outside its session" "the refusal must say the home is sealed"
+    assert_contains "$out" "tell the captain to attach with bin/fm-privateer.sh attach" "the refusal must hand back to the captain"
+  done
+  assert_not_contains "$out" "$socket" "the refusal must not name the session's socket"
+  assert_not_contains "$out" "/tmp" "the refusal must name no path the caller could drive"
+  rm "$home/config/privateer"
+  out=$(FM_HOME="$home" TMUX='' "$PRIVATEER" inside 2>&1)
+  status=$?
+  expect_code 3 "$status" "inside must answer 3 without config/privateer"
+  [ -z "$out" ] || fail "inside must be silent without config/privateer, got: $out"
+  pass "inside answers yes only for the session's own socket, refuses outside it with a step back to the captain that names no socket, and answers 3 in a home with no quarantine"
+}
+
+# --- seal plugin -------------------------------------------------------------
+
+SEAL_PLUGIN="$ROOT/.opencode/plugins/fm-privateer-seal.js"
+
+# seal_checkout <dir>: <dir> as a fixture checkout, its bin/ this checkout's.
+seal_checkout() {
+  mkdir -p "$1"
+  ln -sfn "$ROOT/bin" "$1/bin"
+}
+
+# seal_node <checkout> <FM_HOME, or empty for none> <TMUX value, or empty for
+# none>: runs the JavaScript on stdin after a preamble that loads the real seal
+# plugin for the fixture <checkout> with a fake OpenCode client recording every
+# prompt, from a process with that FM_HOME and TMUX, so the real
+# bin/fm-privateer.sh inside decides the seal. The body sees
+# `hooks`, `prompts`, `throws(hook, input, output)` (the thrown message or
+# ""), `cli(args, input)` for bin/fm-operational-input.sh, and `check`; its
+# output lands in $SEAL_OUT, because Bash 3.2 cannot parse a heredoc with an
+# unbalanced quote inside a command substitution.
+SEAL_OUT="$TMP_ROOT/seal-case.out"
+seal_node() {
+  local checkout=$1 home=$2 tmux=$3 body
+  local -a env_args=(env -u TMUX -u FM_HOME)
+  body=$(cat)
+  {
+    cat <<'JS'
+import { spawnSync } from "node:child_process";
+import { pathToFileURL } from "node:url";
+const prompts = [];
+const client = { session: { promptAsync: async (request) => { prompts.push({ id: request.path.id, text: request.body.parts[0].text }); } } };
+const mod = await import(pathToFileURL(process.env.SEAL_PLUGIN).href);
+const hooks = await mod.FmPrivateerSeal({ client, directory: process.env.CHECKOUT, worktree: process.env.CHECKOUT });
+const throws = async (hook, input, output) => {
+  try {
+    await hooks[hook](input, output);
+    return "";
+  } catch (error) {
+    return error.message;
+  }
+};
+const cli = (args, input) => spawnSync(`${process.env.CHECKOUT}/bin/fm-operational-input.sh`, args, { input, encoding: "utf8" }).stdout;
+const check = (ok, what) => {
+  if (!ok) throw new Error(what);
+};
+JS
+    printf '%s\n' "$body"
+    echo 'console.log("seal-ok");'
+  } > "$TMP_ROOT/seal-case.mjs"
+  [ -z "$home" ] || env_args+=("FM_HOME=$home")
+  [ -z "$tmux" ] || env_args+=("TMUX=$tmux")
+  "${env_args[@]}" SEAL_PLUGIN="$SEAL_PLUGIN" CHECKOUT="$checkout" node "$TMP_ROOT/seal-case.mjs" > "$SEAL_OUT" 2>&1
+}
+
+# seal_ok <label>: fails unless the last seal_node case ran to its end.
+seal_ok() {
+  grep -q '^seal-ok$' "$SEAL_OUT" || fail "$1: $(cat "$SEAL_OUT")"
+}
+
+test_seal_is_inert_without_the_quarantine() {
+  local home
+  command -v node >/dev/null 2>&1 || { pass "seal plugin checks not run: node is not available"; return 0; }
+  home=$(make_home seal-off)
+  rm "$home/config/privateer"
+  seal_checkout "$home"
+  seal_node "$home" "$home" '' <<'JS' || fail "seal plugin without the quarantine: $(cat "$SEAL_OUT")"
+check(Object.keys(hooks).length === 0, `a home with no quarantine must get no hook, got ${Object.keys(hooks)}`);
+JS
+  seal_ok "seal plugin without the quarantine"
+  seal_node "$home" "$home" '' <<'JS' || fail "seal plugin without the launcher: $(cat "$SEAL_OUT")"
+const inert = await mod.FmPrivateerSeal({ client, directory: "/nonexistent-seal-root", worktree: "/nonexistent-seal-root" });
+check(Object.keys(inert).length === 0, "a checkout with no bin/fm-privateer.sh must get no hook");
+JS
+  seal_ok "seal plugin without the launcher"
+  pass "the seal plugin adds no hook in a home with no quarantine or a checkout with no launcher"
+}
+
+test_seal_stops_an_outside_session() {
+  local home
+  command -v node >/dev/null 2>&1 || { pass "seal plugin checks not run: node is not available"; return 0; }
+  home=$(make_home seal-outside)
+  seal_checkout "$home"
+  REFUSAL=$(env -u TMUX FM_HOME="$home" "$PRIVATEER" inside 2>&1)
+  export REFUSAL
+  seal_node "$home" "$home" '' <<'JS' || fail "seal plugin outside the session: $(cat "$SEAL_OUT")"
+const created = (id) => ({ event: { type: "session.created", properties: { sessionID: id, info: { id } } } });
+await hooks.event(created("outside-1"));
+await hooks.event(created("outside-1"));
+await hooks.event({ event: { type: "session.idle", properties: { sessionID: "outside-1" } } });
+check(prompts.length === 1 && prompts[0].id === "outside-1", `one session must be told once, got ${JSON.stringify(prompts)}`);
+check(cli(["kind"], prompts[0].text).trim() === "privateer-seal", `the injected line must be privateer-seal operational input: ${prompts[0].text}`);
+check(cli(["body"], prompts[0].text) === process.env.REFUSAL, `the injected line must carry the launcher's refusal: ${prompts[0].text}`);
+await hooks.event(created("outside-2"));
+check(prompts.length === 2 && prompts[1].id === "outside-2", "a second session must be told too");
+for (const [tool, args] of [["bash", { command: "echo hi" }], ["read", { filePath: "AGENTS.md" }], ["edit", {}], ["write", {}], ["glob", {}], ["grep", {}], ["task", {}], ["skill", {}], ["webfetch", {}]]) {
+  const message = await throws("tool.execute.before", { tool, sessionID: "outside-1", callID: tool }, { args });
+  check(message === process.env.REFUSAL, `the ${tool} tool must be refused with the launcher's refusal, got: ${message}`);
+}
+JS
+  seal_ok "seal plugin outside the session"
+  pass "outside the sealed session the plugin tells each session once, as privateer-seal operational input, to stop and hand back to the captain, and refuses every tool with the same words"
+}
+
+test_seal_checks_the_checkout_whatever_home_is_inherited() {
+  local home other sealed pair
+  command -v node >/dev/null 2>&1 || { pass "seal plugin checks not run: node is not available"; return 0; }
+  home=$(make_home seal-inherited)
+  seal_checkout "$home"
+  other=$(make_home seal-inherited-other)
+  rm "$other/config/privateer"
+  sealed=$(make_home seal-inherited-sealed)
+  for pair in "$other|" "$sealed|/private/tmp/tmux-501/$(session_socket "$sealed"),1,0"; do
+    seal_node "$home" "${pair%%|*}" "${pair#*|}" <<'JS' || fail "seal plugin with an inherited home: $(cat "$SEAL_OUT")"
+check(typeof hooks.event === "function", "an outside session in a sealed checkout must be sealed whatever home it inherits");
+const message = await throws("tool.execute.before", { tool: "bash", sessionID: "o", callID: "c" }, { args: { command: "echo hi" } });
+check(message.includes("runs outside its session"), `every tool must be refused, got: ${message}`);
+JS
+    seal_ok "seal plugin with an inherited home ${pair%%|*}"
+  done
+  pass "an outside session in a sealed checkout is sealed even when its inherited FM_HOME names another home, sealed or not"
+}
+
+test_seal_finds_the_session_of_a_checkout_outside_its_home() {
+  local home checkout
+  command -v node >/dev/null 2>&1 || { pass "seal plugin checks not run: node is not available"; return 0; }
+  home=$(make_home seal-outside-checkout)
+  checkout="$TMP_ROOT/seal-outside-checkout/checkout"
+  seal_checkout "$checkout"
+  seal_node "$checkout" "$home" "/private/tmp/tmux-501/$(session_socket "$home"),1,0" <<'JS' || fail "seal plugin in a checkout outside its home: $(cat "$SEAL_OUT")"
+check(!hooks.event && typeof hooks["tool.execute.after"] === "function", `a checkout outside its home must get the inside rules, got ${Object.keys(hooks)}`);
+const message = await throws("tool.execute.before", { tool: "bash", sessionID: "i", callID: "c" }, { args: { command: "tmux -L default list-sessions" } });
+check(message.includes("tmux reaches only this session's own server"), `the inside tmux rule must apply, got: ${message || "allowed"}`);
+JS
+  seal_ok "seal plugin in a checkout outside its home"
+  pass "a checkout outside its sealed home, with FM_HOME naming the home and TMUX its socket, gets the inside rules"
+}
+
+test_seal_keeps_the_session_on_its_own_tmux_server() {
+  local home
+  command -v node >/dev/null 2>&1 || { pass "seal plugin checks not run: node is not available"; return 0; }
+  home=$(make_home seal-tmux)
+  seal_checkout "$home"
+  seal_node "$home" "$home" "/private/tmp/tmux-501/$(session_socket "$home"),1,0" <<'JS' || fail "seal plugin tmux rule inside the session: $(cat "$SEAL_OUT")"
+check(!hooks.event, "inside the session the plugin must inject nothing");
+const bash = (command) => throws("tool.execute.before", { tool: "bash", sessionID: "inside", callID: "c" }, { args: { command } });
+for (const command of [
+  "tmux -L fm-privateer-0123456789ab send-keys -t privateer:firstmate 'bin/fm-spawn.sh x' Enter",
+  "tmux -S /private/tmp/tmux-501/default capture-pane -p",
+  "tmux -Lother list-sessions",
+  "TMUX= tmux send-keys -t firstmate hi",
+  "env -u TMUX tmux pipe-pane -t firstmate 'cat >> /tmp/x'",
+  "unset TMUX; tmux list-sessions",
+  "bash -c 'tmux -L default list-sessions'",
+  "echo $(tmux -S /tmp/tmux-501/default list-sessions)",
+]) {
+  const message = await bash(command);
+  check(message.includes("tmux reaches only this session's own server"), `'${command}' must be refused, got: ${message || "allowed"}`);
+}
+for (const command of [
+  "tmux send-keys -t fm-worker 'continue' Enter",
+  "tmux capture-pane -p -S -200 -t fm-worker",
+  "bin/fm-send.sh worker \"never use tmux -L\"",
+  "ls -la",
+]) {
+  const message = await bash(command);
+  check(message === "", `'${command}' must be allowed, got: ${message}`);
+}
+check(await throws("tool.execute.before", { tool: "read", sessionID: "inside", callID: "r" }, { args: { filePath: "AGENTS.md" } }) === "", "other tools must be allowed inside");
+JS
+  seal_ok "seal plugin tmux rule inside the session"
+  pass "inside the sealed session the plugin refuses a tmux command that names another server or changes TMUX, and allows the session's own tmux and every other tool"
+}
+
+test_seal_spends_the_refusal_budget() {
+  local home
+  command -v node >/dev/null 2>&1 || { pass "seal plugin checks not run: node is not available"; return 0; }
+  home=$(make_home seal-budget)
+  seal_checkout "$home"
+  seal_node "$home" "$home" "/private/tmp/tmux-501/$(session_socket "$home"),1,0" <<'JS' || fail "seal plugin refusal budget: $(cat "$SEAL_OUT")"
+const before = (session, command) => throws("tool.execute.before", { tool: "bash", sessionID: session, callID: "b" }, { args: { command } });
+const after = async (session, command, text) => {
+  const output = { title: command, output: text, metadata: {} };
+  await hooks["tool.execute.after"]({ tool: "bash", sessionID: session, callID: "a", args: { command } }, output);
+  return output.output;
+};
+const say = (session, text) => hooks["chat.message"]({ sessionID: session }, { message: {}, parts: [{ type: "text", text }] });
+const spawn = "bin/fm-spawn.sh pv-task projects/app --mode local-only";
+// A firstmate script that refuses twice, then succeeds, starts the count again.
+await after("s1", spawn, "error: unknown harness '--project'\n");
+await after("s1", spawn, "fm-privateer: refused: the Privateer session is not running\n");
+await after("s1", "bin/fm-tasks-axi.sh list", "Queued: 1\n");
+await after("s1", spawn, "error: one\n");
+await after("s1", spawn, "error: two\n");
+check(await before("s1", spawn) === "", "two refusals after a success must not spend the budget");
+// Refusals from other commands never count.
+await after("s1", "ls /nowhere", "error: no such file\n");
+check(await before("s1", spawn) === "", "a refusal from a non-firstmate command must not count");
+const third = await after("s1", spawn, "refused: sailor tiller is at capacity\n");
+check(third.startsWith("refused: sailor tiller is at capacity\n") && third.includes("three refusals in a row: stop, report the last refusal to the captain, and wait"),
+  `the result that spends the budget must carry the budget message: ${third}`);
+const blocked = await before("s1", spawn);
+check(blocked.includes("three refusals in a row") && blocked.includes("refused: sailor tiller is at capacity"), `the next firstmate script must be refused with the last refusal: ${blocked}`);
+check(await before("s1", "bin/fm-crew-state.sh") !== "", "every firstmate script must be refused once the budget is spent");
+check(await before("s1", "git status") === "", "other commands stay allowed while the budget is spent");
+for (const command of ["sed -n 1,80p bin/fm-spawn.sh", "grep -n refused bin/fm-spawn.sh", "cat bin/fm-*.sh", "ls bin/fm-*"]) {
+  check(await before("s1", command) === "", `'${command}' reads the scripts and must stay allowed while the budget is spent`);
+}
+check(await before("s1", "bash bin/fm-spawn.sh x") !== "", "a shell running a firstmate script must be refused once the budget is spent");
+check(await before("s1", "cd projects/app && ../../bin/fm-spawn.sh x") !== "", "a firstmate script after another command must be refused once the budget is spent");
+check(await before("s1", "sh -c 'bin/fm-spawn.sh x'") !== "", "a nested firstmate script must be refused once the budget is spent");
+check(await before("s2", spawn) === "", "another session keeps its own budget");
+// Firstmate's own operational input is not the captain.
+await say("s1", cli(["encode", "watcher"], "signal: pv-task"));
+check(await before("s1", spawn) !== "", "a watcher wake must not reset the budget");
+await say("s1", "try the other sailor");
+check(await before("s1", spawn) === "", "a captain message must reset the budget");
+// Reading a script between refusals neither counts nor starts the count again.
+await after("s3", spawn, "error: one\n");
+await after("s3", "sed -n 1,80p bin/fm-spawn.sh", "#!/usr/bin/env bash\n");
+await after("s3", spawn, "error: two\n");
+await after("s3", "grep -n refused bin/fm-spawn.sh", "12: refused\n");
+await after("s3", "cat bin/fm-spawn.sh", "error: in the script text\n");
+check(await before("s3", spawn) === "", "reading a script must not count as a refusal");
+const spent = await after("s3", spawn, "error: three\n");
+check(spent.includes("three refusals in a row"), `reading a script between refusals must not reset the budget: ${spent}`);
+JS
+  seal_ok "seal plugin refusal budget"
+  pass "inside the sealed session three refused firstmate scripts in a row stop every further firstmate script with the last refusal, a success starts the count again, and only a captain message, never Firstmate's own input, resets it"
+}
+
 # --- launcher ---------------------------------------------------------------
 
 test_start_refuses_without_the_flag() {
@@ -1189,6 +1443,13 @@ test_check_requires_the_dispatch_file
 test_check_refuses_anthropic_forges
 test_endpoint_rule
 test_launch_env_lives_inside_the_home
+test_inside_answers_for_the_session
+test_seal_is_inert_without_the_quarantine
+test_seal_stops_an_outside_session
+test_seal_keeps_the_session_on_its_own_tmux_server
+test_seal_checks_the_checkout_whatever_home_is_inherited
+test_seal_finds_the_session_of_a_checkout_outside_its_home
+test_seal_spends_the_refusal_budget
 test_start_refuses_without_the_flag
 test_start_refuses_with_a_forbidden_file
 test_start_refuses_without_a_first_mate_line
