@@ -1,0 +1,63 @@
+# Live Privateer session, recommended layout: <checkout>/forks/privateer is a clone of firstmate at fe03d19 and is itself FM_HOME
+## parent checkout 'git status --porcelain --untracked-files=all' with forks/privateer cloned inside: (empty)
+## bin/fm-privateer.sh start (real sandbox-exec, tmux, egress proxy, OpenCode 1.18.32 first mate on stand-in sailor tiller/coder):
+privateer: started session privateer on tmux socket fm-privateer-31e21e41d5cc (first mate tiller/coder, egress proxy 127.0.0.1:53041); attach with: FM_HOME='/private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-lab.GovhMX/main/forks/privateer' '/private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-lab.GovhMX/main/forks/privateer/bin/fm-privateer.sh' attach
+## first mate pane:
+                                                      ▄
+                     █▀▀█ █▀▀█ █▀▀█ █▀▀▄ █▀▀▀ █▀▀█ █▀▀█ █▀▀█
+                     █  █ █  █ █▀▀▀ █  █ █    █  █ █  █ █▀▀▀
+                     ▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀
+   ┃
+   ┃  Ask anything… "What is the tech stack of this project?"
+   ┃
+   ┃  Build · coder Tiller
+   ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                                                   tab agents  ctrl+p commands
+  /private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-lab.     1.18.32
+  GovhMX/main/forks/privateer
+## worker window (tmux new-window in the sandboxed session server) tamper probe:
+write-refused AGENTS.md
+write-refused CLAUDE.md
+write-refused CONTEXT.md
+write-refused opencode.json
+write-refused opencode.jsonc
+write-refused tui.json
+write-refused tui.jsonc
+write-refused .agents/skills/new/SKILL.md
+write-refused docs/new.md
+write-refused .claude/skills/new/SKILL.md
+write-refused .opencode/opencode.json
+write-refused .opencode/opencode.jsonc
+write-refused .opencode/tui.json
+write-refused .opencode/tui.jsonc
+write-refused .opencode/agent
+write-refused .opencode/agents
+write-refused .opencode/command
+write-refused .opencode/commands
+write-refused .opencode/mode
+write-refused .opencode/modes
+write-refused .opencode/plugin
+write-refused .opencode/plugins
+write-refused .opencode/skill
+write-refused .opencode/skills
+write-refused .opencode/tool
+write-refused .opencode/tools
+move-refused AGENTS.md
+move-refused .agents
+move-refused docs
+move-refused .opencode
+move-refused .claude
+move-refused .claude/skills
+rm-refused .claude/skills
+scratch-write-ok .opencode/scratch,.opencode/node_modules
+state-write-ok
+done
+## control: identical probe run outside the sandbox after stop (first lines):
+WRITE-ALLOWED AGENTS.md
+WRITE-ALLOWED CLAUDE.md
+WRITE-ALLOWED CONTEXT.md
+WRITE-ALLOWED opencode.json
+WRITE-ALLOWED opencode.jsonc
+WRITE-ALLOWED tui.json
+WRITE-ALLOWED tui.jsonc
+WRITE-ALLOWED .agents/skills/new/SKILL.md
