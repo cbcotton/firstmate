@@ -981,7 +981,7 @@ It can signal only processes inside the same sandbox, so nothing in the session 
 Process information stays readable, as the [sailor sandbox](#sailor-sandbox-configsailor-sandbox) describes, so the first mate's session start finds its own OpenCode process, names `opencode` as the primary harness, and owns the home's session lock, while a plain shell started in the session finds no harness and stays read-only.
 
 The home's own scripts act on it only from inside its session.
-`bin/fm-spawn.sh`, `bin/fm-tasks-axi.sh`, `bin/fm-brief.sh`, `bin/fm-send.sh`, `bin/fm-control.sh`, `bin/fm-captain-hold.sh`, `bin/fm-permission-grant.sh`, `bin/fm-merge-local.sh`, and `bin/fm-teardown.sh` each refuse from anywhere else before reading or writing anything, with exit status 2 and `this is a sealed Privateer home; attach with bin/fm-privateer.sh attach, and never drive its session from outside`.
+`bin/fm-spawn.sh`, `bin/fm-tasks-axi.sh`, `bin/fm-brief.sh`, `bin/fm-send.sh`, `bin/fm-control.sh`, `bin/fm-captain-hold.sh`, `bin/fm-permission-grant.sh`, `bin/fm-merge-local.sh`, `bin/fm-teardown.sh`, and `bin/fm-helm.sh` each refuse from anywhere else before reading or writing anything, with exit status 2 and `this is a sealed Privateer home; attach with bin/fm-privateer.sh attach, and never drive its session from outside`.
 The refusal names no socket, port, or path, so a session outside the quarantine, such as the captain's own OpenCode opened in the home's directory, can neither file backlog rows, write briefs, steer, stop, or spawn workers, record holds or grants, land work, or clean up in the home, nor learn where the session is.
 A spawn inside the session is also refused while its egress proxy is not running, so a worker can never land in an unsandboxed tmux server.
 The captain's own commands stay usable outside the session: `bin/fm-privateer.sh` `check`, `start`, `stop`, and `attach`, the [named sailor](#crew-dispatch-profiles-configcrew-dispatchjson) commands of `bin/fm-sailor.sh`, and `bin/fm-update.sh`.
@@ -1013,6 +1013,28 @@ It also keeps a refusal budget: after three firstmate-script calls in a row that
 `bin/fm-privateer-seal-policy.mjs` owns exactly what each rule matches.
 The seal is mistake-proofing, not a boundary: a same-user process that loads no OpenCode plugin, such as a plain shell or Claude Code, can still use the home and drive its tmux socket.
 [`verification/local-sailors.md`](verification/local-sailors.md) records the OpenCode behavior the seal relies on, and `tests/fm-privateer-seal-live-e2e.test.sh` refreshes it.
+
+### The front door
+
+`bin/fm-helm.sh` is the Privateer first mate's front door: one verb per job, each composed from the home's own scripts with the Privateer defaults, so a local model never composes their flags.
+Each slash command in `.opencode/commands/` runs one verb and hands its report to the first mate, so the captain can also type the verb in the session.
+
+| Command | What it does |
+| --- | --- |
+| `/helm` | Runs the session start |
+| `/scout <project> <ask>` | Files the backlog row, writes the worker's instructions with the ask as the captain's intent, and starts a scout on the first sailor that can take it |
+| `/ship <project> <ask>` | The same for a local-only ship, on the project's registered branch prefix and merge authority |
+| `/queue` | Shows the backlog |
+| `/sailors` | Shows each sailor's status |
+| `/steer <task-id> <text>` | Sends the text to the worker |
+| `/land <task-id>` | Lands a ready local-only branch through the guarded local merge |
+| `/wake` | Drains the wake queue |
+
+When no sailor can take the work, the task waits in the queue with its instructions written, and the front door names the `bin/fm-spawn.sh` call that starts it later and the candidate sailors in order.
+While the dispatch file declares rules, the front door refuses before writing anything and lists each rule's condition, because no script judges a natural-language rule; the first mate repeats the call with `--rule <n>`, or `--rule default` when no rule fits.
+Every verb runs only in a Privateer home and only inside its session.
+The captain's words reach the front door exactly, or not at all: OpenCode ends a command's shell step at the first backtick and reads `$$`, `$&`, `` $` ``, and `$'` in the words as its own substitution patterns, so each command passes the words three ways, and the front door refuses, before writing anything, words holding a backtick or a `$` followed by `$`, `&`, `'`, or a backtick, and asks for them again without those.
+`bin/fm-helm.sh --help` owns each verb's exact steps, and [`verification/local-sailors.md`](verification/local-sailors.md) records the OpenCode behavior the commands rely on, which `tests/fm-helm-live-e2e.test.sh` refreshes.
 
 ### Egress audit
 
