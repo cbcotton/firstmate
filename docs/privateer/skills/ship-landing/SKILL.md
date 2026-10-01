@@ -15,12 +15,12 @@ Its ready line reads `done [at=<epoch>]: ready in branch <branch>`.
    If `bin/fm-project-mode.sh <project>` prints `local-only on`, land it without asking.
 3. Wait for the captain's word; silence or a question is not approval.
 4. If the task is held for this approval, record the captain's words with `answer` and `--release` first; load `captain-hold-lifecycle` for the exact form.
-5. Land it with `bin/fm-merge-local.sh <id>`, which fast-forwards the project's main branch to the worker's branch.
-   If it refuses because the branch has diverged, tell the worker: `bin/fm-send.sh <id> "main has moved; rebase your branch onto main so it is a clean fast-forward, and report ready again."`
+5. Land it with `bin/fm-helm.sh land <id>`, which fast-forwards the project's main branch to the worker's branch.
+   If it refuses because the branch has diverged, tell the worker: `bin/fm-send.sh <id> 'main has moved; rebase your branch onto main so it is a clean fast-forward, and report ready again.'`
    If it refuses because the task is still held, go back to step 4.
 6. Clean up with `bin/fm-teardown.sh <id>`.
-   A refusal about uncommitted or unlanded work is a stop: read it and tell the captain.
-   Never add `--force` unless the captain has told you in words to throw that work away.
+   A refusal about uncommitted or unlanded work is a stop: tell the captain the refusal and the unlanded work, and stop.
+   Never pass `--force` to `bin/fm-teardown.sh`; the captain discards that work himself if he wants.
 7. Tell the captain in one line that the change landed, and on which project.
 8. Run `bin/fm-helm.sh queue`; start each queued task with the `bin/fm-spawn.sh` call the front door named when it queued that task, or ask the captain when you no longer have that call.
    Never run `/scout`, `/ship`, or `bin/fm-helm.sh scout|ship` again for a task already in the backlog.

@@ -29,7 +29,7 @@ If the task's work has already landed, this is not a recovery: clean it up with 
 4. **A second relaunch fails too.**
    Leave the task and its copy as they are.
    Tell the captain what the worker was doing, that its work is kept, and what you recommend.
-   Hold the task for that choice: `bin/fm-captain-hold.sh hold <id> --reason "worker failed twice; retry, change the ask, or drop it?"`.
+   Hold the task for that choice: `bin/fm-captain-hold.sh hold <id> --reason 'worker failed twice; retry, change the ask, or drop it?'`.
 
 A worker whose context is filling up is not wedged; it compacts and keeps going.
 
