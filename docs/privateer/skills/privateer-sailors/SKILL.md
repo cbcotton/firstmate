@@ -35,7 +35,8 @@ Spawn on that one, with that exact sailor and model.
 
 1. Do not spawn: the task stays in the queue, which is correct.
 2. Tell the captain in one line which sailors are busy or down and that the task waits for one.
-3. After each cleanup, `bin/fm-tasks-axi.sh ready` lists it again; check the candidates again then.
+3. After each cleanup, run `bin/fm-helm.sh queue`, then start the task with the `bin/fm-spawn.sh` call the front door named when it queued it, or ask the captain when you no longer have that call.
+   Never run `/scout`, `/ship`, or `bin/fm-helm.sh scout|ship` again for a task already in the backlog.
 
 ## A running worker's sailor stopped answering
 

@@ -22,6 +22,7 @@ Its ready line reads `done [at=<epoch>]: ready in branch <branch>`.
    A refusal about uncommitted or unlanded work is a stop: read it and tell the captain.
    Never add `--force` unless the captain has told you in words to throw that work away.
 7. Tell the captain in one line that the change landed, and on which project.
-8. Run `bin/fm-tasks-axi.sh ready` and start the queued work it lists.
+8. Run `bin/fm-helm.sh queue`; start each queued task with the `bin/fm-spawn.sh` call the front door named when it queued that task, or ask the captain when you no longer have that call.
+   Never run `/scout`, `/ship`, or `bin/fm-helm.sh scout|ship` again for a task already in the backlog.
 
 Never land a branch without the captain's approval or a `local-only on` project, never push, and never run git in a project yourself.
