@@ -208,7 +208,10 @@ test_every_command_reaches_the_front_door() {
     users=$(users_since "$dir" "$logged")
     assert_contains "$users" "helm-probe-stdout $verb" "opencode $OPENCODE_VERSION: the front door's stdout must reach the model for /$verb"
     assert_contains "$users" "helm-probe-stderr $verb" "opencode $OPENCODE_VERSION: the front door's stderr must reach the model for /$verb"
-    assert_not_contains "$users" "fm-helm.sh" "opencode $OPENCODE_VERSION: the template's shell step must not reach the model for /$verb"
+    # Only the shell step holds these; the session-start digest a Privateer
+    # first mate receives may name bin/fm-helm.sh itself.
+    assert_not_contains "$users" "!\`bin/fm-helm.sh" "opencode $OPENCODE_VERSION: the template's shell step must not reach the model for /$verb"
+    assert_not_contains "$users" "FM_HELM_ARGUMENTS" "opencode $OPENCODE_VERSION: the template's here-document must not reach the model for /$verb"
     case "$verb" in
       helm | queue | sailors | wake)
         assert_equals "$verb" "$(cat "$home/state/probe/$n/argv")" "opencode $OPENCODE_VERSION: /$verb must pass only its verb"
