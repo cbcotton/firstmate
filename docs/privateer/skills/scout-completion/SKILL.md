@@ -21,4 +21,4 @@ Promote the scout in place rather than filing a new task, while its worker is st
 Run `bin/fm-project-mode.sh <project>` for `<yolo>` and `bin/fm-project-mode.sh --branch-prefix <project>` for `<prefix>`, then run `bin/fm-promote.sh <id> --mode local-only --yolo <yolo> --branch-prefix <prefix>`.
 It prints one `bin/fm-send.sh` command; run that command exactly, which hands the worker its new instructions.
 The same worker then builds the fix on a fresh branch, and its reproduction becomes the regression test.
-If the scout is already cleaned up, start a new ship with `bin/fm-helm.sh ship <project> "<ask>"` (the captain's `/ship <project> <ask>` does the same), and name the report's path `$FM_HOME/data/<id>/report.md` in the ask.
+If the scout is already cleaned up, start a new ship with `bin/fm-helm.sh ship <project> '<ask>'` (the captain's `/ship <project> <ask>` does the same), and name the report's path `$FM_HOME/data/<id>/report.md` in the ask.

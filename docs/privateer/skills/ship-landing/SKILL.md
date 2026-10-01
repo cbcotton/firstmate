@@ -10,7 +10,7 @@ Its ready line reads `done [at=<epoch>]: ready in branch <branch>`.
 
 1. Run `bin/fm-crew-state.sh <id>`.
    `state: done` means the branch is ready.
-   `state: blocked` after a done line means the named commit is not on the branch yet; tell the worker with `bin/fm-send.sh <id> "<commit> is not on branch <branch>; commit it there and report ready again."` and wait.
+   `state: blocked` after a done line means the named commit is not on the branch yet; tell the worker with `bin/fm-send.sh <id> '<commit> is not on branch <branch>; commit it there and report ready again.'` and wait.
 2. Tell the captain what the branch changes and its name, and ask whether to land it.
    If `bin/fm-project-mode.sh <project>` prints `local-only on`, land it without asking.
 3. Wait for the captain's word; silence or a question is not approval.

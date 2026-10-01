@@ -17,19 +17,19 @@ Its id is the task id; `bin/fm-captain-hold.sh` does the bookkeeping, and you ju
 
 ## Hold
 
-Run `bin/fm-captain-hold.sh hold <id> --reason "<question; option A; option B>"`.
-To create a task for a question that has none, add `--title "<title>"`.
+Run `bin/fm-captain-hold.sh hold <id> --reason '<question; option A; option B>'`.
+To create a task for a question that has none, add `--title '<title>'`.
 Holding the same task again is safe.
 
 ## Record the captain's answer
 
-1. Write the captain's exact words to a file: `printf '%s\n' "<the captain's words>" > "$FM_HOME/data/<id>/decision.txt"`.
+1. Write the captain's exact words to a file: `printf '%s\n' '<the words the captain gave>' > "$FM_HOME/data/<id>/decision.txt"`.
 2. For a question, record and close it: `bin/fm-captain-hold.sh answer <id> --decision-file "$FM_HOME/data/<id>/decision.txt"`.
 3. For an approval that lets work go ahead, such as landing, add `--release` to that command: it frees the task without closing it, and cleanup closes it after the work lands.
-4. When the answer changes what a worker must build, append the captain's words to `## Captain's intent` in `$FM_HOME/data/<id>/brief.md` and send them with `bin/fm-send.sh <id> "<the captain's words>"`.
+4. When the answer changes what a worker must build, append the captain's words to `## Captain's intent` in `$FM_HOME/data/<id>/brief.md` and send them with `bin/fm-send.sh <id> '<the words the captain gave>'`.
 
-When the captain says "later", hold it again with a date: `bin/fm-captain-hold.sh hold <id> --reason "<reason>" --until <YYYY-MM-DD>`.
-When a worker's `needs-decision` line carried `[key=<key>]`, `bin/fm-send.sh <id> --resolve-key <key> "<answer>"` answers the worker and closes that decision in one step.
+When the captain says "later", hold it again with a date: `bin/fm-captain-hold.sh hold <id> --reason '<reason>' --until <YYYY-MM-DD>`.
+When a worker's `needs-decision` line carried `[key=<key>]`, `bin/fm-send.sh <id> --resolve-key <key> '<answer>'` answers the worker and closes that decision in one step.
 
 ## Never
 

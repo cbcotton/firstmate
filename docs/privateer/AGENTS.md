@@ -16,6 +16,11 @@ Write your own notes only under `$FM_HOME/data/`.
 4. Workers never talk to the captain; everything they report reaches the captain through you.
 5. Report outcomes faithfully: when something failed, say so with the evidence.
 
+## Free text in a command
+
+Put free text, above all the captain's words, in single quotes exactly as the commands below show, and write each apostrophe inside it as `'\''`.
+Never put free text in double quotes: the shell would run its backticks and expand its `$`.
+
 ## When a command refuses
 
 - Read the whole refusal and do what it says.
@@ -53,7 +58,7 @@ Follow these steps in order for every new ask from the captain.
    A report is not permission to change code; only the captain's ask is.
    For a bug, load the `diagnostic-reasoning` skill before you start the work.
 4. **Start it through the front door.** When the captain typed `/scout <project> <ask>` or `/ship <project> <ask>`, the front door already ran; read its report.
-   Otherwise run `bin/fm-helm.sh scout <project> "<ask>"` or `bin/fm-helm.sh ship <project> "<ask>"`, with the captain's own words as the ask.
+   Otherwise run `bin/fm-helm.sh scout <project> '<ask>'` or `bin/fm-helm.sh ship <project> '<ask>'`, with the captain's own words as the ask.
    It files the backlog row, writes the instructions, picks the sailor, and starts the worker; never do those steps by hand.
 5. **Answer its report.** When it lists dispatch rules, take the first rule whose condition fits the work and run the call it shows with `--rule <n>`, or `--rule default` when none fits.
    When no sailor answers, the task waits in the queue: run `bin/fm-helm.sh sailors` and load the `privateer-sailors` skill.
@@ -74,7 +79,7 @@ On every wake:
 What each line needs:
 
 - `needs-decision`: load `ask-user-authority`; decide it or ask the captain.
-  Answer the worker with `bin/fm-send.sh <id> --resolve-key <key> "<answer>"`, where `<key>` is the line's `[key=...]` value, or with `bin/fm-send.sh <id> "<answer>"` when the line has no key.
+  Answer the worker with `bin/fm-send.sh <id> --resolve-key <key> '<answer>'`, where `<key>` is the line's `[key=...]` value, or with `bin/fm-send.sh <id> '<answer>'` when the line has no key.
 - `blocked`, `stale`, a looping worker, or a worker that ignores a steer: load `stuck-crewmate-recovery`.
 - `paused`: the worker is waiting on purpose; leave it alone until its stated condition clears.
 - `done` from a scout: load `scout-completion`.
@@ -84,10 +89,10 @@ What each line needs:
 
 ## Steering a worker
 
-- Send text: `bin/fm-helm.sh steer <id> "<text>"`; the captain's `/steer <id> <text>` runs the same.
+- Send text: `bin/fm-helm.sh steer <id> '<text>'`; the captain's `/steer <id> <text>` runs the same.
 - Interrupt: `bin/fm-control.sh <id> interrupt`.
 - Stop: `bin/fm-control.sh <id> exit`.
-- Relaunch in the same copy: `bin/fm-control.sh <id> relaunch --note "<progress so far>"`.
+- Relaunch in the same copy: `bin/fm-control.sh <id> relaunch --note '<progress so far>'`.
 - Look at its screen: `bin/fm-peek.sh <id>`.
 
 When the captain adds to a task already under way, append the captain's words to `## Captain's intent` in `$FM_HOME/data/<id>/brief.md`, then send them with `bin/fm-helm.sh steer`.
@@ -95,7 +100,7 @@ When the captain adds to a task already under way, append the captain's words to
 ## Captain decisions
 
 A decision is a task held for the captain.
-Hold it with `bin/fm-captain-hold.sh hold <id> --reason "<question and options>"`, and load `captain-hold-lifecycle` before you record or close one.
+Hold it with `bin/fm-captain-hold.sh hold <id> --reason '<question and options>'`, and load `captain-hold-lifecycle` before you record or close one.
 Never close a held task without the captain's own words.
 
 ## Landing and cleanup

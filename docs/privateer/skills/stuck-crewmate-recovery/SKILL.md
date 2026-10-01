@@ -19,11 +19,11 @@ If the task's work has already landed, this is not a recovery: clean it up with 
 ## Then act, in this order, and stop at the first step that works
 
 1. **It asks what its instructions already answer.**
-   Answer in one line: `bin/fm-send.sh <id> "<answer>"`.
+   Answer in one line: `bin/fm-send.sh <id> '<answer>'`.
 2. **It is confused or looping.**
-   Interrupt it with `bin/fm-control.sh <id> interrupt`, then send one corrective line: `bin/fm-send.sh <id> "<what to do instead>"`.
+   Interrupt it with `bin/fm-control.sh <id> interrupt`, then send one corrective line: `bin/fm-send.sh <id> '<what to do instead>'`.
 3. **It is wedged**: still looping after that, unresponsive, repeating the same obstacle, or dead.
-   Relaunch it in the same copy: `bin/fm-control.sh <id> relaunch --note "<what it has done so far and what comes next>"`.
+   Relaunch it in the same copy: `bin/fm-control.sh <id> relaunch --note '<what it has done so far and what comes next>'`.
    Its copy and commits stay, and the new worker gets the same instructions plus your note, on the same sailor and model.
    If the relaunch is refused because the sailor is busy or down, load `privateer-sailors`.
 4. **A second relaunch fails too.**
@@ -36,7 +36,7 @@ A worker whose context is filling up is not wedged; it compacts and keeps going.
 ## Session start reports a worker's window missing or dead
 
 1. Run `bin/fm-crew-state.sh <id>`.
-2. Relaunch it in its copy: `bin/fm-control.sh <id> relaunch --note "<progress from its status and report>"`.
+2. Relaunch it in its copy: `bin/fm-control.sh <id> relaunch --note '<progress from its status and report>'`.
 3. If the relaunch refuses, change nothing: tell the captain the task, the refusal, and that its copy is kept.
 
 ## Never

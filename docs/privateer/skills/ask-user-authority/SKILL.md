@@ -41,6 +41,6 @@ Hold the task (load `captain-hold-lifecycle`) and tell the captain, in one short
 
 ## Answering the worker
 
-With a key: `bin/fm-send.sh <id> --resolve-key <key> "<decision>"`.
-Without a key: `bin/fm-send.sh <id> "<decision>"`.
+With a key: `bin/fm-send.sh <id> --resolve-key <key> '<decision>'`.
+Without a key: `bin/fm-send.sh <id> '<decision>'`.
 Send a decision, not a question; the worker applies it.

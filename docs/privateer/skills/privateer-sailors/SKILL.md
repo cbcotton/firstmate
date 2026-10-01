@@ -42,7 +42,7 @@ Spawn on that one, with that exact sailor and model.
 
 The worker usually reports `blocked` or goes quiet.
 A relaunch keeps the same sailor and model, so first run `bin/fm-sailor.sh check <sailor> <model> --task <id>`.
-When it prints `ok:`, relaunch with `bin/fm-control.sh <id> relaunch --note "<progress so far>"`.
+When it prints `ok:`, relaunch with `bin/fm-control.sh <id> relaunch --note '<progress so far>'`.
 While it refuses, leave the worker alone and tell the captain which sailor is down.
 There is no command to move a running worker to another sailor; if the captain wants that, say so.
 
