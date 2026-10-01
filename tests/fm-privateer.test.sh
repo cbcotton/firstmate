@@ -1277,6 +1277,50 @@ lock=0" "$(cat "$state/mate" 2>/dev/null)" "the sealed first mate must detect op
   pass "in the real sandboxed session the opencode first mate detects its harness and owns the fleet lock, while a plain shell in the same session stays read-only"
 }
 
+test_session_zsh_here_document_runs() {
+  local dir home outside root out status spid sport socket state _
+  if ! "$ROOT/bin/fm-sandbox-exec.sh" available || ! command -v tmux >/dev/null 2>&1 || [ ! -x /bin/zsh ]; then
+    pass "session zsh here-document check not run: sandbox-exec, tmux, or /bin/zsh is not available on this machine"
+    return 0
+  fi
+  dir="$TMP_ROOT/session-zsh"
+  home=$(make_home session-zsh)
+  state="$home/state"
+  outside=$(mktemp -d /tmp/pv-checkout.XXXXXX)
+  root="$outside/root"
+  make_checkout "$root"
+  mkdir -p "$dir/sailor/v1"
+  printf '{"data":[{"id":"coder"}]}\n' > "$dir/sailor/v1/models"
+  read -r spid sport < <(serve_dir "$dir/sailor" "$dir/sailor.log")
+  [ -n "$sport" ] || fail "the stand-in sailor did not start"
+  jq -n --arg e "http://127.0.0.1:$sport/v1" '{sailors: {tiller: {title: "Tiller", endpoint: $e, status: "live", models: ["coder"]}}, default: {harness: "opencode", sailor: "tiller", model: "coder"}}' \
+    > "$home/config/crew-dispatch.json"
+  # The first mate runs a slash-command template through the captain's $SHELL,
+  # as OpenCode does, and the template feeds its arguments as a here-document.
+  cat > "$dir/primary" <<SH
+#!/bin/sh
+"\$SHELL" -c "cat <<'FM_HELM_ARGUMENTS' > '$state/heredoc.tmp' 2> '$state/heredoc.err'
+ship words
+FM_HELM_ARGUMENTS"
+echo "status=\$?" >> '$state/heredoc.tmp'
+mv '$state/heredoc.tmp' '$state/heredoc'
+exec sleep 60
+SH
+  chmod +x "$dir/primary"
+  out=$(SHELL=/bin/zsh FM_TEST_SEAM=1 FM_PRIVATEER_PRIMARY="$dir/primary" FM_HOME="$home" FM_ROOT_OVERRIDE="$root" "$PRIVATEER" start 2>&1)
+  status=$?
+  socket=$(printf '%s\n' "$out" | sed -n 's/.*on tmux socket \([^ ]*\).*/\1/p' | head -1)
+  wait_for_file "$state/heredoc"
+  FM_HOME="$home" FM_ROOT_OVERRIDE="$root" "$PRIVATEER" stop >/dev/null 2>&1 || { [ -z "$socket" ] || tmux -L "$socket" kill-server 2>/dev/null; }
+  kill "$spid" 2>/dev/null
+  rm -rf "$outside"
+  expect_code 0 "$status" "the real session must start: $out"
+  assert_equals "ship words
+status=0" "$(cat "$state/heredoc" 2>/dev/null)" \
+    "a zsh here-document in the real session must run: $(cat "$state/heredoc.err" 2>/dev/null)"
+  pass "in the real sandboxed session a captain whose shell is zsh can run a slash-command here-document"
+}
+
 # --- spawn ------------------------------------------------------------------
 
 # make_spawn_case <name> <id>: a Privateer home with a project and worktree for
@@ -1579,6 +1623,7 @@ test_start_refuses_when_the_proxy_cannot_bind
 test_proxy_forwards_only_allowed_destinations
 test_session_sandbox_holds_every_command
 test_session_first_mate_owns_the_lock_and_a_plain_shell_does_not
+test_session_zsh_here_document_runs
 test_start_refuses_while_running
 test_stop_refuses_with_work_in_flight_and_stops_an_idle_session
 test_stop_cleans_up_after_a_session_that_ended

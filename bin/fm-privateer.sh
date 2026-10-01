@@ -92,7 +92,8 @@
 # server, and again the primary itself, start from an empty environment plus
 # exactly: HOME PATH USER LOGNAME SHELL TERM TERMINFO TERMINFO_DIRS COLORTERM LANG
 # LC_ALL LC_CTYPE TMPDIR TMP TEMP TMUX_TMPDIR as the launcher saw them (TERMINFO
-# and TERMINFO_DIRS only name where terminal descriptions are read from), FM_HOME, and the
+# and TERMINFO_DIRS only name where terminal descriptions are read from),
+# TMPPREFIX inside that temporary directory, FM_HOME, and the
 # launch-env assignments above; the primary adds OPENCODE_CONFIG_CONTENT, which
 # pins the model to the first mate's sailor as the only provider, allows every
 # tool as a secondmate primary is allowed, turns auto-update off, disables
@@ -616,7 +617,7 @@ render_helm() {
 
 cmd_start() {
   local line sailor model check provider config socket socket_path primary port
-  local name value launch home_real root_real egress_real root_git projects_real git_meta pool_real wt_git helm_real
+  local name value launch tmp_real home_real root_real egress_real root_git projects_real git_meta pool_real wt_git helm_real
   local -a env_args session_env sandbox_args
   env_args=()
   session_env=()
@@ -660,6 +661,11 @@ cmd_start() {
     value=${!name}
     env_args+=("$name=$value")
   done
+  # zsh writes a here-document under $TMPPREFIX (/tmp/zsh* by default), which
+  # the sandbox denies, so a zsh captain's slash commands would fail; point it
+  # into the temporary directory the sandbox allows.
+  tmp_real=$(cd "${TMPDIR:-/tmp}" && pwd -P) || die "cannot resolve ${TMPDIR:-/tmp}"
+  env_args+=("TMPPREFIX=$tmp_real/zsh")
   home_real=$(cd "$FM_HOME" && pwd -P) || die "cannot resolve $FM_HOME"
   env_args+=("FM_HOME=$home_real")
   root_real=$(cd "$FM_ROOT" && pwd -P) || die "cannot resolve $FM_ROOT"
