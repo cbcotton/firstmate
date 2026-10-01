@@ -51,25 +51,14 @@ Follow these steps in order for every new ask from the captain.
 3. **Scout or ship.** A ship changes code.
    A scout writes a report: it investigates, diagnoses, plans, or reviews.
    A report is not permission to change code; only the captain's ask is.
-   For a bug, load the `diagnostic-reasoning` skill before you write the brief.
-4. **Task id.** Pick a short lowercase id ending in a two-character suffix, such as `fix-login-k3`.
-5. **Backlog row.** Run `bin/fm-tasks-axi.sh add <id> "<title>"`.
-6. **Brief.** For a scout, run `bin/fm-brief.sh <id> <project> --scout`.
-   For a ship, run `bin/fm-project-mode.sh --branch-prefix <project>` for the prefix, then `bin/fm-brief.sh <id> <project> --mode local-only --branch-prefix <prefix>`.
-7. **Fill the brief.** Edit `$FM_HOME/data/<id>/brief.md`: replace `{TASK}` with the captain's own words, and `{FIRSTMATE_SPEC}` with what to build and what stays out of scope.
-   Leave no `{...}` placeholder behind.
-8. **Sailor.** Read `$FM_HOME/config/crew-dispatch.json`.
-   Take the first rule whose `when` fits the work, else `default`; its `use` names the `sailor` and `model`.
-   Run `bin/fm-sailor.sh check <sailor> <model>`.
-   On `refused:`, load the `privateer-sailors` skill.
-9. **Spawn.** For a scout, run `bin/fm-spawn.sh <id> <project> --scout --harness opencode --sailor <sailor> --model <model>`.
-   For a ship, run `bin/fm-project-mode.sh <project>`; its second word is `<yolo>`.
-   Then run `bin/fm-spawn.sh <id> <project> --mode local-only --yolo <yolo> --branch-prefix <prefix> --harness opencode --sailor <sailor> --model <model>`.
-10. **Tell the captain** in one line what started and on which project.
-
-Coming, not installed yet: a front door that does steps 4 to 9 in one call.
-Its planned verbs are `helm`, `scout`, `ship`, `queue`, `sailors`, `steer`, `land`, and `wake`, each a slash command such as `/scout <project> <ask>`.
-Until they exist, follow the steps above and never try to run them.
+   For a bug, load the `diagnostic-reasoning` skill before you start the work.
+4. **Start it through the front door.** When the captain typed `/scout <project> <ask>` or `/ship <project> <ask>`, the front door already ran; read its report.
+   Otherwise run `bin/fm-helm.sh scout <project> "<ask>"` or `bin/fm-helm.sh ship <project> "<ask>"`, with the captain's own words as the ask.
+   It files the backlog row, writes the instructions, picks the sailor, and starts the worker; never do those steps by hand.
+5. **Answer its report.** When it lists dispatch rules, take the first rule whose condition fits the work and run the call it shows with `--rule <n>`, or `--rule default` when none fits.
+   When no sailor answers, the task waits in the queue: run `bin/fm-helm.sh sailors` and load the `privateer-sailors` skill.
+   Any other refusal: follow the refusal rules below.
+6. **Tell the captain** in one line what started and on which project, or what waits and why.
 
 ## Wakes and worker status
 
@@ -78,7 +67,7 @@ A status line is an event, not the current state; run `bin/fm-crew-state.sh <id>
 
 On every wake:
 
-1. Run `bin/fm-wake-drain.sh` before anything else.
+1. Run `bin/fm-helm.sh wake` before anything else; the captain's `/wake` runs the same.
 2. Handle every line it prints, including the `OPEN DECISIONS` and `UNREAD STATUS` sections.
 3. Run the exact command it printed after `WAKE_ACK_REQUIRED`, once, and never again for the same wake.
 
@@ -91,17 +80,17 @@ What each line needs:
 - `done` from a scout: load `scout-completion`.
 - `done` from a ship, which reads `ready in branch <branch>`: load `ship-landing`.
 - `failed`: tell the captain what failed and what work is kept.
-- `heartbeat`: run `bin/fm-tasks-axi.sh list --state in_flight` and check each task with `bin/fm-crew-state.sh <id>`; tell the captain only what changed.
+- `heartbeat`: run `bin/fm-helm.sh queue` and check each in-flight task with `bin/fm-crew-state.sh <id>`; tell the captain only what changed.
 
 ## Steering a worker
 
-- Send text: `bin/fm-send.sh <id> "<text>"`.
+- Send text: `bin/fm-helm.sh steer <id> "<text>"`; the captain's `/steer <id> <text>` runs the same.
 - Interrupt: `bin/fm-control.sh <id> interrupt`.
 - Stop: `bin/fm-control.sh <id> exit`.
 - Relaunch in the same copy: `bin/fm-control.sh <id> relaunch --note "<progress so far>"`.
 - Look at its screen: `bin/fm-peek.sh <id>`.
 
-When the captain adds to a task already under way, append the captain's words to `## Captain's intent` in `$FM_HOME/data/<id>/brief.md`, then send them with `bin/fm-send.sh`.
+When the captain adds to a task already under way, append the captain's words to `## Captain's intent` in `$FM_HOME/data/<id>/brief.md`, then send them with `bin/fm-helm.sh steer`.
 
 ## Captain decisions
 
@@ -111,10 +100,10 @@ Never close a held task without the captain's own words.
 
 ## Landing and cleanup
 
-- Land a ready branch only as rule 2 allows, with `bin/fm-merge-local.sh <id>`.
+- Land a ready branch only as rule 2 allows, with `bin/fm-helm.sh land <id>`; the captain's `/land <id>` runs the same.
 - Clean up a finished task with `bin/fm-teardown.sh <id>`.
 - A refusal from either is a stop: read it, fix the cause, or ask the captain.
-- After cleanup, run `bin/fm-tasks-axi.sh ready` and start the queued work it lists, from step 6 of the intake ladder.
+- After cleanup, run `bin/fm-helm.sh queue`; start each queued task with the `bin/fm-spawn.sh` call the front door named when it queued that task, or ask the captain when you no longer have that call.
 
 ## What this home never does
 

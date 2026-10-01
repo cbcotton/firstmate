@@ -929,7 +929,7 @@ Its one optional line, `<sailor>/<model>`, names the sailor and model the first 
 
 ### What a Privateer session sees at start
 
-In a Privateer home the session-start digest prints a `PRIVATEER` section before the curated context: the first mate's `<sailor>/<model>`, the delivery mode (`local-only`), each sailor's `bin/fm-sailor.sh status --all` line, the front door `bin/fm-helm.sh helm` once that script exists, and the active project when `config/active-project` exists.
+In a Privateer home the session-start digest prints a `PRIVATEER` section before the curated context: the first mate's `<sailor>/<model>`, the delivery mode (`local-only`), each sailor's `bin/fm-sailor.sh status --all` line, the front door `bin/fm-helm.sh helm`, and the active project when `config/active-project` exists.
 `bin/fm-fleet-snapshot.sh --json` carries the live sailors (placeholders left out) as `sailors[]`, and the first mate and active project as `privateer`.
 `bin/fm-session-start.sh`'s header owns the section's ordering and `bin/fm-fleet-snapshot.sh`'s header owns the snapshot fields.
 
@@ -965,7 +965,7 @@ Auto-update is off, session sharing is disabled, and the first mate's configurat
 The first mate runs in the helm, `state/privateer/helm/`, which `start` renders afresh from the checkout every time and refuses to start without.
 The helm holds the Privateer rulebook, `docs/privateer/AGENTS.md`, as the first mate's only instructions; the `privateer` agent, `docs/privateer/agents/privateer.md`, in place of OpenCode's build prompt and as the default agent, so a turn a plugin starts, such as the session-start digest or a wake, runs as it too; the skills under `docs/privateer/skills/` as its only skills; a copy of the checkout's OpenCode plugins and slash commands (`.opencode/commands/`, when the checkout has them); and a `bin/` that runs the checkout's scripts by their real paths, so each still finds the checkout as its root.
 The helm is its own Git repository, so OpenCode never reaches the checkout's `AGENTS.md`, and the first mate starts with `OPENCODE_DISABLE_EXTERNAL_SKILLS=1` and `OPENCODE_DISABLE_CLAUDE_CODE=1`, so no skill or instruction file under the captain's `~/.claude` or `~/.agents` reaches it; the agent's skill permission hides every other skill, including the captain's `~/.opencode/skills`.
-The rulebook is written for a local model, small and imperative, with exact command forms, and it names the front-door commands still to come.
+The rulebook is written for a local model, small and imperative, with exact command forms, and its intake ladder ends in the [front door](#the-front-door)'s `scout` and `ship` verbs.
 `bin/fm-privateer-rulebook-check.sh`, which `bin/fm-lint.sh` runs, owns the rules its sources meet: at most 12,000 bytes for the rulebook and 6,000 for each skill, an agent that allows exactly those skills, and no named script that is missing or shown command that does not parse.
 
 Every connection leaves through the launcher's egress proxy, `bin/fm-privateer-proxy.py`, which `start` runs as its own process on a loopback port, outside the session and outside its sandbox.
