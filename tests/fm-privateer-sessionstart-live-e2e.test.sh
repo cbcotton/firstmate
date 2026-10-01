@@ -126,6 +126,8 @@ test_privateer_first_mate_takes_the_helm_by_itself() {
   git clone -q "$ROOT" "$root" || guard_fail "the fixture clone of this checkout failed"
   cp -R "$ROOT/bin/." "$root/bin/"
   cp -R "$ROOT/.opencode/." "$root/.opencode/"
+  mkdir -p "$root/docs/privateer"
+  cp -R "$ROOT/docs/privateer/." "$root/docs/privateer/"
   git -C "$root" remote set-url origin https://github.com/cbcotton/firstmate.git
 
   log="$case_dir/model.log"

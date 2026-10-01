@@ -115,7 +115,8 @@
 # docs/privateer/agents/privateer.md as .opencode/agents/privateer.md, whose
 # skill permission denies every skill but the helm's own;
 # docs/privateer/skills/<name>/SKILL.md as .opencode/skills/<name>/SKILL.md; a
-# copy of this checkout's .opencode/plugins/; .opencode/.gitignore, as
+# copy of this checkout's .opencode/plugins/ and, when it has them, its
+# .opencode/commands/, the slash commands; .opencode/.gitignore, as
 # OpenCode itself writes it, because OpenCode writes that file at start when
 # it is missing and cannot start when the sandbox refuses the write; and bin/,
 # holding for every executable bin/*.sh of this checkout a script that execs
@@ -589,9 +590,11 @@ render_helm() {
     name=${name##*/}
     mkdir -p "$HELM/.opencode/skills/$name" && cp "$entry" "$HELM/.opencode/skills/$name/SKILL.md" || return 1
   done
-  if [ -d "$root/.opencode/plugins" ]; then
-    cp -R "$root/.opencode/plugins" "$HELM/.opencode/plugins" || return 1
-  fi
+  for name in plugins commands; do
+    if [ -d "$root/.opencode/$name" ]; then
+      cp -R "$root/.opencode/$name" "$HELM/.opencode/$name" || return 1
+    fi
+  done
   for entry in "$root"/bin/*; do
     [ -e "$entry" ] || [ -L "$entry" ] || continue
     name=${entry##*/}

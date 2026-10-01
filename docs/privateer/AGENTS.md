@@ -28,15 +28,15 @@ Write your own notes only under `$FM_HOME/data/`.
 
 A message that starts with `FIRSTMATE_OP: v1` comes from this home's tooling, not from the captain.
 
-- `FIRSTMATE_OP: v1 session-start:` means run the session start below.
+- `FIRSTMATE_OP: v1 session-start:` is the session-start digest, or a request to run session start; handle it as the session start section says.
 - `FIRSTMATE_OP: v1 watcher:` is a wake; handle it as the wakes section says.
 - `FIRSTMATE_OP: v1 privateer-seal:` means this session is outside the sealed home; stop and tell the captain.
 
 ## Session start
 
-Run `bin/fm-session-start.sh` once, at the start of the session, before anything else.
-Read all of its output: it lists work in progress, waiting decisions, and wakes.
-Never run it a second time in the same session.
+The tooling runs session start for you and sends its output, the digest, as a `FIRSTMATE_OP: v1 session-start:` message with the captain's first message, and again after the conversation is compacted.
+Read the whole digest before you answer: it lists work in progress, waiting decisions, and wakes, and its `PRIVATEER` section names your sailor, every sailor's state, and the active project.
+Run `bin/fm-session-start.sh` yourself only when that message asks you to, and then only once.
 The watcher arms itself after each of your turns; never arm it yourself.
 
 ## The intake ladder
@@ -44,6 +44,7 @@ The watcher arms itself after each of your turns; never arm it yourself.
 Follow these steps in order for every new ask from the captain.
 
 1. **Project.** Run `ls "$FM_HOME/projects"` and use the one project the ask names.
+   When the ask names none, use the digest's `active project`, if it shows one.
    If none fits or several fit, ask the captain one question and stop.
    Never use a folder outside `$FM_HOME/projects/`.
 2. **Answer or delegate.** If a report in `$FM_HOME/data/*/report.md` already answers the ask, answer from it and stop.
@@ -61,9 +62,9 @@ Follow these steps in order for every new ask from the captain.
    Take the first rule whose `when` fits the work, else `default`; its `use` names the `sailor` and `model`.
    Run `bin/fm-sailor.sh check <sailor> <model>`.
    On `refused:`, load the `privateer-sailors` skill.
-9. **Spawn.** For a scout, run `bin/fm-spawn.sh <id> projects/<project> --scout --harness opencode --sailor <sailor> --model <model>`.
+9. **Spawn.** For a scout, run `bin/fm-spawn.sh <id> <project> --scout --harness opencode --sailor <sailor> --model <model>`.
    For a ship, run `bin/fm-project-mode.sh <project>`; its second word is `<yolo>`.
-   Then run `bin/fm-spawn.sh <id> projects/<project> --mode local-only --yolo <yolo> --branch-prefix <prefix> --harness opencode --sailor <sailor> --model <model>`.
+   Then run `bin/fm-spawn.sh <id> <project> --mode local-only --yolo <yolo> --branch-prefix <prefix> --harness opencode --sailor <sailor> --model <model>`.
 10. **Tell the captain** in one line what started and on which project.
 
 Coming, not installed yet: a front door that does steps 4 to 9 in one call.

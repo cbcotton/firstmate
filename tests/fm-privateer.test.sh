@@ -797,7 +797,7 @@ test_start_renders_the_helm_afresh() {
   make_checkout "$root"
   # The checkout's scripts: one to run, a library, a module, and a directory;
   # and its OpenCode plugins, with a library of their own.
-  mkdir -p "$root/bin/backends" "$root/.opencode/plugins/lib"
+  mkdir -p "$root/bin/backends" "$root/.opencode/plugins/lib" "$root/.opencode/commands"
   cat > "$root/bin/fm-echo.sh" <<'SH'
 #!/usr/bin/env bash
 printf 'script=%s args=%s\n' "$0" "$*"
@@ -807,6 +807,12 @@ SH
   printf 'export const policy = 1;\n' > "$root/bin/fm-policy.mjs"
   printf 'export const Probe = async () => ({});\n' > "$root/.opencode/plugins/probe.js"
   printf 'export const helper = 1;\n' > "$root/.opencode/plugins/lib/helper.js"
+  cat > "$root/.opencode/commands/probe.md" <<'MD'
+---
+description: A slash command.
+---
+!bin/fm-echo.sh $ARGUMENTS
+MD
   helm="$home/state/privateer/helm"
   # What a previous start left behind must not survive the next one.
   mkdir -p "$helm/.opencode/skills/stale"
@@ -832,6 +838,8 @@ SH
     ! cmp -s "$helm/.opencode/plugins/lib/helper.js" "$root/.opencode/plugins/lib/helper.js"; then
     fail "the helm must carry a copy of the checkout's plugins and their libraries"
   fi
+  cmp -s "$helm/.opencode/commands/probe.md" "$root/.opencode/commands/probe.md" ||
+    fail "the helm must carry a copy of the checkout's slash commands"
   assert_equals "$helm_real" "$(git -C "$helm" rev-parse --show-toplevel 2>/dev/null)" "the helm must be its own Git repository"
   [ ! -L "$helm/bin/fm-echo.sh" ] && [ -x "$helm/bin/fm-echo.sh" ] || fail "an executable script must reach the helm as its own small script, not a link"
   assert_equals "script=$root_real/bin/fm-echo.sh args=a b" "$("$helm/bin/fm-echo.sh" a b)" \
@@ -841,7 +849,7 @@ SH
   done
   out=$(run_launcher "$dir" "$home" "$root" stop)
   expect_code 0 "$?" "stop must end the session: $out"
-  pass "start renders the helm afresh: the rulebook, the agent, exactly the rulebook's skills, the checkout's plugins, its own Git repository, and a bin/ that runs every checkout script by its real path"
+  pass "start renders the helm afresh: the rulebook, the agent, exactly the rulebook's skills, the checkout's plugins and slash commands, its own Git repository, and a bin/ that runs every checkout script by its real path"
 }
 
 test_start_refuses_without_the_rulebook() {
