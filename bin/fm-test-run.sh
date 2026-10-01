@@ -294,7 +294,7 @@ family_for_basename() {
     fm-fork-free-helpers.test.sh|\
     fm-harness-precedence.test.sh|\
     fm-kimi-harness.test.sh|fm-devin-harness.test.sh|fm-muse-harness.test.sh|fm-rovo-harness.test.sh|fm-agy-harness.test.sh|fm-omp-harness.test.sh|fm-herdr-lab.test.sh|fm-lint.test.sh|\
-    fm-lint-workflows.test.sh|\
+    fm-lint-workflows.test.sh|fm-privateer-rulebook-check.test.sh|\
     fm-operational-input.test.sh|fm-pi-primary-types.test.sh|\
     fm-calm-claude-mod.test.sh|\
     fm-harness-adapter-references.test.sh|\
@@ -1543,6 +1543,14 @@ families_for_changed_path() {
       # suite, and the live guard that the real OpenCode runs each command.
       printf '%s\n' "__script__:fm-helm.test.sh"
       printf '%s\n' "__script__:fm-helm-live-e2e.test.sh"
+      ;;
+    bin/fm-privateer-rulebook-check.sh|docs/privateer/*)
+      # The Privateer helm's sources and the owner of their rules: that
+      # owner's suite, the launcher suite that renders the helm from them, and
+      # the live egress audit, which proves what the first mate is shown.
+      printf '%s\n' "__script__:fm-privateer-rulebook-check.test.sh"
+      printf '%s\n' "__script__:fm-privateer.test.sh"
+      printf '%s\n' live-harness-optin
       ;;
     bin/fm-env-lib.sh)
       # The one .env accessor, sourced by bin/fm-x-lib.sh (Relay token) and
