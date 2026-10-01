@@ -1,0 +1,5 @@
+$ fm-privateer.sh start   # checkout without docs/privateer
+fm-privateer: refused: the checkout at /tmp/helmnorb.gPcdKQ/root carries no Privateer rulebook (docs/privateer/AGENTS.md and docs/privateer/agents/privateer.md); update the checkout first
+exit=1
+helm exists: no
+egress pid: none

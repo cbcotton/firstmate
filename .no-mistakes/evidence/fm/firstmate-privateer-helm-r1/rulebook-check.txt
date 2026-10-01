@@ -1,0 +1,22 @@
+$ bin/fm-privateer-rulebook-check.sh   # this checkout
+exit=0
+
+$ (rulebook names missing bin/fm-nonexistent.sh)
+docs/privateer/AGENTS.md names bin/fm-nonexistent.sh, which is not in this checkout
+exit=1
+
+$ (rulebook shows unparseable command)
+docs/privateer/AGENTS.md shows `bin/fm-spawn.sh "unterminated <id>`, which does not parse as a shell command
+exit=1
+
+$ (rulebook grown past 12 KB)
+docs/privateer/AGENTS.md is 21717 bytes; the rulebook may be at most 12000
+exit=1
+
+$ (ship-landing skill grown past 6 KB)
+docs/privateer/skills/ship-landing/SKILL.md is 8926 bytes; a helm skill may be at most 6000
+exit=1
+
+$ (new skill not allowed by agent permission)
+docs/privateer/skills/extra-skill is not allowed by docs/privateer/agents/privateer.md, so the first mate could never load it
+exit=1

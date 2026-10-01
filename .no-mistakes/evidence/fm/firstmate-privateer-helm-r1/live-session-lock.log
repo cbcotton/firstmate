@@ -1,0 +1,2 @@
+ok - opencode 1.18.33 as a Privateer first mate ran session start through its shell tool (after 107s, typed prompt needed: yes), which acquired the fleet lock for its own OpenCode process (pid 77689) and named opencode as the primary harness, while a plain shell in the same session found no harness and stayed read-only
+# all fm-privateer-session-lock-live-e2e tests passed

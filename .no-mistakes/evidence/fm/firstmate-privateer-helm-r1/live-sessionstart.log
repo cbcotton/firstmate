@@ -1,0 +1,2 @@
+ok - opencode 1.18.33 as a Privateer first mate received the session-start digest in its first answering request, with the captain's first message (after 12s), which took the fleet lock for its own OpenCode process (pid 69117), and received the re-emitted digest after /compact
+# all fm-privateer-sessionstart-live-e2e tests passed

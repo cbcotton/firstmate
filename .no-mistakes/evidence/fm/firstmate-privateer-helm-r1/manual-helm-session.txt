@@ -1,0 +1,75 @@
+== launcher start
+exit=0 privateer: started session privateer on tmux socket fm-privateer-8fbdc0214b1a (first mate tiller/scripted, egress proxy 127.0.0.1:49369); attach with: FM_HOME='/private/tmp/helmcase.dvJ1Lb/home' '/private/tmp/helmcase.dvJ1Lb/root/bin/fm-privateer.sh' attach
+== rendered helm tree
+./.opencode/.gitignore
+./.opencode/agents/privateer.md
+./.opencode/plugins/fm-primary-cd-check.js
+./.opencode/plugins/fm-primary-pretool-check.js
+./.opencode/plugins/fm-primary-sessionstart-nudge.js
+./.opencode/plugins/fm-primary-turnend-guard.js
+./.opencode/plugins/fm-primary-watch-arm.js
+./.opencode/plugins/fm-privateer-seal.js
+./.opencode/plugins/lib/fm-operational-input.js
+./.opencode/plugins/package.json
+./.opencode/skills/ask-user-authority/SKILL.md
+./.opencode/skills/captain-hold-lifecycle/SKILL.md
+./.opencode/skills/diagnostic-reasoning/SKILL.md
+./.opencode/skills/privateer-sailors/SKILL.md
+./.opencode/skills/scout-completion/SKILL.md
+./.opencode/skills/ship-landing/SKILL.md
+./.opencode/skills/stuck-crewmate-recovery/SKILL.md
+./AGENTS.md
+bin entries:      219
+git toplevel: /private/tmp/helmcase.dvJ1Lb/home/state/privateer/helm
+AGENTS.md == docs/privateer/AGENTS.md
+#!/bin/sh
+exec '/private/tmp/helmcase.dvJ1Lb/root/bin/fm-spawn.sh' "$@"
+== in-sandbox probe (from the primary pane's command)
+cwd=/private/tmp/helmcase.dvJ1Lb/home/state/privateer/helm
+args=--agent privateer
+toplevel=/private/tmp/helmcase.dvJ1Lb/home/state/privateer/helm
+FM_ROOT_OVERRIDE=/private/tmp/helmcase.dvJ1Lb/root
+default_agent=privateer
+DISABLE_EXTERNAL_SKILLS=1 DISABLE_CLAUDE_CODE=1
+append AGENTS.md exit=1
+truncate agent exit=1
+create file in helm exit=1
+rm skill exit=1
+mv helm aside exit=1
+mv parent dir aside exit=1
+control: write home state exit=0
+bin wrapper: inside-exit=0
+== helm after probe
+AGENTS.md untouched
+ls: /private/tmp/helmcase.dvJ1Lb/home/state/privateer/helm/new-file: No such file or directory
+== pane capture (privateer:firstmate)
+
+
+
+
+
+                                                      ▄
+                     █▀▀█ █▀▀█ █▀▀█ █▀▀▄ █▀▀▀ █▀▀█ █▀▀█ █▀▀█
+                     █  █ █  █ █▀▀▀ █  █ █    █  █ █  █ █▀▀▀
+                     ▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀
+
+
+   ┃
+   ┃  Ask anything… "Fix a TODO in the codebase"
+   ┃
+   ┃  Privateer · scripted Audit
+   ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                                                   tab agents  ctrl+p commands
+
+
+
+
+
+  /private/tmp/helmcase.dvJ1Lb/home/state/privateer/helm:main          1.18.33
+
+== process
+/private/tmp/helmcase.dvJ1Lb/home/state/privateer/helm opencode
+== stop
+privateer: stopped session privateer on tmux socket fm-privateer-8fbdc0214b1a
+exit=0
+/tmp/fm-helm-manual/run.sh: line 62: 70064 Terminated: 15          python3 $C/model.py $C/port
