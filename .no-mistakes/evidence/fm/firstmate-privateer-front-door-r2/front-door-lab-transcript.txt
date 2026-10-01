@@ -1,0 +1,88 @@
+$ bin/fm-helm.sh
+refused: no verb given; the verbs are helm, scout, ship, queue, sailors, steer, land, wake
+the calls: bin/fm-helm.sh helm | scout|ship [--rule <n>|default] <project> <ask...> | queue | sailors | steer <task-id> <text...> | land <task-id> | wake
+[exit 2]
+
+$ bin/fm-helm.sh fly app
+refused: unknown verb 'fly'; the verbs are helm, scout, ship, queue, sailors, steer, land, wake
+the calls: bin/fm-helm.sh helm | scout|ship [--rule <n>|default] <project> <ask...> | queue | sailors | steer <task-id> <text...> | land <task-id> | wake
+[exit 2]
+
+$ bin/fm-helm.sh scout
+refused: scout needs a project and the ask
+the calls: bin/fm-helm.sh helm | scout|ship [--rule <n>|default] <project> <ask...> | queue | sailors | steer <task-id> <text...> | land <task-id> | wake
+[exit 2]
+
+$ bin/fm-helm.sh scout ../etc read it
+refused: '../etc' is a path; give the name of a project under projects/
+[exit 1]
+
+$ bin/fm-helm.sh scout nosuch look around
+refused: 'nosuch' is not a registered project with a clone under projects/; the projects here are: app; ask the captain which one
+[exit 1]
+
+$ bin/fm-helm.sh queue extra
+refused: queue takes no arguments
+the calls: bin/fm-helm.sh helm | scout|ship [--rule <n>|default] <project> <ask...> | queue | sailors | steer <task-id> <text...> | land <task-id> | wake
+[exit 2]
+
+$ bin/fm-helm.sh land
+refused: land takes exactly one task id
+the calls: bin/fm-helm.sh helm | scout|ship [--rule <n>|default] <project> <ask...> | queue | sailors | steer <task-id> <text...> | land <task-id> | wake
+[exit 2]
+
+$ bin/fm-helm.sh scout --rule=1 app look
+refused: unknown flag '--rule=1'; scout takes only --rule <n>|default, before the project
+the calls: bin/fm-helm.sh helm | scout|ship [--rule <n>|default] <project> <ask...> | queue | sailors | steer <task-id> <text...> | land <task-id> | wake
+[exit 2]
+
+$ bin/fm-helm.sh scout app find why the build is slow
+filed: find-why-the-build-is-slow-7e - find why the build is slow
+instructions: data/find-why-the-build-is-slow-7e/brief.md, with the ask as the captain's intent
+queued: no sailor can take find-why-the-build-is-slow-7e now, so it waits in the queue with its instructions written:
+  tiller/coder: sailor tiller is not answering at http://127.0.0.1:1/v1
+start it later with: bin/fm-spawn.sh find-why-the-build-is-slow-7e app --scout --harness opencode --sailor <sailor> --model <model>
+for the first of these that answers: tiller/coder
+[exit 0]
+
+$ bin/fm-helm.sh queue
+in_flight: 0 tasks
+summary:
+  queued: 1
+  ready: 1
+queued[1]{id,title,kind,blocked_by}:
+  find-why-the-build-is-slow-7e,find why the build is slow,scout,none
+public_followups: 0 obligations
+done: 0 retained
+[exit 0]
+
+$ (OpenCode-shaped --stdin, intact words incl quotes and $HOME)
+filed: check-the-captain-s-build-home-ec - check the captain's "build" $HOME
+instructions: data/check-the-captain-s-build-home-ec/brief.md, with the ask as the captain's intent
+queued: no sailor can take check-the-captain-s-build-home-ec now, so it waits in the queue with its instructions written:
+  tiller/coder: sailor tiller is not answering at http://127.0.0.1:1/v1
+start it later with: bin/fm-spawn.sh check-the-captain-s-build-home-ec app --scout --harness opencode --sailor <sailor> --model <model>
+for the first of these that answers: tiller/coder
+[exit 0]
+
+$ (OpenCode-shaped --stdin after a $' mangle: second copy reads $ARGUMENTS)
+refused: OpenCode changed or cut the words, which happens when they hold a backtick or a $ followed by $, &, ', or a backtick; give them again without those
+[exit 1]
+
+$ (cut at a backtick: no markers)
+refused: OpenCode changed or cut the words, which happens when they hold a backtick or a $ followed by $, &, ', or a backtick; give them again without those
+[exit 1]
+
+$ bin/fm-helm.sh queue
+in_flight: 0 tasks
+summary:
+  queued: 2
+  ready: 2
+queued[2]{id,title,kind,blocked_by}:
+  find-why-the-build-is-slow-7e,find why the build is slow,scout,none
+  check-the-captain-s-build-home-ec,"check the captain's \"build\" $HOME",scout,none
+public_followups: 0 obligations
+done: 0 retained
+[exit 0]
+
+DRIVE-DONE

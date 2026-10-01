@@ -1,0 +1,20 @@
+Note: switching to '74de438e6f8cd829b2927f0797dadba68b605000'.
+
+You are in 'detached HEAD' state. You can look around, make experimental
+changes and commit them, and you can discard any commits you make in this
+state without impacting any branches by switching back to a branch.
+
+If you want to create a new branch to retain commits you create, you may
+do so (now or later) by using -c with the switch command. Example:
+
+  git switch -c <new-branch-name>
+
+Or undo this operation with:
+
+  git switch -
+
+Turn off this advice by setting config variable advice.detachedHead to false
+
+ok - opencode 1.18.33 runs each of the eight slash commands as one front-door call from the home, passes the captain's words exactly twice and their tokens on standard input, hands the front door's stdout and stderr to the model, and the real front door refuses words OpenCode changed or cut, filing nothing
+# all fm-helm-live-e2e tests passed
+FM_HELM_LIVE=1 bash tests/fm-helm-live-e2e.test.sh  33.76s user 20.61s system 112% cpu 48.160 total

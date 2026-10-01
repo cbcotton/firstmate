@@ -1,0 +1,5 @@
+## Captain's intent
+check the captain's "build" $HOME
+
+## Firstmate spec
+

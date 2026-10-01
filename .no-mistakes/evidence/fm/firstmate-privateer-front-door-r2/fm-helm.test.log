@@ -1,0 +1,13 @@
+ok - scout files the row, writes the ask as the captain's intent, and starts the scout on the first sailor that can take it
+ok - ship starts a local-only ship on the project's registered branch prefix and merge authority
+ok - work no sailor can take waits in the queue with its instructions, and the spawn call it names starts it on the sailor that answers
+ok - a home with dispatch rules is asked to choose one, with each condition and the call to repeat, before anything is written, and --rule starts the work on that rule's sailors
+ok - the --stdin form keeps the captain's words exactly, quotes, $, ;, and newlines included, and takes a leading --rule
+ok - words OpenCode changed or cut, at a backtick or a $ followed by $, &, ', or a backtick, are refused by name before anything is written
+ok - steer sends the text as a durable record, queue shows the backlog without tasks-axi's hints, sailors shows every sailor, and wake presents what waits
+ok - helm runs the session start and then names the front door's commands
+ok - land runs the guarded local merge and passes its refusal through
+ok - every malformed call is refused with what was wrong and the accepted forms, before anything is written
+ok - the front door refuses a home without the quarantine and a caller outside the home's session
+# all fm-helm tests passed
+bash tests/fm-helm.test.sh  16.36s user 14.35s system 56% cpu 54.762 total
