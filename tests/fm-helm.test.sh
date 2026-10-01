@@ -4,10 +4,11 @@
 # file the backlog row, write the instructions with the ask as the captain's
 # intent, take the first sailor that can take the work, and start it through
 # the real bin/fm-spawn.sh against a fake tmux and treehouse; work no sailor
-# can take waits in the queue until the same verb starts it; a home with
-# dispatch rules is asked to choose one before anything is written; the
-# --stdin form the slash commands use keeps the captain's words exactly and
-# refuses words that lost their end line; the other verbs reach their scripts;
+# can take waits in the queue, named with the spawn call that starts it; a
+# home with dispatch rules is asked to choose one before anything is written;
+# the --stdin form the slash commands use, fed the text OpenCode writes, keeps
+# the captain's words exactly and refuses words OpenCode changed or cut; the
+# other verbs reach their scripts;
 # and each malformed call, a home without the quarantine, and a caller outside
 # the session are refused. The real tasks-axi holds the backlog, and a fake
 # curl answers for the sailors. docs/configuration.md ("The front door") owns
@@ -77,12 +78,24 @@ helm_env() {
     "TMUX=${TMUX_AS:-/tmp/tmux-fake/$(session_socket "$HOME_DIR"),1,0}" "PATH=$FAKEBIN_DIR:$PATH"
 }
 
-# run_helm <args...>: the front door with its output, stdout then stderr.
-run_helm() {
+# in_home <command...>: <command> in the front door's environment, with its
+# output, stdout then stderr.
+in_home() {
   local -a env_args=()
   local line
   while IFS= read -r line; do env_args+=("$line"); done < <(helm_env)
-  env "${env_args[@]}" "$HELM" "$@" 2>&1
+  env "${env_args[@]}" "$@" 2>&1
+}
+
+run_helm() {
+  in_home "$HELM" "$@"
+}
+
+# opencode_text <copy> <again> <tokens>: the --stdin text a slash command's
+# here-document holds once OpenCode has written <copy> and <again> for its two
+# $ARGUMENTS and <tokens> for its $1.
+opencode_text() {
+  printf '%s\nFM_HELM_AGAIN\n%s\nFM_HELM_TOKENS\n%s\nFM_HELM_END_OF_ARGUMENTS\n' "$1" "$2" "$3"
 }
 
 # row <id> <field>: one field of the task's backlog row.
@@ -176,22 +189,22 @@ test_work_no_sailor_can_take_waits_in_the_queue() {
   assert_contains "$out" "queued: no sailor can take $id now" "the front door must say the work waits"
   assert_contains "$out" "tiller/coder:" "the front door must say why the first sailor refused"
   assert_contains "$out" "bonsai/small:" "the front door must say why the second sailor refused"
-  assert_contains "$out" "start it once a sailor is free with: bin/fm-helm.sh scout $id" "the front door must name the call that starts it"
+  assert_contains "$out" "start it later with: bin/fm-spawn.sh $id app --scout --harness opencode --sailor <sailor> --model <model>" "the front door must name the spawn call that starts it"
+  assert_contains "$out" "for the first of these that answers: tiller/coder, bonsai/small" "the front door must list the candidate sailors in order"
   assert_equals queued "$(row "$id" state)" "the row must stay Queued"
   assert_absent "$HOME_DIR/state/$id.meta" "nothing may be spawned"
   assert_present "$HOME_DIR/data/$id/brief.md" "the instructions must be written"
 
   printf 'tiller\n' > "$CASE_DIR/down"
   first=$out
-  out=$(run_helm scout "$id")
+  out=$(in_home "$ROOT/bin/fm-spawn.sh" "$id" app --scout --harness opencode --sailor bonsai --model small)
   status=$?
   track "$first"
-  expect_code 0 "$status" "the queued task must start once a sailor is free"$'\n'"$out"
-  assert_contains "$out" "sailor: bonsai/small can take it" "the next sailor in order must take it"
-  assert_contains "$out" "started: $id, a scout on app, on bonsai/small" "the front door must say what started"
+  expect_code 0 "$status" "the named spawn call must start the queued task once a sailor answers"$'\n'"$out"
   assert_equals in_flight "$(row "$id" state)" "the start must move the row In flight"
+  assert_grep 'sailor=bonsai' "$HOME_DIR/state/$id.meta" "the task record must name the sailor that answered"
   assert_equals "survey the tests" "$(intent_of "$id")" "starting it must keep its instructions"
-  pass "work no sailor can take waits in the queue with its instructions, and the same verb with its id starts it on the next free sailor"
+  pass "work no sailor can take waits in the queue with its instructions, and the spawn call it names starts it on the sailor that answers"
 }
 
 test_dispatch_rules_are_chosen_before_anything_is_written() {
@@ -225,15 +238,17 @@ test_dispatch_rules_are_chosen_before_anything_is_written() {
 test_stdin_keeps_the_captains_words() {
   local out status id words
   make_case stdin
-  words=$'fix the captain\'s "login" $(whoami); `true` && echo no\nand keep the second line'
-  out=$(printf 'app %s\nFM_HELM_END_OF_ARGUMENTS\n' "$words" | run_helm ship --stdin)
+  # shellcheck disable=SC2016
+  words=$'app fix the captain\'s "build" $(whoami); $HOME $5\nand keep the second line'
+  # shellcheck disable=SC2016
+  out=$(opencode_text "$words" "$words" 'app fix the captain s build $(whoami); $HOME $5 and keep the second line' | run_helm ship --stdin)
   status=$?
   expect_code 0 "$status" "the slash-command form must start the ship"$'\n'"$out"
   track "$out"; id=$ID
-  assert_equals "$words" "$(intent_of "$id")" "every quote, \$, ;, and line of the captain's words must reach the intent unchanged"
-  assert_contains "$out" "filed: $id - fix the captain's \"login\" \$(whoami); \`true\` && echo no" "the title must be the ask's first line"
+  assert_equals "${words#app }" "$(intent_of "$id")" "every quote, \$, ;, and line of the captain's words must reach the intent unchanged"
+  assert_contains "$out" "filed: $id - fix the captain's \"build\" \$(whoami); \$HOME \$5" "the title must be the ask's first line"
 
-  out=$(printf -- '--rule default app look around\nFM_HELM_END_OF_ARGUMENTS\n' | run_helm scout --stdin)
+  out=$(opencode_text '--rule default app look around' '--rule default app look around' '--rule default app look around' | run_helm scout --stdin)
   status=$?
   track "$out"
   expect_code 0 "$status" "the slash-command form must take a leading --rule"$'\n'"$out"
@@ -241,15 +256,26 @@ test_stdin_keeps_the_captains_words() {
   pass "the --stdin form keeps the captain's words exactly, quotes, \$, ;, and newlines included, and takes a leading --rule"
 }
 
-test_stdin_without_its_end_line_is_refused() {
-  local out status
-  make_case cut
-  out=$(printf 'app fix \n' | run_helm scout --stdin)
-  status=$?
-  expect_code 1 "$status" "words without their end line must be refused"$'\n'"$out"
-  assert_contains "$out" "refused: the words arrived without their end line, most likely cut at a backtick" "the refusal must say the words were cut"
-  assert_nothing_filed "words cut short"
-  pass "words that arrive without their end line, as a backtick leaves them, are refused before anything is written"
+test_stdin_words_opencode_changed_are_refused() {
+  local out status label text
+  make_case mangled
+  # Each case is the text OpenCode writes for the captain's words.
+  # shellcheck disable=SC2016
+  while IFS='|' read -r label text; do
+    out=$(printf '%b' "$text" | run_helm scout --stdin)
+    status=$?
+    expect_code 1 "$status" "words holding $label must be refused"$'\n'"$out"
+    assert_contains "$out" "refused: OpenCode changed or cut the words, which happens when they hold a backtick or a \$ followed by \$, &, ', or a backtick; give them again without those" "words holding $label: the refusal must name the cause"
+  done <<'EOF'
+a backtick, app fix `foo` now|app fix \n
+$`, app fix $` now|app fix \n
+$', app print $'x' then stop|app print \nFM_HELM_AGAIN\n$ARGUMENTS\nFM_HELM_TOKENS\napp print $ x then stop\nFM_HELM_END_OF_ARGUMENTS\n
+$&, app use $& here|app use $ARGUMENTS here\nFM_HELM_AGAIN\napp use $ARGUMENTS here\nFM_HELM_TOKENS\napp use $& here\nFM_HELM_END_OF_ARGUMENTS\n
+$$, app pay $$5|app pay $5\nFM_HELM_AGAIN\napp pay $5\nFM_HELM_TOKENS\napp pay $$5\nFM_HELM_END_OF_ARGUMENTS\n
+a marker line, app a\nFM_HELM_AGAIN\nb|app a\nFM_HELM_AGAIN\nb\nFM_HELM_AGAIN\napp a\nFM_HELM_AGAIN\nb\nFM_HELM_TOKENS\napp a FM_HELM_AGAIN b\nFM_HELM_END_OF_ARGUMENTS\n
+EOF
+  assert_nothing_filed "words OpenCode changed or cut"
+  pass "words OpenCode changed or cut, at a backtick or a \$ followed by \$, &, ', or a backtick, are refused by name before anything is written"
 }
 
 # --- the other verbs ----------------------------------------------------------
@@ -260,7 +286,7 @@ test_steer_queue_and_sailors_reach_their_scripts() {
   out=$(run_helm scout app look at the logs)
   track "$out"; id=$ID
   [ -n "$id" ] || fail "the scout must start before it can be steered: $out"
-  out=$(printf '%s look again, and\nreport twice\nFM_HELM_END_OF_ARGUMENTS\n' "$id" | run_helm steer --stdin)
+  out=$(opencode_text "$id look again, and"$'\n'"report twice" "$id look again, and"$'\n'"report twice" "$id look again, and report twice" | run_helm steer --stdin)
   status=$?
   expect_code 0 "$status" "steer must send the text"$'\n'"$out"
   grep -rqF 'report twice' "$HOME_DIR/state/$id.inbox" || fail "steer must leave the text as a durable inbox record: $out"
@@ -304,7 +330,7 @@ test_helm_runs_the_session_start() {
   out=$(cat "$CASE_DIR/helm.out")
   expect_code 0 "$status" "helm must run the session start"$'\n'"$out"
   assert_contains "$out" "NEXT STEP" "helm must print the whole session-start digest"
-  assert_equals "front door: /scout <project> <ask>, /ship <project> <ask>, /scout or /ship <task-id> for queued work, /queue, /sailors, /steer <task-id> <text>, /land <task-id>, /wake" \
+  assert_equals "front door: /scout <project> <ask>, /ship <project> <ask>, /queue, /sailors, /steer <task-id> <text>, /land <task-id>, /wake" \
     "$(printf '%s\n' "$out" | tail -1)" "helm must end by naming the front door's commands"
   pass "helm runs the session start and then names the front door's commands"
 }
@@ -334,11 +360,12 @@ test_malformed_calls_are_refused() {
   done <<'EOF'
 |refused: no verb given; the verbs are helm, scout, ship, queue, sailors, steer, land, wake
 launch app go|refused: unknown verb 'launch'; the verbs are helm, scout, ship, queue, sailors, steer, land, wake
-scout|refused: scout needs a project and the ask, or the id of a queued task
-scout app|refused: 'app' is not a task in the backlog; to start new work give the project and then the ask
+scout|refused: scout needs a project and the ask
+scout app|refused: scout needs a project and the ask
 scout nosuch go|refused: 'nosuch' is not a registered project with a clone under projects/; the projects here are: app
 scout projects/app go|refused: 'projects/app' is a path; give the name of a project under projects/
 scout --project app go|refused: unknown flag '--project'; scout takes only --rule <n>|default, before the project
+ship --rule=1 app go|refused: unknown flag '--rule=1'; ship takes only --rule <n>|default, before the project
 ship --rule 0 app go|refused: --rule takes a rule number from 1, or default, not '0'
 ship --rule 3 app go|refused: there is no rule 3; config/crew-dispatch.json declares 0
 scout --rule|refused: --rule needs a rule number or default
@@ -352,20 +379,6 @@ scout --stdin extra|refused: --stdin takes the arguments on standard input, and 
 EOF
   assert_nothing_filed "a malformed call"
   pass "every malformed call is refused with what was wrong and the accepted forms, before anything is written"
-}
-
-test_a_queued_task_of_another_kind_is_not_started() {
-  local out status id
-  make_case kind
-  printf 'tiller\nbonsai\n' > "$CASE_DIR/down"
-  id=$(filed_id "$(run_helm scout app look)")
-  : > "$CASE_DIR/down"
-  out=$(run_helm ship "$id")
-  status=$?
-  expect_code 1 "$status" "a queued scout must not start as a ship"$'\n'"$out"
-  assert_contains "$out" "refused: task $id is a scout, not a ship" "the refusal must name the task's kind"
-  assert_absent "$HOME_DIR/state/$id.meta" "nothing may be spawned"
-  pass "a queued task starts only through the verb of its own kind"
 }
 
 test_only_a_privateer_home_inside_its_session() {
@@ -392,12 +405,11 @@ test_ship_is_local_only_on_the_registered_prefix
 test_work_no_sailor_can_take_waits_in_the_queue
 test_dispatch_rules_are_chosen_before_anything_is_written
 test_stdin_keeps_the_captains_words
-test_stdin_without_its_end_line_is_refused
+test_stdin_words_opencode_changed_are_refused
 test_steer_queue_and_sailors_reach_their_scripts
 test_helm_runs_the_session_start
 test_land_reaches_the_guarded_local_merge
 test_malformed_calls_are_refused
-test_a_queued_task_of_another_kind_is_not_started
 test_only_a_privateer_home_inside_its_session
 
 echo "# all fm-helm tests passed"

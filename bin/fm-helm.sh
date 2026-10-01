@@ -12,7 +12,6 @@
 #   fm-helm.sh helm
 #   fm-helm.sh scout [--rule <n>|default] <project> <ask...>
 #   fm-helm.sh ship [--rule <n>|default] <project> <ask...>
-#   fm-helm.sh scout|ship [--rule <n>|default] <task-id>
 #   fm-helm.sh queue
 #   fm-helm.sh sailors
 #   fm-helm.sh steer <task-id> <text...>
@@ -23,8 +22,8 @@
 # helm runs bin/fm-session-start.sh, the session start, and then names the
 # front door's slash commands.
 #
-# scout and ship with a project and an ask start new work on a project that
-# data/projects.md registers and that has a clone under projects/:
+# scout and ship start new work on a project that data/projects.md registers
+# and that has a clone under projects/:
 #   1. choose the candidate sailors (below), before anything is written;
 #   2. file the backlog row with bin/fm-tasks-axi.sh add --mint, titled with
 #      the ask's first line, with --kind scout|ship and --repo <project>;
@@ -38,11 +37,10 @@
 #      ship, plus --harness opencode --sailor <sailor> --model <model> and the
 #      profile's --effort when it names one.
 # When every candidate is refused, or the spawn refuses, the row stays Queued
-# with its instructions written, and the output names the call that starts
-# it. When the instructions cannot be written, the row just filed is removed.
-# scout and ship with one word, a task id, start that Queued task from step 4
-# instead: its kind must match the verb, its project is its row's repo, and
-# its instructions must exist.
+# with its instructions written, and the output names the bin/fm-spawn.sh call
+# of step 5 that starts it, with the candidate sailors in order when none
+# answered. When the instructions cannot be written, the row just filed is
+# removed.
 #
 # The candidate sailors are profiles of config/crew-dispatch.json, in the
 # order listed: its default profiles when it declares no rules, the profiles
@@ -61,13 +59,19 @@
 # --stdin reads the verb's arguments as text on standard input instead, the
 # form the slash commands in .opencode/commands/ use: after an optional
 # leading --rule <n>, the first word is the project or task id, and the rest,
-# newlines included, is the ask or the steer. The text must end with the line
-# FM_HELM_END_OF_ARGUMENTS, which each slash command writes after the
+# newlines included, is the ask or the steer. Each slash command writes the
 # captain's words inside a quoted here-document, so no quote, $, or ; in them
-# reaches a shell. OpenCode ends a command's shell step at the first backtick,
-# so words holding a backtick arrive without that line and are refused; it
-# also reads $' in the words as part of its own substitution, so words holding
-# those two characters can arrive cut short.
+# reaches a shell, three times: OpenCode's $ARGUMENTS, the line FM_HELM_AGAIN,
+# $ARGUMENTS again, the line FM_HELM_TOKENS, OpenCode's $1, and the line
+# FM_HELM_END_OF_ARGUMENTS. OpenCode fills $1 with the words' tokens as they
+# are, but writes $ARGUMENTS with JavaScript's replaceAll, which reads $$, $&,
+# $`, and $' in the words as its own patterns, and it ends the shell step at
+# the first backtick. So the text is taken only when it has exactly that
+# shape, its two $ARGUMENTS copies are identical, hold no literal $ARGUMENTS,
+# and hold as many $ as the $1 copy; then the $ARGUMENTS copy is the
+# arguments. Anything else is refused before anything is written: words
+# holding a backtick or a $ followed by $, &, ', or a backtick never arrive
+# unchanged.
 #
 # Every verb refuses (exit 2) in a home without config/privateer and, through
 # bin/fm-privateer-lib.sh, from outside the home's Privateer session. Progress
@@ -87,6 +91,8 @@ CONFIG="${FM_CONFIG_OVERRIDE:-$FM_HOME/config}"
 PROJECTS="${FM_PROJECTS_OVERRIDE:-$FM_HOME/projects}"
 DISPATCH="$CONFIG/crew-dispatch.json"
 END_LINE=FM_HELM_END_OF_ARGUMENTS
+AGAIN_LINE=FM_HELM_AGAIN
+TOKENS_LINE=FM_HELM_TOKENS
 VERBS='helm, scout, ship, queue, sailors, steer, land, wake'
 SCOUT_SPEC="Investigate exactly what the captain's intent above asks, on this project, and write the findings to the report this brief names; change no project code, and note anything beyond the ask in the report as follow-up."
 SHIP_SPEC="Build exactly what the captain's intent above asks, on this project, with tests where the project has them; note anything beyond the ask in the done line as follow-up rather than adding it."
@@ -100,7 +106,7 @@ refuse() {
 misuse() {
   {
     echo "refused: $*"
-    echo "the calls: bin/fm-helm.sh helm | scout|ship [--rule <n>|default] <project> <ask...> | scout|ship [--rule <n>|default] <task-id> | queue | sailors | steer <task-id> <text...> | land <task-id> | wake"
+    echo "the calls: bin/fm-helm.sh helm | scout|ship [--rule <n>|default] <project> <ask...> | queue | sailors | steer <task-id> <text...> | land <task-id> | wake"
   } >&2
   exit 2
 }
@@ -125,13 +131,28 @@ trim() {
 
 # read_stdin_args: ARGS from the text on standard input, as the header says.
 read_stdin_args() {
-  local text word
+  local text word again tokens markers nl=$'\n'
+  local mangled="OpenCode changed or cut the words, which happens when they hold a backtick or a \$ followed by \$, &, ', or a backtick; give them again without those"
   text=$(cat)
+  markers=$(printf '%s\n' "$text" | awk -v a="$AGAIN_LINE" -v t="$TOKENS_LINE" -v e="$END_LINE" '
+    $0 == a || $0 == t || $0 == e { printf "%s ", $0 }')
+  [ "$markers" = "$AGAIN_LINE $TOKENS_LINE $END_LINE " ] || refuse "$mangled"
   case "$text" in
-    "$END_LINE") text= ;;
-    *$'\n'"$END_LINE") text=${text%$'\n'"$END_LINE"} ;;
-    *) refuse "the words arrived without their end line, most likely cut at a backtick, where OpenCode ends a command's shell step; give them again without backticks" ;;
+    *"$nl$AGAIN_LINE$nl"*"$nl$TOKENS_LINE$nl"*"$nl$END_LINE") ;;
+    *) refuse "$mangled" ;;
   esac
+  again=${text#*"$nl$AGAIN_LINE$nl"}
+  tokens=${again#*"$nl$TOKENS_LINE$nl"}
+  tokens=${tokens%"$nl$END_LINE"}
+  again=${again%%"$nl$TOKENS_LINE$nl"*}
+  text=${text%%"$nl$AGAIN_LINE$nl"*}
+  [ "$text" = "$again" ] || refuse "$mangled"
+  case "$text" in
+    *"\$ARGUMENTS"*) refuse "$mangled" ;;
+  esac
+  again=${text//[!\$]/}
+  tokens=${tokens//[!\$]/}
+  [ "${#again}" -eq "${#tokens}" ] || refuse "$mangled"
   ARGS=()
   text=$(trim "$text")
   while :; do
@@ -156,16 +177,6 @@ no_arguments() {  # <verb> <count>
   [ "$2" -eq 0 ] || misuse "$1 takes no arguments"
 }
 
-# task_field <show-output> <field>: one field of `tasks-axi show`, unquoted.
-task_field() {
-  local value
-  value=$(printf '%s\n' "$1" | sed -n "s/^  $2: //p" | head -1)
-  case "$value" in
-    \"*\") value=${value#\"}; value=${value%\"} ;;
-  esac
-  printf '%s' "$value"
-}
-
 # check_project <project>: refuse unless <project> is registered with a clone.
 check_project() {
   local known='' clone
@@ -182,14 +193,12 @@ check_project() {
   fi
 }
 
-# again <kind> <word> [<ask>]: the same call with --rule left to fill in.
+# again <kind> <project> <ask>: the same call with --rule left to fill in.
 again() {
-  local call="bin/fm-helm.sh $1 --rule <n> $2"
-  [ "$#" -lt 3 ] || call="$call $(shell_quote "$3")"
-  printf '%s\n' "$call"
+  printf '%s\n' "bin/fm-helm.sh $1 --rule <n> $2 $(shell_quote "$3")"
 }
 
-# choose_candidates <kind> <word> [<ask>]: CANDIDATES, one `sailor<TAB>model<TAB>effort`
+# choose_candidates <kind> <project> <ask>: CANDIDATES, one `sailor<TAB>model<TAB>effort`
 # line per profile, as the header's sailor choice says.
 choose_candidates() {
   local rules selector
@@ -267,28 +276,30 @@ ship_posture() {
 # launch <kind> <id> <project>: steps 4 and 5, with PREFIX and YOLO set for a
 # ship; exits.
 launch() {
-  local kind=$1 id=$2 project=$3 sailor model effort out start
-  local -a refusals args
+  local kind=$1 id=$2 project=$3 sailor model effort out
+  local -a refusals args profiles
   refusals=()
-  start="bin/fm-helm.sh $kind${RULE:+ --rule $RULE} $id"
+  profiles=()
+  args=("$id" "$project")
+  if [ "$kind" = ship ]; then
+    args+=(--mode local-only --yolo "$YOLO" --branch-prefix "$PREFIX")
+  else
+    args+=(--scout)
+  fi
+  args+=(--harness opencode)
   while IFS=$'\t' read -r sailor model effort; do
     [ -n "$sailor" ] || continue
+    profiles+=("$sailor/$model${effort:+ --effort $effort}")
     if out=$("$SCRIPT_DIR/fm-sailor.sh" check "$sailor" "$model" 2>&1); then
       say "sailor: $sailor/$model can take it"
-      args=("$id" "$project")
-      if [ "$kind" = ship ]; then
-        args+=(--mode local-only --yolo "$YOLO" --branch-prefix "$PREFIX")
-      else
-        args+=(--scout)
-      fi
-      args+=(--harness opencode --sailor "$sailor" --model "$model")
+      args+=(--sailor "$sailor" --model "$model")
       [ -z "$effort" ] || args+=(--effort "$effort")
       if out=$("$SCRIPT_DIR/fm-spawn.sh" "${args[@]}" 2>&1); then
         say "started: $id, a $kind on $project, on $sailor/$model"
         exit 0
       fi
       {
-        echo "refused: the spawn refused, so $id stays Queued with its instructions written; fix what it names, then start it with: $start"
+        echo "refused: the spawn refused, so $id stays Queued with its instructions written; fix what it names, then start it with: bin/fm-spawn.sh ${args[*]}"
         printf '%s\n' "$out" | sed 's/^/  /'
       } >&2
       exit 1
@@ -299,13 +310,14 @@ $CANDIDATES
 EOF
   say "queued: no sailor can take $id now, so it waits in the queue with its instructions written:"
   printf '  %s\n' "${refusals[@]+"${refusals[@]}"}"
-  say "start it once a sailor is free with: $start"
+  say "start it later with: bin/fm-spawn.sh ${args[*]} --sailor <sailor> --model <model>"
+  say "for the first of these that answers: $(printf '%s, ' "${profiles[@]}" | sed 's/, $//')"
   exit 0
 }
 
-# intake <kind> [--rule <n>|default] <project> <ask...> | <task-id>
+# intake <kind> [--rule <n>|default] <project> <ask...>
 intake() {
-  local kind=$1 word ask out rc id title brief show state task_kind project
+  local kind=$1 ask out rc id title brief project
   shift
   RULE=
   while [ "$#" -gt 0 ]; do
@@ -315,10 +327,6 @@ intake() {
         RULE=$2
         shift 2
         ;;
-      --rule=*)
-        RULE=${1#--rule=}
-        shift
-        ;;
       --*) misuse "unknown flag '$1'; $kind takes only --rule <n>|default, before the project" ;;
       *) break ;;
     esac
@@ -327,27 +335,11 @@ intake() {
     '' | default) ;;
     0* | *[!0-9]*) misuse "--rule takes a rule number from 1, or default, not '$RULE'" ;;
   esac
-  [ "$#" -ge 1 ] || misuse "$kind needs a project and the ask, or the id of a queued task"
-  word=$1
+  [ "$#" -ge 1 ] || misuse "$kind needs a project and the ask"
+  project=$1
   shift
   ask=$(trim "$*")
-
-  if [ -z "$ask" ]; then
-    show=$("$SCRIPT_DIR/fm-tasks-axi.sh" show "$word" 2>/dev/null) ||
-      refuse "'$word' is not a task in the backlog; to start new work give the project and then the ask: bin/fm-helm.sh $kind <project> <ask>"
-    state=$(task_field "$show" state)
-    task_kind=$(task_field "$show" kind)
-    project=$(task_field "$show" repo)
-    [ "$state" = queued ] || refuse "task $word is $state, not queued, so there is nothing to start"
-    [ "$task_kind" = "$kind" ] || refuse "task $word is a ${task_kind:-task of no kind}, not a $kind"
-    check_project "$project"
-    [ -f "$DATA/$word/brief.md" ] || refuse "task $word has no instructions at data/$word/brief.md; start new work with bin/fm-helm.sh $kind <project> <ask> instead"
-    choose_candidates "$kind" "$word"
-    [ "$kind" = scout ] || ship_posture "$project"
-    launch "$kind" "$word" "$project"
-  fi
-
-  project=$word
+  [ -n "$ask" ] || misuse "$kind needs a project and the ask"
   check_project "$project"
   choose_candidates "$kind" "$project" "$ask"
   [ "$kind" = scout ] || ship_posture "$project"
@@ -405,7 +397,7 @@ case "$VERB" in
     no_arguments helm "$#"
     "$SCRIPT_DIR/fm-session-start.sh"
     status=$?
-    say "front door: /scout <project> <ask>, /ship <project> <ask>, /scout or /ship <task-id> for queued work, /queue, /sailors, /steer <task-id> <text>, /land <task-id>, /wake"
+    say "front door: /scout <project> <ask>, /ship <project> <ask>, /queue, /sailors, /steer <task-id> <text>, /land <task-id>, /wake"
     exit "$status"
     ;;
   scout | ship) intake "$VERB" "$@" ;;

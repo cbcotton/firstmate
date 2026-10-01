@@ -3,6 +3,10 @@ description: Land a ready local-only branch - /land <task-id>
 ---
 !`bin/fm-helm.sh land --stdin 2>&1 <<'FM_HELM_ARGUMENTS'
 $ARGUMENTS
+FM_HELM_AGAIN
+$ARGUMENTS
+FM_HELM_TOKENS
+$1
 FM_HELM_END_OF_ARGUMENTS
 FM_HELM_ARGUMENTS`
 

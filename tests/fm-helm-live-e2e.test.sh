@@ -10,18 +10,20 @@
 # clone of this checkout, with its working tree's scripts and OpenCode files,
 # is a Privateer home whose bin/fm-helm.sh is a probe recording its arguments,
 # working directory, and standard input, and writing one line to stdout and
-# one to stderr. `opencode serve` runs inside the home's session, and each
+# one to stderr; while state/probe-real exists, it then runs the real front
+# door, kept as bin/fm-helm-real.sh, on the same arguments and input. `opencode serve` runs inside the home's session, and each
 # command is sent with `opencode run --attach --command`, so the run spends
 # no model tokens: a scripted OpenAI-compatible model on a loopback port
 # answers every request and logs each user message. It runs by default
 # wherever opencode is installed.
 #
 # Every command must reach the probe once, from the home, with its own verb;
-# the verbs that take words must receive them on standard input followed by
-# the end line, quotes, $, and ; included; the model must receive both probe
-# lines and none of the template's shell step. Two words the front door's
-# header names as limits are pinned too: a backtick cuts the words and drops
-# the end line, and $' cuts them silently.
+# the verbs that take words must receive them on standard input in the shape
+# the front door's header names, the words exactly twice, quotes, $, and ;
+# included, then their tokens; the model must receive both probe lines and
+# none of the template's shell step. Words OpenCode changes or cuts, holding a
+# backtick or a $ followed by $, &, ', or a backtick, must reach the real
+# front door, whose refusal must reach the model with no backlog row filed.
 # `opencode run` reads standard input when it is not a terminal and waits for
 # it to close, so every OpenCode process gets /dev/null.
 set -u
@@ -122,6 +124,7 @@ make_home() {
   cp -R "$ROOT/.opencode/." "$home/.opencode/"
   mkdir -p "$home/config" "$home/state/probe" "$1/xdg/config" "$1/xdg/data" "$1/xdg/state" "$1/xdg/cache"
   printf 'tiller/scripted\n' > "$home/config/privateer"
+  cp "$home/bin/fm-helm.sh" "$home/bin/fm-helm-real.sh"
   cat > "$home/bin/fm-helm.sh" <<'SH'
 #!/bin/sh
 n=$(ls "$FM_HOME/state/probe" | wc -l | tr -d ' ')
@@ -132,6 +135,7 @@ pwd -P > "$d/cwd"
 cat > "$d/stdin"
 echo "helm-probe-stdout $1"
 echo "helm-probe-stderr $1" >&2
+[ ! -e "$FM_HOME/state/probe-real" ] || exec "$FM_HOME/bin/fm-helm-real.sh" "$@" < "$d/stdin"
 SH
   chmod +x "$home/bin/fm-helm.sh"
   printf '%s\n' "$home"
@@ -140,6 +144,11 @@ SH
 # probe_runs <home>: how many times the probe ran.
 probe_runs() {
   find "$1/state/probe" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' '
+}
+
+# backlog_rows <home>: the rows of the home's backlog.
+backlog_rows() {
+  grep -c '^- \[' "$1/data/backlog.md" 2>/dev/null || true
 }
 
 # users_since <dir> <line>: the user messages of every model request logged
@@ -162,7 +171,7 @@ WORDS
 }
 
 test_every_command_reaches_the_front_door() {
-  local dir home config socket url line verb words runs n users rc logged
+  local dir home config socket url line verb words tokens runs n users rc logged rows
   local -a oc_env=() attach
   dir="$TMP_ROOT/commands"
   mkdir -p "$dir"
@@ -191,9 +200,10 @@ test_every_command_reaches_the_front_door() {
   [ -n "$url" ] || guard_fail "opencode serve never listened: $(tail -c 600 "$dir/serve.out")"
   attach=(opencode run --attach "$url" --password helm-live)
 
-  # verb|words: the words the captain types after the command.
+  # verb|words|tokens: the words the captain types after the command, and what
+  # OpenCode writes for $1.
   runs=0
-  while IFS='|' read -r verb words; do
+  while IFS='|' read -r verb words tokens; do
     logged=$(wc -l < "$dir/model.log" | tr -d ' ')
     (
       cd "$home" || exit 1
@@ -218,43 +228,53 @@ test_every_command_reaches_the_front_door() {
         ;;
       *)
         assert_equals "$verb"$'\n'"--stdin" "$(cat "$home/state/probe/$n/argv")" "opencode $OPENCODE_VERSION: /$verb must pass its verb and --stdin"
-        assert_equals "$words"$'\n'"$END_LINE" "$(cat "$home/state/probe/$n/stdin")" "opencode $OPENCODE_VERSION: /$verb must pass the captain's words exactly, then the end line"
+        assert_equals "$words"$'\nFM_HELM_AGAIN\n'"$words"$'\nFM_HELM_TOKENS\n'"$tokens"$'\n'"$END_LINE" "$(cat "$home/state/probe/$n/stdin")" "opencode $OPENCODE_VERSION: /$verb must pass the captain's words exactly twice, then their tokens and the end line"
         ;;
     esac
   done <<'EOF'
 helm|
-scout|app check why the captain's "build" fails; $(whoami) && echo no
-ship|app add a health check
+scout|app check why the captain's "build" fails; $(whoami) && echo no $HOME $5|app check why the captain s build fails; $(whoami) && echo no $HOME $5
+ship|app add a health check|app add a health check
 queue|
 sailors|
-steer|look-around-4d look again, and don't stop
-land|add-a-file-1b
+steer|look-around-4d look again, and don't stop|look-around-4d look again, and don t stop
+land|add-a-file-1b|add-a-file-1b
 wake|
 EOF
 
-  (
-    cd "$home" || exit 1
-    # The backtick is the captain's own character, not an expansion.
-    # shellcheck disable=SC2016
-    send_command scout 'app fix `foo` now'
-  ) < /dev/null > "$dir/run.out" 2>&1
-  n=$runs
-  runs=$((runs + 1))
-  assert_equals "$runs" "$(probe_runs "$home")" "opencode $OPENCODE_VERSION: words holding a backtick must still run the front door once"
-  assert_equals "app fix " "$(cat "$home/state/probe/$n/stdin")" "opencode $OPENCODE_VERSION: a backtick must cut the words and drop the end line, as the front door's header says"
-
-  (
-    cd "$home" || exit 1
-    send_command scout "app print \$'x' then stop"
-  ) < /dev/null > "$dir/run.out" 2>&1
-  n=$runs
-  runs=$((runs + 1))
-  assert_equals "$runs" "$(probe_runs "$home")" "opencode $OPENCODE_VERSION: words holding \$' must still run the front door once"
-  assert_equals "app print "$'\n'"$END_LINE" "$(cat "$home/state/probe/$n/stdin")" "opencode $OPENCODE_VERSION: \$' must cut the words silently, as the front door's header says"
+  # The words OpenCode changes or cuts reach the real front door.
+  : > "$home/state/probe-real"
+  rows=$(backlog_rows "$home")
+  # verb|words|stdin: the words the captain types, and what reaches the front
+  # door, or - where OpenCode's own shell steps garble it; the backtick and $
+  # are the captain's own characters.
+  # shellcheck disable=SC2016
+  while IFS='|' read -r verb words line; do
+    logged=$(wc -l < "$dir/model.log" | tr -d ' ')
+    (
+      cd "$home" || exit 1
+      send_command "$verb" "$words"
+    ) < /dev/null > "$dir/run.out" 2>&1
+    n=$runs
+    runs=$((runs + 1))
+    assert_equals "$runs" "$(probe_runs "$home")" "opencode $OPENCODE_VERSION: /$verb $words must still run the front door once"
+    [ "$line" = - ] ||
+      assert_equals "$(printf '%b' "$line")" "$(cat "$home/state/probe/$n/stdin")" "opencode $OPENCODE_VERSION: /$verb $words must reach the front door changed, as its header says"
+    users=$(users_since "$dir" "$logged")
+    assert_contains "$users" "refused: OpenCode changed or cut the words" "opencode $OPENCODE_VERSION: the front door's refusal of /$verb $words must reach the model"
+    assert_equals "$rows" "$(backlog_rows "$home")" "opencode $OPENCODE_VERSION: /$verb $words must file no backlog row"
+  done <<'EOF'
+scout|app fix `foo` now|app fix 
+scout|app print $'x' then stop|app print \nFM_HELM_AGAIN\n$ARGUMENTS\nFM_HELM_TOKENS\napp print $ x then stop\nFM_HELM_END_OF_ARGUMENTS
+ship|app use $& here|app use $ARGUMENTS here\nFM_HELM_AGAIN\napp use $ARGUMENTS here\nFM_HELM_TOKENS\napp use $& here\nFM_HELM_END_OF_ARGUMENTS
+ship|app pay $$5|app pay $5\nFM_HELM_AGAIN\napp pay $5\nFM_HELM_TOKENS\napp pay $$5\nFM_HELM_END_OF_ARGUMENTS
+steer|look-around-4d run $` now|-
+EOF
+  rm -f "$home/state/probe-real"
 
   kill "$SERVE_PID" 2>/dev/null
   SERVE_PID=
-  pass "opencode $OPENCODE_VERSION runs each of the eight slash commands as one front-door call from the home, passes the captain's words exactly on standard input, hands the front door's stdout and stderr to the model, and cuts words at a backtick or \$' as documented"
+  pass "opencode $OPENCODE_VERSION runs each of the eight slash commands as one front-door call from the home, passes the captain's words exactly twice and their tokens on standard input, hands the front door's stdout and stderr to the model, and the real front door refuses words OpenCode changed or cut, filing nothing"
 }
 
 test_every_command_reaches_the_front_door

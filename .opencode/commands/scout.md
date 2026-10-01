@@ -1,8 +1,12 @@
 ---
-description: Start a scout - /scout <project> <ask>, or /scout <task-id> for queued work
+description: Start a scout - /scout <project> <ask>
 ---
 !`bin/fm-helm.sh scout --stdin 2>&1 <<'FM_HELM_ARGUMENTS'
 $ARGUMENTS
+FM_HELM_AGAIN
+$ARGUMENTS
+FM_HELM_TOKENS
+$1
 FM_HELM_END_OF_ARGUMENTS
 FM_HELM_ARGUMENTS`
 

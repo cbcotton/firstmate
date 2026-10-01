@@ -1024,17 +1024,16 @@ Each slash command in `.opencode/commands/` runs one verb and hands its report t
 | `/helm` | Runs the session start |
 | `/scout <project> <ask>` | Files the backlog row, writes the worker's instructions with the ask as the captain's intent, and starts a scout on the first sailor that can take it |
 | `/ship <project> <ask>` | The same for a local-only ship, on the project's registered branch prefix and merge authority |
-| `/scout <task-id>`, `/ship <task-id>` | Starts that queued task |
 | `/queue` | Shows the backlog |
 | `/sailors` | Shows each sailor's status |
 | `/steer <task-id> <text>` | Sends the text to the worker |
 | `/land <task-id>` | Lands a ready local-only branch through the guarded local merge |
 | `/wake` | Drains the wake queue |
 
-When no sailor can take the work, the task waits in the queue with its instructions written, and the same command with its task id starts it later.
+When no sailor can take the work, the task waits in the queue with its instructions written, and the front door names the `bin/fm-spawn.sh` call that starts it later and the candidate sailors in order.
 While the dispatch file declares rules, the front door refuses before writing anything and lists each rule's condition, because no script judges a natural-language rule; the first mate repeats the call with `--rule <n>`, or `--rule default` when no rule fits.
 Every verb runs only in a Privateer home and only inside its session.
-The captain's words reach the front door exactly, except that OpenCode ends a command's shell step at the first backtick, so words holding one are refused, and reads `$'` as part of its own substitution, so words holding it arrive cut short.
+The captain's words reach the front door exactly, or not at all: OpenCode ends a command's shell step at the first backtick and reads `$$`, `$&`, `` $` ``, and `$'` in the words as its own substitution patterns, so each command passes the words three ways, and the front door refuses, before writing anything, words holding a backtick or a `$` followed by `$`, `&`, `'`, or a backtick, and asks for them again without those.
 `bin/fm-helm.sh --help` owns each verb's exact steps, and [`verification/local-sailors.md`](verification/local-sailors.md) records the OpenCode behavior the commands rely on, which `tests/fm-helm-live-e2e.test.sh` refreshes.
 
 ### Egress audit
