@@ -37,6 +37,14 @@ fm_privateer_home() {
   [ -e "$1/privateer" ] || [ -L "$1/privateer" ]
 }
 
+# fm_privateer_first_mate <config-dir>: the first mate's <sailor>/<model>, the
+# first field of the first non-blank line of <config-dir>/privateer once #
+# comments are stripped, or empty (bin/fm-privateer.sh owns the format).
+fm_privateer_first_mate() {
+  [ -f "$1/privateer" ] || return 0
+  sed -e 's/#.*//' "$1/privateer" 2>/dev/null | awk 'NF { print $1; exit }'
+}
+
 # fm_privateer_socket_name <home>: the tmux socket name of <home>'s session.
 fm_privateer_socket_name() {
   local root hash

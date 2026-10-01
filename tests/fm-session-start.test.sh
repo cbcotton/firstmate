@@ -1607,7 +1607,7 @@ SH
   assert_contains "$out" 'stopped during the "lock" stage' \
     "the abnormal-death banner did not name the stage that never finished"
   assert_contains "$out" \
-    "wake-queue supervision-instructions read-once fleet-state network-checks context next-step" \
+    "wake-queue supervision-instructions read-once fleet-state network-checks privateer context next-step" \
     "the abnormal-death banner did not list every stage that never ran"
   assert_not_contains "$out" "RUNTIME BOUND" \
     "an abnormal death was misreported as the runtime bound firing"
@@ -2241,7 +2241,7 @@ EOF
   assert_contains "$out" "RUNTIME BOUND" "the truncation banner did not name the bound it hit"
   assert_contains "$out" 'stopped during the "bootstrap" stage' "the truncation banner did not name the incomplete stage"
   assert_contains "$out" "RECONCILE these stages" "the truncation banner did not tell the agent what to reconcile"
-  assert_contains "$out" "wake-queue supervision-instructions read-once fleet-state network-checks context next-step" \
+  assert_contains "$out" "wake-queue supervision-instructions read-once fleet-state network-checks privateer context next-step" \
     "the truncation banner did not list every stage that never ran"
   assert_not_contains "$out" "NEXT STEP" "a truncated digest claimed to have reached its closing reminder"
   assert_absent "$home/state/.session-start-complete" \
@@ -2673,6 +2673,43 @@ EOF
   pass "an empty fleet reports (none) for in-flight tasks and an absent AFK flag"
 }
 
+test_privateer_section_names_first_mate_sailors_and_active_project() {
+  local rec root home fakebin out priv_line ctx_line
+  rec=$(new_world privateer-section)
+  IFS='|' read -r root home fakebin <<EOF
+$rec
+EOF
+  make_fake_toolchain "$fakebin"
+  make_fake_ps_claude "$fakebin"
+
+  out=$(run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+  assert_not_contains "$out" "PRIVATEER" "a home without config/privateer must print no PRIVATEER section"
+
+  printf '%s\n' '# first mate' '' 'tiller/qwen-coder  # the Heretic' > "$home/config/privateer"
+  printf '%s\n' '{"sailors":{"tiller":{"endpoint":"http://127.0.0.1:9/v1","status":"live","models":["qwen-coder"]}}}' \
+    > "$home/config/crew-dispatch.json"
+  cat > "$fakebin/curl" <<'SH'
+#!/usr/bin/env bash
+printf '%s' '{"object":"list","data":[{"id":"qwen-coder"}]}'
+SH
+  chmod +x "$fakebin/curl"
+  out=$(run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+  assert_contains "$out" "first mate: tiller/qwen-coder" "the PRIVATEER section did not name the first mate"
+  assert_contains "$out" "delivery: local-only" "the PRIVATEER section did not state the delivery mode"
+  assert_contains "$out" "tiller live answering" "the PRIVATEER section did not carry the sailor status line"
+  assert_not_contains "$out" "active project:" "with no config/active-project the section must not print an active project"
+
+  printf '%s\n' 'constellation' > "$home/config/active-project"
+  out=$(run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+  assert_contains "$out" "active project: constellation" "the PRIVATEER section did not print the active project"
+  priv_line=$(printf '%s\n' "$out" | grep -n '^PRIVATEER$' | head -1 | cut -d: -f1)
+  ctx_line=$(printf '%s\n' "$out" | grep -n '^CONTEXT$' | head -1 | cut -d: -f1)
+  [ -n "$priv_line" ] && [ -n "$ctx_line" ] && [ "$priv_line" -lt "$ctx_line" ] \
+    || fail "the PRIVATEER section must precede the curated context"
+
+  pass "a Privateer home's digest names the first mate, sailors, delivery, and active project"
+}
+
 test_next_step_sources_x_mode_cadence() {
   local rec root home fakebin out
   rec=$(new_world next-step-x)
@@ -3074,6 +3111,7 @@ test_backlog_queued_bound_discloses_its_remainder
 test_backlog_compact_manual_backend_skips_indented_bodies
 test_backlog_compact_tasks_axi_unavailable_uses_manual_fallback
 test_fleet_digest_empty_fleet
+test_privateer_section_names_first_mate_sailors_and_active_project
 test_next_step_sources_x_mode_cadence
 test_next_step_afk_delegates_to_daemon
 test_next_step_quiet_mode_delegates_to_daemon

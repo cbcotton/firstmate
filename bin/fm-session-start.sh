@@ -60,14 +60,18 @@
 #                       can itself reach the digest's runtime bound.
 #   7. network checks - the result of the deferred network stage started back at
 #                       step 1, harvested WITHOUT waiting for it.
-#   8. context digest - data/projects.md, data/secondmates.md, data/captain.md,
+#   8. privateer      - in a Privateer home only (config/privateer), the first
+#                       mate's sailor and model, each live sailor's
+#                       fm-sailor.sh status line, the delivery mode, the front
+#                       door, and the active project; silent elsewhere.
+#   9. context digest - data/projects.md, data/secondmates.md, data/captain.md,
 #                       data/captain-shared.md, data/learnings.md: read-only,
 #                       always safe, always runs.
-#   9. closing reminder - prints the context-specific watcher next step; this
+#  10. closing reminder - prints the context-specific watcher next step; this
 #                       script points back to the emitted harness supervision
 #                       block and deliberately never arms the watcher itself.
 #
-# Those nine names are also the runtime-bound stage list below, so a truncated
+# Those ten names are also the runtime-bound stage list below, so a truncated
 # startup can name exactly which of them never ran - and the parent banners
 # EVERY nonzero child exit, not only the bound: a child that dies or is killed
 # mid-stage must never truncate the digest silently.
@@ -90,6 +94,9 @@
 # The digest is therefore composed from bounded local reads and local
 # subprocesses only, while slow network or inactive-state reconciliation delays
 # a reported check rather than startup.
+# The one exception is step 8, in a Privateer home only: fm-sailor.sh status
+# probes each declared sailor's own endpoint on the blocking path, each request
+# bounded by FM_SAILOR_PROBE_TIMEOUT.
 # What this deliberately trades: on a slow network the digest prints "IN
 # PROGRESS" and names exactly which checks are not yet confirmed, instead of
 # waiting for them. It never reports an unconfirmed check as passed.
@@ -276,7 +283,7 @@ done
 # The ordered stage list is the contract behind the truncation banner: the child
 # names the stage it is entering, and the parent reports every stage at or after
 # that one as never emitted. Keep it in the exact order the digest prints.
-SESSION_START_STAGES='lock bootstrap wake-queue supervision-instructions read-once fleet-state network-checks context next-step'
+SESSION_START_STAGES='lock bootstrap wake-queue supervision-instructions read-once fleet-state network-checks privateer context next-step'
 
 stage() {  # <stage-name>: breadcrumb for the parent's truncation banner
   [ -n "${FM_SESSION_START_STAGE_FILE:-}" ] || return 0
@@ -993,9 +1000,10 @@ fi
 
 # --- 7. network checks ------------------------------------------------------
 # Deliberately here and not later: these lines are actionable (a stuck clone, a
-# secondmate that could not be relaunched, broken GitHub auth), and the section
-# after this one is the curated memory a truncated tail is meant to take first.
-# Deliberately here and not earlier: this is the last point in the digest, so the
+# secondmate that could not be relaunched, broken GitHub auth), and what follows
+# is the Privateer section (silent outside a Privateer home) and then the curated
+# memory a truncated tail is meant to take first.
+# Deliberately here and not earlier: this is the last read before that tail, so the
 # worker started at step 1 has had the whole composition above to finish in. It
 # is a NON-BLOCKING read either way - whatever the worker has published by now is
 # printed, and whatever it has not is named as not yet confirmed.
@@ -1010,7 +1018,35 @@ else
   "$SCRIPT_DIR/fm-startup-network.sh" harvest --pid $$ 2>&1 || true
 fi
 
-# --- 8. context digest -----------------------------------------------------
+# --- 8. privateer ------------------------------------------------------------
+# A Privateer home's first mate runs on a small local model, so the facts it
+# needs to act on first - who it runs on, which sailors answer, how work lands,
+# where to begin - are printed here instead of being left to discovery. Read-only
+# and silent in every other home. The sailor probe is bounded by fm-sailor.sh's
+# own FM_SAILOR_PROBE_TIMEOUT, and a failure never aborts the digest.
+stage privateer
+# shellcheck source=bin/fm-privateer-lib.sh
+. "$SCRIPT_DIR/fm-privateer-lib.sh"
+if fm_privateer_home "$CONFIG"; then
+  section "PRIVATEER"
+  first_mate=$(fm_privateer_first_mate "$CONFIG")
+  printf 'first mate: %s\n' "${first_mate:-not named in config/privateer}"
+  printf 'delivery: local-only (a ready branch waits for the captain; nothing is pushed)\n'
+  printf 'sailors:\n'
+  sailor_out=$(FM_HOME="$FM_HOME" FM_CONFIG_OVERRIDE="$CONFIG" FM_STATE_OVERRIDE="$STATE" \
+    "$SCRIPT_DIR/fm-sailor.sh" status --all 2>&1) || sailor_out="unavailable (fm-sailor.sh status failed)"
+  [ -n "$sailor_out" ] || sailor_out="no sailors"
+  printf '%s\n' "$sailor_out" | sed 's/^/  /'
+  if [ -x "$SCRIPT_DIR/fm-helm.sh" ]; then
+    printf 'front door: bin/fm-helm.sh helm\n'
+  fi
+  if [ -f "$CONFIG/active-project" ]; then
+    active_project=$(sed -n '1{s/^[[:space:]]*//;s/[[:space:]]*$//;p;}' "$CONFIG/active-project" 2>/dev/null || true)
+    [ -z "$active_project" ] || printf 'active project: %s\n' "$active_project"
+  fi
+fi
+
+# --- 9. context digest -----------------------------------------------------
 # Last of the bulk sections deliberately: curated memory is stable session to
 # session, already governed by config/startup-memory-budget, and recoverable
 # with one targeted read, so it is the cheapest thing for a truncated tail to
@@ -1023,7 +1059,7 @@ print_file_or_absent "$DATA/captain.md" "data/captain.md"
 print_file_or_absent "$DATA/captain-shared.md" "data/captain-shared.md (shared, main-authoritative, read-only in secondmate homes)"
 print_file_or_absent "$DATA/learnings.md" "data/learnings.md"
 
-# --- 9. closing reminder -----------------------------------------------
+# --- 10. closing reminder -----------------------------------------------
 stage next-step
 section "NEXT STEP"
 if [ "$READ_ONLY" -eq 1 ]; then
