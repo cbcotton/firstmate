@@ -161,6 +161,26 @@ Facts the fix depends on:
 - With `ps` allowed but here-documents still refused, a first mate whose current directory the session could not write detected `opencode` but still could not take the lock, because `bin/fm-session-lock-lib.sh` reads the ancestry through here-documents.
 - `tests/fm-sandbox-exec.test.sh` re-proves both allowances against the real sandbox, and `tests/fm-privateer.test.sh` re-proves the whole lock path in a real session with a stub first mate running as `opencode`, both without a model.
 
+## A Privateer first mate takes the helm by itself
+
+Verified 2026-09-30 on macOS 26.6 with OpenCode 1.18.33 and tmux 3.7c by `FM_PRIVATEER_SESSIONSTART_LIVE=1 tests/fm-privateer-sessionstart-live-e2e.test.sh`, the session start check that `../configuration.md` ("Privateer quarantine") names.
+The check ran `bin/fm-privateer.sh start` for real, with a throwaway home, a fixture clone of the checkout outside the home, and a scripted sailor on a loopback port that logs the user text of every request.
+It typed only the captain's first message, then `/compact`.
+
+| Observation | Result |
+| --- | --- |
+| When OpenCode creates its session | When the first message is submitted: nothing reached the sailor until a message was typed, so `session.created` cannot run before the captain speaks |
+| Injection that raced the first message | The first answering request held only the captain's message and the digest arrived a turn later, because the digest takes seconds to run |
+| Injection with the plugin's `chat.message` hook waiting for the digest | The first answering request held the captain's message and then the digest as `session-start` operational input, 8 seconds after the composer was ready |
+| The lock | `state/.lock` named the `opencode` process, and `state/.session-start-complete` existed, with no read-only banner |
+| After `/compact` | `session.compacted` produced a request holding the `SESSION START (CONTEXT RE-EMIT)` digest |
+
+Facts the plugin depends on:
+
+- OpenCode 1.18.33 allocates a user message's id before it triggers `chat.message` and saves the message only after the hook returns, so a digest queued from the hook's wait lands after the captain's message in history but before the model's first call.
+- `experimental.session.compacting` receives `{ context, prompt }` for the compaction prompt itself, so a digest added there would be summarized, which is why the plugin uses `session.compacted` and `promptAsync`.
+- `tests/fm-sessionstart-nudge.test.sh` re-proves the event mapping, the wait, and the 512 KiB bound without a model.
+
 ## The seal plugin holds against the real OpenCode
 
 Verified 2026-09-30 on macOS 26.6 with OpenCode 1.18.33 by `tests/fm-privateer-seal-live-e2e.test.sh`, which runs by default wherever `opencode` is installed because its model is a scripted OpenAI-compatible server on a loopback port.

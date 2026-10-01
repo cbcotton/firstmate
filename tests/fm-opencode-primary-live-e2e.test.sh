@@ -145,7 +145,7 @@ run_ahoy_case() {
 
 run_ahoy_transcript_regressions() {
   mkdir -p \
-    "$AHOY_PROJECT/.opencode/plugins" \
+    "$AHOY_PROJECT/.opencode/plugins/lib" \
     "$AHOY_PROJECT/.agents/skills/ahoy" \
     "$AHOY_PROJECT/.agents/skills/bearings" \
     "$AHOY_PROJECT/bin"
@@ -153,6 +153,7 @@ run_ahoy_transcript_regressions() {
   cp "$ROOT/.opencode/plugins/fm-primary-sessionstart-nudge.js" \
     "$ROOT/.opencode/plugins/package.json" \
     "$AHOY_PROJECT/.opencode/plugins/"
+  cp "$ROOT/.opencode/plugins/lib/fm-operational-input.js" "$AHOY_PROJECT/.opencode/plugins/lib/"
   cp \
     "$ROOT/bin/fm-sessionstart-nudge.sh" \
     "$ROOT/bin/fm-primary-scope-lib.sh" \

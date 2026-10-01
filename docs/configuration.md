@@ -1021,6 +1021,12 @@ It then fails on a session whose model requests did not pass through the egress 
 It fails unless session start acquires the session lock for that OpenCode process and names `opencode` as the primary harness, and unless a plain shell opened in the same session finds no harness and stays read-only.
 [`verification/local-sailors.md`](verification/local-sailors.md) records the dated result; rerun the check after an OpenCode upgrade.
 
+### Session start check
+
+`FM_PRIVATEER_SESSIONSTART_LIVE=1 tests/fm-privateer-sessionstart-live-e2e.test.sh` starts a short Privateer session the same way, with a scripted sailor that logs what it is sent, and types only the captain's first message and `/compact`.
+It fails unless the session-start digest reaches the model's first answering request, the digest took the session lock for the OpenCode process, and the digest is re-emitted after the compaction.
+[`sessionstart-nudge.md`](sessionstart-nudge.md#opencode) owns how the plugin delivers it, and [`verification/local-sailors.md`](verification/local-sailors.md) records the dated result.
+
 ### Setting up a home
 
 Create the home with `config/privateer` naming the first mate's sailor and model, `config/crew-harness` holding `opencode`, `config/sailor-sandbox`, and a `config/crew-dispatch.json` naming only local sailors and no `sailor_fallback`; `config/opencode-permission-profile` set to `restricted` is the agreed posture for its sailors.

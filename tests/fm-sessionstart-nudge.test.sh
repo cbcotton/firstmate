@@ -165,7 +165,7 @@ test_namespace_pid1_lock_holder_is_silent() {
   pass "fm-sessionstart-nudge: a lock holder that is pid 1 of its own namespace is already run"
 }
 
-test_opencode_plugin_delivers_exact_nudge_once() {
+test_opencode_plugin_falls_back_to_exact_nudge_once() {
   local root="$TMP_ROOT/opencode-primary" out status=0
   make_primary "$root"
   cp "$ROOT/bin/fm-sessionstart-nudge.sh" "$ROOT/bin/fm-primary-scope-lib.sh" \
@@ -201,7 +201,112 @@ EOF
   ) || status=$?
   expect_code 0 "$status" "OpenCode exact nudge delivery"
   [ -z "$out" ] || fail "OpenCode exact nudge delivery printed output: $out"
-  pass "OpenCode session.created delivers the exact wrapper nudge once per session"
+  pass "OpenCode session.created falls back to the exact wrapper nudge once per session when no digest runs"
+}
+
+# Drives the OpenCode plugin through its public event surface with a fake
+# client and a stand-in run wrapper that records the source it was given.
+run_opencode_plugin() {  # <root> <js-body>
+  local root=$1 body=$2
+  PLUGIN="$ROOT/.opencode/plugins/fm-primary-sessionstart-nudge.js" WORKTREE="$root" \
+    node --input-type=module 2>&1 <<PLUGIN_JS
+import { pathToFileURL } from "node:url";
+const prompts = [];
+const client = {
+  session: {
+    promptAsync: async (request) => {
+      prompts.push({ id: request.path.id, text: request.body.parts[0].text });
+    },
+  },
+};
+const mod = await import(pathToFileURL(process.env.PLUGIN).href);
+const hooks = await mod.FmPrimarySessionstartNudge({
+  client,
+  directory: process.env.WORKTREE,
+  worktree: process.env.WORKTREE,
+});
+const created = (id, parentID) => hooks.event({
+  event: { type: "session.created", properties: { sessionID: id, info: { id, parentID } } },
+});
+const compacted = (id) => hooks.event({
+  event: { type: "session.compacted", properties: { sessionID: id } },
+});
+$body
+PLUGIN_JS
+}
+
+make_opencode_run_primary() {  # <root> <stand-in run script body>
+  local root=$1 script=$2
+  make_primary "$root"
+  cp "$ROOT/bin/fm-sessionstart-nudge.sh" "$ROOT/bin/fm-primary-scope-lib.sh" \
+    "$ROOT/bin/fm-gate-refuse-lib.sh" "$ROOT/bin/fm-operational-input.sh" "$root/bin/"
+  chmod +x "$root/bin/fm-sessionstart-nudge.sh"
+  printf '#!/usr/bin/env bash\n%s\n' "$script" > "$root/bin/fm-sessionstart-run.sh"
+  chmod +x "$root/bin/fm-sessionstart-run.sh"
+}
+
+test_opencode_plugin_injects_digest_at_startup_and_compaction() {
+  local root="$TMP_ROOT/opencode-run-tier" out status=0
+  # shellcheck disable=SC2016 # Expanded by the stand-in script, not this shell.
+  make_opencode_run_primary "$root" \
+    'printf "%s\n" "$2" >> "$(dirname "$0")/../state/sources"; printf "DIGEST for %s\n" "$2"'
+  out=$(run_opencode_plugin "$root" '
+await created("first");
+await created("first");
+await created("second");
+await created("child", "first");
+await compacted("first");
+await compacted("child");
+const digests = prompts.map((p) => p.id + "|" + p.text.slice(p.text.indexOf("DIGEST")));
+const expected = ["first|DIGEST for startup", "second|DIGEST for clear", "first|DIGEST for compact"];
+if (JSON.stringify(digests) !== JSON.stringify(expected)) throw new Error("unexpected prompts: " + JSON.stringify(prompts));
+for (const p of prompts) {
+  if (!p.text.startsWith("⁣FIRSTMATE_OP: v1 session-start: DIGEST")) throw new Error("digest not typed as session-start: " + p.text);
+}
+') || status=$?
+  expect_code 0 "$status" "OpenCode digest injection"
+  [ -z "$out" ] || fail "OpenCode digest injection printed output: $out"
+  [ "$(tr '\n' ' ' < "$root/state/sources")" = "startup clear compact " ] \
+    || fail "OpenCode plugin ran the wrapper with unexpected sources: $(cat "$root/state/sources")"
+  pass "OpenCode plugin injects the run digest at startup, a clear for later sessions, and compaction, skipping child sessions"
+}
+
+test_opencode_plugin_bounds_an_oversized_digest() {
+  local root="$TMP_ROOT/opencode-run-oversize" out status=0
+  make_opencode_run_primary "$root" 'head -c 600000 /dev/zero | tr "\0" x; echo'
+  out=$(run_opencode_plugin "$root" '
+await created("big");
+if (prompts.length !== 1) throw new Error("expected one prompt, got " + prompts.length);
+const text = prompts[0].text;
+if (!text.includes("DELIVERY TRUNCATED")) throw new Error("oversized digest was not marked truncated");
+if (text.length > 512 * 1024 + 1024) throw new Error("oversized digest was not bounded: " + text.length);
+') || status=$?
+  expect_code 0 "$status" "OpenCode oversized digest"
+  [ -z "$out" ] || fail "OpenCode oversized digest printed output: $out"
+  pass "OpenCode plugin bounds an oversized digest at 512 KiB with a loud truncation marker"
+}
+
+test_opencode_plugin_holds_the_first_message_for_the_digest() {
+  local root="$TMP_ROOT/opencode-run-hold" out status=0
+  # shellcheck disable=SC2016 # Expanded by the stand-in script, not this shell.
+  make_opencode_run_primary "$root" \
+    'sleep 1; touch "$(dirname "$0")/../state/digest-done"; printf "DIGEST\n"'
+  out=$(MARKER="$root/state/digest-done" run_opencode_plugin "$root" '
+import { existsSync } from "node:fs";
+const creating = created("held");
+// The message hook must wait for the digest even when the event is still in flight.
+await hooks["chat.message"]({ sessionID: "held" });
+if (!existsSync(process.env.MARKER)) throw new Error("the first message was not held for the digest");
+await creating;
+if (prompts.length !== 1) throw new Error("expected one digest prompt, got " + prompts.length);
+const started = Date.now();
+await hooks["chat.message"]({ sessionID: "held" });
+await hooks["chat.message"]({ sessionID: "unknown" });
+if (Date.now() - started > 500) throw new Error("later messages were held");
+') || status=$?
+  expect_code 0 "$status" "OpenCode first message hold"
+  [ -z "$out" ] || fail "OpenCode first message hold printed output: $out"
+  pass "OpenCode plugin holds a session's messages until its digest is ready and never holds a later one"
 }
 
 # --- run tier ----------------------------------------------------------------
@@ -1102,7 +1207,10 @@ test_linked_secondmate_primary_nudges
 test_missing_state_is_silent
 test_owned_lock_is_silent
 test_namespace_pid1_lock_holder_is_silent
-test_opencode_plugin_delivers_exact_nudge_once
+test_opencode_plugin_falls_back_to_exact_nudge_once
+test_opencode_plugin_injects_digest_at_startup_and_compaction
+test_opencode_plugin_bounds_an_oversized_digest
+test_opencode_plugin_holds_the_first_message_for_the_digest
 test_run_startup_runs_the_full_digest
 test_run_clear_and_compact_reemit
 test_run_rebuild_forwards_source_to_drifted_instruction_refresh

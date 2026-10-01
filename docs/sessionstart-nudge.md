@@ -26,8 +26,8 @@ The tier is a property of the harness surface, not of the home.
 
 | Tier | What the adapter does | Used by |
 | --- | --- | --- |
-| Run | Executes `bin/fm-session-start.sh` through the native session-open adapter and gates its ordered digest into model context before the first turn. | Claude, `codex exec`, Pi / pi-signed, omp, Cursor |
-| Nudge | Asks the agent to run the digest through the native adapter or the tracked session-start instruction. | Grok, OpenCode, and run-tier sources routed to the nudge |
+| Run | Executes `bin/fm-session-start.sh` through the native session-open adapter and gates its ordered digest into model context before the first turn. | Claude, `codex exec`, Pi / pi-signed, omp, Cursor, OpenCode |
+| Nudge | Asks the agent to run the digest through the native adapter or the tracked session-start instruction. | Grok, and run-tier sources routed to the nudge |
 
 Codex's interactive TUI has no tracked session-open, compaction, or re-emit channel and is not covered by either tier.
 
@@ -39,7 +39,7 @@ Codex's interactive TUI has no tracked session-open, compaction, or re-emit chan
 | Codex exec | Run | [Codex exec](#codex-exec) |
 | Codex interactive TUI | Uncovered | [Codex interactive TUI](#codex-interactive-tui) |
 | Pi / pi-signed | Run | [Pi and pi-signed](#pi-and-pi-signed) |
-| OpenCode | Nudge | [OpenCode](#opencode) |
+| OpenCode | Run | [OpenCode](#opencode) |
 | Grok | Nudge | [Grok](#grok) |
 | Cursor | Run | [Cursor](#cursor) |
 | omp | Run | [omp](#omp) |
@@ -306,18 +306,29 @@ Whenever the digest is incomplete, this approved containment keeps the prefix an
 
 ### OpenCode
 
-OpenCode is a nudge-tier harness.
-The `.opencode/plugins/fm-primary-sessionstart-nudge.js` plugin does three things:
+OpenCode is a run-tier harness for its interactive TUI.
+The `.opencode/plugins/fm-primary-sessionstart-nudge.js` plugin runs `bin/fm-sessionstart-run.sh` itself and hands the digest to the model as `session-start` operational input.
+It maps OpenCode events onto wrapper sources:
 
-- It listens for `session.created`.
-- It runs once per session id.
-- It calls `client.session.promptAsync` only when the wrapper prints a nudge.
+- `session.created` runs once per top-level session id.
+  The process's first session is `startup`, and a later one is `clear`, because it already holds the helm and lost only its context.
+  A child session such as a subagent is ignored.
+- `session.compacted` runs `compact` for any session that is not a child.
+  The `experimental.session.compacting` hook is deliberately unused, because text added there is summarized away instead of kept.
+
+OpenCode creates its session when the first message is submitted, and it saves that message only after the `chat.message` hook returns.
+The plugin's `chat.message` hook therefore waits for the digest, so the model's first answering request holds the digest alongside the captain's message.
+The digest itself is delivered through `client.session.promptAsync`, so in history it follows the captain's message.
+The wait is bounded by the digest's own runtime bound plus a 180s kill in the plugin.
+
+The plugin retains at most 512 KiB of the digest and appends a loud `OPENCODE SESSION-START DELIVERY TRUNCATED` marker otherwise, matching the Pi bound.
+A run that yields no digest falls back to the nudge wrapper, which stays silent wherever the run wrapper stood down.
+Inside a sealed Privateer session the plugin process is a descendant of the OpenCode first mate, so the digest takes the session lock as the first mate's own.
 
 Interactive TUI delivery is supported.
-Headless `opencode run` is intentionally fail-open, because the process can exit before the queued turn.
-That early exit is also why OpenCode cannot use the run tier.
+Headless `opencode run` stays fail-open, because the process can exit before the queued turn.
+Compaction re-emit is fail-open in the same way.
 
-The OpenCode nudge runs only on `session.created`.
 The watcher-arm and turn-end plugins run later, on `session.idle`.
 The guard lets the watcher coordinator act first, so the plugins do not race for one lifecycle event.
 
@@ -432,6 +443,14 @@ It uses a TERM-resistant digest that exceeds its budget and proves that the dige
 ### Native startup and Ahoy tests
 
 `tests/fm-pi-primary-live-e2e.test.sh` and `tests/fm-opencode-primary-live-e2e.test.sh` exercise native startup paths with first-message and later-message Ahoy regressions.
+
+### OpenCode tests
+
+`tests/fm-sessionstart-nudge.test.sh` drives the plugin through its public events with a fake client and a stand-in run wrapper.
+It proves the source each event maps to, exactly-once delivery, child-session exclusion, the wait in `chat.message`, the 512 KiB bound with its marker, and the fall back to the exact nudge when no digest runs.
+
+`FM_PRIVATEER_SESSIONSTART_LIVE=1 tests/fm-privateer-sessionstart-live-e2e.test.sh` proves the path in a real sealed Privateer session.
+The digest reaches the model's first answering request with nothing typed but the captain's first message, it takes the session lock for the OpenCode process, and `/compact` re-emits it.
 
 ### Cursor tests
 
