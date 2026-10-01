@@ -273,6 +273,38 @@
       "audience": "maintainer-architecture"
     },
     {
+      "path": ".opencode/commands/helm.md",
+      "audience": "agent-runtime"
+    },
+    {
+      "path": ".opencode/commands/land.md",
+      "audience": "agent-runtime"
+    },
+    {
+      "path": ".opencode/commands/queue.md",
+      "audience": "agent-runtime"
+    },
+    {
+      "path": ".opencode/commands/sailors.md",
+      "audience": "agent-runtime"
+    },
+    {
+      "path": ".opencode/commands/scout.md",
+      "audience": "agent-runtime"
+    },
+    {
+      "path": ".opencode/commands/ship.md",
+      "audience": "agent-runtime"
+    },
+    {
+      "path": ".opencode/commands/steer.md",
+      "audience": "agent-runtime"
+    },
+    {
+      "path": ".opencode/commands/wake.md",
+      "audience": "agent-runtime"
+    },
+    {
       "path": "AGENTS.md",
       "audience": "agent-runtime"
     },
