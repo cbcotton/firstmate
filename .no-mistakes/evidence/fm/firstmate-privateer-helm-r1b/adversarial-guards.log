@@ -1,0 +1,34 @@
+$ # 1. start on a checkout without docs/privateer
+fm-privateer: refused: the checkout at /tmp/fm-adv.XIIJxG/root carries no Privateer rulebook (docs/privateer/AGENTS.md and docs/privateer/agents/privateer.md); update the checkout first
+exit=1
+ls: /tmp/fm-adv.XIIJxG/home/state/privateer: No such file or directory
+
+$ # 2. rulebook check on clean tree
+exit=0
+
+$ # 3. rulebook check on a broken copy
+docs/privateer/skills/scout-completion/SKILL.md names itself 'Scout_Completion', but its directory is scout-completion
+docs/privateer/skills/ship-landing/SKILL.md names bin/fm-nope.sh, which is not in this checkout
+docs/privateer/skills/ship-landing/SKILL.md shows `bin/fm-send.sh <id> "unterminated`, which does not parse as a shell command
+docs/privateer/skills/rogue is not allowed by docs/privateer/agents/privateer.md, so the first mate could never load it
+exit=1
+
+$ # 4. front door refuses malformed calls
+$ bin/fm-helm.sh 
+error: fm-helm.sh refused: this is a sealed Privateer home; attach with bin/fm-privateer.sh attach, and never drive its session from outside
+exit=2
+$ bin/fm-helm.sh bogus
+error: fm-helm.sh refused: this is a sealed Privateer home; attach with bin/fm-privateer.sh attach, and never drive its session from outside
+exit=2
+$ bin/fm-helm.sh land
+error: fm-helm.sh refused: this is a sealed Privateer home; attach with bin/fm-privateer.sh attach, and never drive its session from outside
+exit=2
+$ bin/fm-helm.sh steer
+error: fm-helm.sh refused: this is a sealed Privateer home; attach with bin/fm-privateer.sh attach, and never drive its session from outside
+exit=2
+$ bin/fm-helm.sh scout
+error: fm-helm.sh refused: this is a sealed Privateer home; attach with bin/fm-privateer.sh attach, and never drive its session from outside
+exit=2
+$ bin/fm-helm.sh land a b
+error: fm-helm.sh refused: this is a sealed Privateer home; attach with bin/fm-privateer.sh attach, and never drive its session from outside
+exit=2

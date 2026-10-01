@@ -1,0 +1,113 @@
+Note: switching to '49ad62fdf7af5bba74133701bb1a6853b818acc3'.
+
+changes and commit them, and you can discard any commits you make in this
+state without impacting any branches by switching back to a branch.
+
+If you want to create a new branch to retain commits you create, you may
+do so (now or later) by using -c with the switch command. Example:
+
+
+Or undo this operation with:
+
+
+
+start exit=0 : privateer: started session privateer on tmux socket fm-privateer-92e5de9268ce (first mate tiller/scripted, egress proxy 127.0.0.1:52659); attach with: FM_HOME='/private/tmp/fm-slash.djiXlB/home' '/private/tmp/fm-slash.djiXlB/root/bin/fm-privateer.sh' attach
+--- rendered helm tree:
+.
+backends
+fm-afk-contract.sh
+fm-afk-launch.sh
+#!/bin/sh
+exec '/private/tmp/fm-slash.djiXlB/root/bin/fm-helm.sh' "$@"
+/private/tmp/fm-slash.djiXlB/home/state/privateer/helm
+                     ▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀
+   ┃
+   ┃  /sailors
+   ┃
+   ┃  Privateer · scripted Start
+   ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                                                   tab agents  ctrl+p commands
+  /private/tmp/fm-slash.djiXlB/home/state/privateer/helm:main          1.18.33
+--- pane after /sailors:
+  ┃  NEXT STEP
+  ┃  =========================================================================
+  ┃  =======
+  ┃  Follow the supervision operating instructions block above for harness
+  ┃  'opencode'.
+  ┃  This script never starts supervision itself.
+  ┃
+  ┃  The digest above is complete for this session start. The READ-ONCE
+  ┃  CONTRACT
+  ┃  section near the top of it governs what may still be read from disk.
+  ┃
+     Aye. Standing by.
+     ▣  Privateer · scripted · 779ms
+  ┃
+  ┃
+  ┃
+  ┃  Privateer · scripted Start
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+   /private/tmp/fm-slash.djiXlB/home/state/privateer/tab agents ctrl+p
+   helm                                                         commands
+--- model received (user text of /sailors turn):
+tiller live answering endpoint=http://127.0.0.1:52646/v1 tasks=0/1 models=scripted(listed)
+
+
+That is each sailor's status, shown for the captain's /sailors.
+Tell the captain in a few plain lines which sailors can take work now and which cannot, and why.
+⁣FIRSTMATE_OP: v1 session-start: ================================================================================
+SESSION START - /private/tmp/fm-slash.djiXlB/home
+================================================================================
+
+LOCK
+--------------------------------------------------------------------------------
+lock acquired: harness pid 44411
+
+BOOTSTRAP
+--------------------------------------------------------------------------------
+BOOTSTRAP_INFO: lavish-axi >=0.1.80 enables confirmed board replies; this older compatible version retains the legacy reply path, but upgrade to prevent handing back a board before its reply is accepted
+
+WAKE QUEUE
+--------------------------------------------------------------------------------
+(no queued wakes)
+================================================================================
+SUPERVISION OPERATING INSTRUCTIONS - primary harness: opencode
+================================================================================
+Current state:
+- Lock: held by this session; this session owns normal supervision unless away mode says otherwise.
+- Away/quiet mode: inactive.
+- X mode: inactive; use the default watcher cadence.
+- Ordinary wake: the OpenCode TUI plugin already owns watcher continuity; do not arm manually.
+
+Mode: OpenCode TUI plugin background wake.
+
+When this session owns supervision and away mode is not active:
+1. Drain first with `bin/fm-wake-drain.sh`.
+   After handling all emitted wakes and reconciling open decisions and unread status lines, run the exact `--ack-through` command printed as `WAKE_ACK_REQUIRED`; until then the work remains durable for idempotent re-handling after interruption.
+2. First cycle: let `.opencode/plugins/fm-primary-watch-arm.js` arm supervision after the OpenCode session goes idle.
+3. The plugin listens for `session.idle`, spawns `bin/fm-watch-arm.sh --restart` without awaiting it in the idle handler, and owns every later successor launch.
+4. After an actionable child close, the plugin rechecks session-lock ownership and verifies one singleton successor before it calls `client.session.promptAsync`; its bounded fallback is defined in `docs/watcher-continuity.md`.
+5. Ordinary wake: do not ask the model to re-arm because continuity is plugin-owned.
+6. An unexpected child close enters bounded exponential retry, and an exhausted retry or lost session lock is surfaced as a watcher failure instead of disappearing.
+7. Failure or missing cycle only: if the plugin reports a watcher failure, drain queued wakes, inspect the failure text, and use `bin/fm-watch-arm.sh` manually only as a short recovery probe.
+8. Never use shell `&` for watcher supervision.
+   The arm mechanism above is plugin-owned, not a model tool call, but a manual recovery probe that backgrounds, pipes, or bundles the arm is denied automatically by the PreToolUse seatbelt (`.opencode/plugins/fm-primary-pretool-check.js`, `bin/fm-arm-pretool-check.sh`).
+9. Do not rely on this plugin in headless `opencode run`; firstmate primary supervision targets persistent OpenCode TUI sessions.
+
+OpenCode's persistent TUI plugin runtime is the wake mechanism.
+The plugin applies in the main primary checkout and a secondmate's own home, and stays silent only in child crewmate and scout worktrees.
+
+
+================================================================================
+READ-ONCE CONTRACT
+================================================================================
+Everything below is printed in full for this session start: every state/*.meta,
+a compact data/backlog.md listing, a bounded tail of every state/*.status,
+data/projects.md, data/secondmates.md, data/captain.md, data/captain-shared.md,
+and data/learnings.md.
+Do NOT re-read any of them after reading this digest, and do NOT bulk-read
+data/backlog.md or state/*.status: re-reading everything defeats the entire
+point of this command.
+
+Go to a source directly only when:
+/tmp/fm-slash-probe/run.sh: line 52: 43293 Terminated: 15          python3 $OUT/model.py $OUT/port $OUT/model.log
