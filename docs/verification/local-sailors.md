@@ -183,7 +183,7 @@ Facts the plugin depends on:
 
 ## A Privateer first mate sees only its helm
 
-Verified 2026-09-30 on macOS 26.6 with OpenCode 1.18.33 and tmux 3.7c by `FM_PRIVATEER_EGRESS_LIVE=1 tests/fm-privateer-egress-live-e2e.test.sh`, the egress audit, which also checks the helm that `../configuration.md` ("How a Privateer session runs") describes.
+Verified 2026-10-01 on macOS 26.6 with OpenCode 1.18.33 and tmux 3.7c by `FM_PRIVATEER_EGRESS_LIVE=1 tests/fm-privateer-egress-live-e2e.test.sh`, the egress audit, which also checks the helm that `../configuration.md` ("How a Privateer session runs") describes.
 The audit ran `bin/fm-privateer.sh start` for real with a fixture clone of the checkout carrying the working tree's scripts, plugins, and Privateer rulebook, and with `HOME` set to a stand-in captain home holding `~/.claude/CLAUDE.md` and one decoy skill in each of `~/.claude/skills`, `~/.agents/skills`, and `~/.opencode/skills`.
 Its scripted sailor recorded the system text and the offered skills of every chat request.
 
@@ -192,14 +192,15 @@ Its scripted sailor recorded the system text and the offered skills of every cha
 | The system text of the first request that offered the first mate's tools | Began with the `privateer` agent's prompt, and named `Instructions from: <home>/state/privateer/helm/AGENTS.md` as its only instructions |
 | The checkout's `AGENTS.md` and the stand-in `~/.claude/CLAUDE.md` | Absent from that system text |
 | The skills that request offered | Exactly the seven under `docs/privateer/skills/`, and none of the three decoys |
-| That request's arrival | 85 seconds after start, answering the prompt the audit typed into the pane |
+| That request's arrival | 92 seconds after start, answering the prompt the audit typed into the pane together with the session-start digest |
 
-`FM_PRIVATEER_SESSION_LOCK_LIVE=1 tests/fm-privateer-session-lock-live-e2e.test.sh` also passed with the first mate in the helm: session start ran as `bin/fm-session-start.sh` through the helm's `bin/`, took the fleet lock for the OpenCode process, and printed the OpenCode supervision block, 606 seconds after start on a machine under load (load averages between 6 and 10).
+With the first mate in the helm, `FM_PRIVATEER_SESSIONSTART_LIVE=1 tests/fm-privateer-sessionstart-live-e2e.test.sh` also passed, the digest arriving through the helm's `bin/` with the captain's first message, as did `FM_PRIVATEER_SESSION_LOCK_LIVE=1 tests/fm-privateer-session-lock-live-e2e.test.sh`, whose `bin/fm-session-start.sh` ran through the helm's `bin/` 94 seconds after start, took the fleet lock for the OpenCode process, and printed the OpenCode supervision block.
 
 Facts the helm depends on, each observed in a scratch Git repository with OpenCode's four `XDG_*` directories isolated and a scripted model that logged each request:
 
 - A directory that is its own Git repository, even one with no commit, is OpenCode's project root: `opencode debug scrap` named it as the worktree, and an `AGENTS.md` and `.agents/skills/` in a directory above it did not load.
 - A custom agent's Markdown body replaces OpenCode's build prompt: the system text began with that body.
+- A turn a plugin starts with `promptAsync` and no agent, such as the session-start digest, runs as OpenCode's default agent, `build`, whatever agent the TUI was started with; the audit's first request held the build prompt and the hidden skills until the launcher's configuration named `default_agent: "privateer"`, and `opencode run` with no `--agent` then ran as `privateer`.
 - Without the two switches below, OpenCode appended `~/.claude/CLAUDE.md` as instructions and offered skills from `~/.claude/skills`, `~/.agents/skills`, and `~/.opencode/skills`.
 - `OPENCODE_DISABLE_EXTERNAL_SKILLS=1` drops `.claude/skills` and `.agents/skills` everywhere, including a project's own, and keeps `.opencode/skills`, which is why the helm's skills live there; `OPENCODE_DISABLE_CLAUDE_CODE=1` drops `~/.claude/CLAUDE.md`.
 - An agent whose `permission.skill` denies `"*"` and allows named skills is offered only those, so the captain's `~/.opencode/skills` and the built-in `customize-opencode` skill are hidden.

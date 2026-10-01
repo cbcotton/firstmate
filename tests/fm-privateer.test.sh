@@ -697,8 +697,8 @@ test_start_passes_only_the_allowlist() {
   assert_grep "XDG_STATE_HOME=$home_real/state/privateer/opencode/state" "$envlog" "OpenCode's state directory must sit inside the home"
   assert_grep "XDG_CACHE_HOME=$home_real/state/privateer/opencode/cache" "$envlog" "OpenCode's cache directory must sit inside the home"
   assert_grep "OPENCODE_DISABLE_AUTOUPDATE=1" "$envlog" "auto-update must be off"
-  assert_grep 'OPENCODE_CONFIG_CONTENT={"autoupdate":false,"share":"disabled","model":"tiller/coder","permission":{"*":"allow"},"provider":{"tiller":{"npm":"@ai-sdk/openai-compatible","name":"Tiller","options":{"baseURL":"http://127.0.0.1:11234/v1"},"models":{"coder":{"name":"coder","limit":{"context":131072,"output":16384},"options":{"reasoningEffort":"medium","temperature":0.6}}}}}}' "$envlog" \
-    "the first mate's OpenCode config must pin the model to its sailor as the only provider, carrying the model's settings, with auto-update off and sharing disabled"
+  assert_grep 'OPENCODE_CONFIG_CONTENT={"autoupdate":false,"share":"disabled","default_agent":"privateer","model":"tiller/coder","permission":{"*":"allow"},"provider":{"tiller":{"npm":"@ai-sdk/openai-compatible","name":"Tiller","options":{"baseURL":"http://127.0.0.1:11234/v1"},"models":{"coder":{"name":"coder","limit":{"context":131072,"output":16384},"options":{"reasoningEffort":"medium","temperature":0.6}}}}}}' "$envlog" \
+    "the first mate's OpenCode config must pin the model to its sailor as the only provider, carrying the model's settings, with auto-update off, sharing disabled, and the privateer agent as the default"
   assert_equals "HTTPS_PROXY=http://127.0.0.1:$port" "$(grep '^HTTPS_PROXY=' "$envlog")" "the egress proxy must reach the first mate as HTTPS_PROXY"
   assert_equals "HTTP_PROXY=http://127.0.0.1:$port" "$(grep '^HTTP_PROXY=' "$envlog")" "the egress proxy must reach the first mate as HTTP_PROXY"
   assert_equals "GIT_SSH_COMMAND=ssh -o ProxyCommand='/usr/bin/nc -X connect -x 127.0.0.1:$port %h %p'" "$(grep '^GIT_SSH_COMMAND=' "$envlog")" "Git over SSH must tunnel through the egress proxy"

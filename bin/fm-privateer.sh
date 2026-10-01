@@ -95,8 +95,10 @@
 # and TERMINFO_DIRS only name where terminal descriptions are read from), FM_HOME, and the
 # launch-env assignments above; the primary adds OPENCODE_CONFIG_CONTENT, which
 # pins the model to the first mate's sailor as the only provider, allows every
-# tool as a secondmate primary is allowed, turns auto-update off, and disables
-# sharing; FM_ROOT_OVERRIDE naming this checkout, so every script and plugin
+# tool as a secondmate primary is allowed, turns auto-update off, disables
+# sharing, and makes the privateer agent the default, so a turn a plugin starts
+# without naming an agent, such as the session-start digest or a wake, runs
+# as that agent too; FM_ROOT_OVERRIDE naming this checkout, so every script and plugin
 # keeps it as the code root; and OPENCODE_DISABLE_EXTERNAL_SKILLS=1 and
 # OPENCODE_DISABLE_CLAUDE_CODE=1, so no skill or instruction file under the
 # captain's ~/.claude or ~/.agents reaches the first mate. The primary also
@@ -648,7 +650,7 @@ cmd_start() {
   provider=$(FM_CONFIG_OVERRIDE="$CONFIG" FM_STATE_OVERRIDE="$STATE" "$SCRIPT_DIR/fm-sailor.sh" provider-json "$sailor" "$model") ||
     die "the first mate's OpenCode provider entry could not be built"
   config=$(jq -cn --argjson provider "$provider" --arg model "$sailor/$model" \
-    '{autoupdate: false, share: "disabled", model: $model, permission: {"*": "allow"}, provider: $provider}') ||
+    '{autoupdate: false, share: "disabled", default_agent: "privateer", model: $model, permission: {"*": "allow"}, provider: $provider}') ||
     die "the first mate's OpenCode configuration could not be composed"
   mkdir -p "$OPENCODE_ROOT/config" "$OPENCODE_ROOT/data" "$OPENCODE_ROOT/state" "$OPENCODE_ROOT/cache" "$POOL" ||
     die "cannot create $OPENCODE_ROOT"
