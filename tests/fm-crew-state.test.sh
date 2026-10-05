@@ -196,6 +196,22 @@ case "${1:-}" in
 esac
 exit 1
 SH
+  cat > "$fb/tea" <<'SH'
+#!/usr/bin/env bash
+set -u
+case "${1:-} ${2:-}" in
+  "logins list")
+    printf '%s\n' '[{"name":"other","url":"https://other.example","default":"true"},{"name":"forge","url":"https://gitea.example","default":"false"}]'
+    exit 0 ;;
+  "api --login")
+    [ -z "${FM_FAKE_TEA_READ_LOG:-}" ] || printf '%s\n' "$*" >> "$FM_FAKE_TEA_READ_LOG"
+    [ "${FM_FAKE_TEA_READ_FAIL:-0}" = 1 ] && exit 1
+    printf '{"number":%s,"state":"%s","merged":%s,"draft":false,"head":{"sha":"0123456789abcdef0123456789abcdef01234567"}}\n' \
+      "${FM_FAKE_TEA_NUMBER:-${4##*/}}" "${FM_FAKE_TEA_STATE:-closed}" "${FM_FAKE_TEA_MERGED:-true}"
+    exit 0 ;;
+esac
+exit 1
+SH
   cat > "$fb/tmux" <<'SH'
 #!/usr/bin/env bash
 set -u
@@ -276,7 +292,7 @@ case "${1:-}" in
 esac
 exit 0
 SH
-  chmod +x "$fb/no-mistakes" "$fb/gh" "$fb/gh-axi" "$fb/glab" "$fb/gerrit-axi" "$fb/tmux" "$fb/herdr"
+  chmod +x "$fb/no-mistakes" "$fb/gh" "$fb/gh-axi" "$fb/glab" "$fb/gerrit-axi" "$fb/tea" "$fb/tmux" "$fb/herdr"
   printf '%s\n' "$fb"
 }
 
@@ -351,6 +367,11 @@ reset_fakes() {
   FM_FAKE_GERRIT_URL_JSON=
   FM_FAKE_GERRIT_READ_FAIL=0
   FM_FAKE_GERRIT_READ_LOG=
+  FM_FAKE_TEA_STATE=closed
+  FM_FAKE_TEA_MERGED=true
+  FM_FAKE_TEA_NUMBER=
+  FM_FAKE_TEA_READ_FAIL=0
+  FM_FAKE_TEA_READ_LOG=
   unset FM_FAKE_PR_47_STATE FM_FAKE_PR_47_MERGED FM_FAKE_PR_48_STATE FM_FAKE_PR_48_MERGED
   export FM_FAKE_AXI_STATUS FM_FAKE_AXI_STATUS_RUN FM_FAKE_RUNS_LIST FM_FAKE_BUSY FM_FAKE_BUSY_TEXT FM_FAKE_TMUX_MISSING FM_FAKE_TMUX_UNREADABLE
   export FM_FAKE_HERDR_BUSY FM_FAKE_HERDR_MISSING FM_FAKE_HERDR_READ_FAIL FM_FAKE_HERDR_HUSK FM_FAKE_HERDR_AGENT_STATUS FM_FAKE_HERDR_PROCESS FM_FAKE_HERDR_SHELL_PID FM_FAKE_CI_LOGS
@@ -360,6 +381,7 @@ reset_fakes() {
   export FM_FAKE_GLAB_STATE FM_FAKE_GLAB_READ_FAIL FM_FAKE_GLAB_READ_LOG
   export FM_FAKE_GERRIT_STATUS FM_FAKE_GERRIT_CHANGE FM_FAKE_GERRIT_URL_JSON
   export FM_FAKE_GERRIT_READ_FAIL FM_FAKE_GERRIT_READ_LOG
+  export FM_FAKE_TEA_STATE FM_FAKE_TEA_MERGED FM_FAKE_TEA_NUMBER FM_FAKE_TEA_READ_FAIL FM_FAKE_TEA_READ_LOG
   export FM_FAKE_PR_47_STATE FM_FAKE_PR_47_MERGED FM_FAKE_PR_48_STATE FM_FAKE_PR_48_MERGED
 }
 
@@ -1674,6 +1696,50 @@ test_terminal_passed_with_unreadable_gerrit_change_reports_unknown() {
   assert_contains "$out" "run passed: PR state unknown (unreadable)" "mismatched Gerrit record is honest unknown"
   assert_not_contains "$out" "PR merged" "another change's merged record must not report merged"
   pass "terminal passed run handles an unreadable or mismatched Gerrit read"
+}
+
+test_terminal_passed_reads_gitea_pull_request_state() {
+  reset_fakes
+  command -v jq >/dev/null 2>&1 || { pass "Gitea pull request state skipped without jq"; return; }
+  local d url read_log out
+  d=$(new_case passed-gitea-pull)
+  url=https://gitea.example/owner/repo/pulls/7
+  make_repo_on_branch "$d/wt" fm/feat-dgitea
+  make_fakebin "$d" >/dev/null
+  fm_write_meta "$d/state/feat-dgitea.meta" "window=fm:fm-feat-dgitea" \
+    "worktree=$d/wt" "kind=ship" "pr=$url"
+  read_log="$d/tea-read.log"
+  : > "$read_log"
+  FM_FAKE_TEA_READ_LOG=$read_log
+  FM_FAKE_AXI_STATUS="$(run_passed_with_pr fm/feat-dgitea "$url")"
+  out=$(run_crew_state "$d" feat-dgitea)
+  assert_contains "$out" "run passed: PR merged" "merged Gitea pull request is reported merged"
+  assert_grep 'api --login forge /repos/owner/repo/pulls/7' "$read_log" \
+    "Gitea read addresses the pull request under its host's own login"
+
+  FM_FAKE_TEA_STATE=open
+  FM_FAKE_TEA_MERGED=false
+  out=$(run_crew_state "$d" feat-dgitea)
+  assert_contains "$out" "run passed: PR open" "open Gitea pull request state is named"
+  assert_not_contains "$out" "PR merged" "open Gitea pull request must not be reported merged"
+
+  FM_FAKE_TEA_STATE=closed
+  out=$(run_crew_state "$d" feat-dgitea)
+  assert_contains "$out" "run passed: PR closed" "closed Gitea pull request state is named"
+  assert_not_contains "$out" "PR merged" "closed Gitea pull request must not be reported merged"
+
+  FM_FAKE_TEA_MERGED=true
+  FM_FAKE_TEA_NUMBER=8
+  out=$(run_crew_state "$d" feat-dgitea)
+  assert_contains "$out" "run passed: PR state unknown (unreadable)" "another pull request's record is honest unknown"
+  assert_not_contains "$out" "PR merged" "another pull request's merged record must not report merged"
+
+  FM_FAKE_TEA_NUMBER=
+  FM_FAKE_TEA_READ_FAIL=1
+  out=$(run_crew_state "$d" feat-dgitea)
+  assert_contains "$out" "run passed: PR state unknown (unreadable)" "failed Gitea read is honest unknown"
+  assert_not_contains "$out" "PR merged" "failed Gitea read must not be reported merged"
+  pass "terminal passed run reads Gitea pull request state"
 }
 
 test_terminal_failed() {
@@ -5557,6 +5623,7 @@ test_terminal_passed_with_failed_gitlab_read_reports_unknown
 test_terminal_passed_with_open_gerrit_change_does_not_claim_merged
 test_terminal_passed_with_merged_gerrit_change_reports_merged
 test_terminal_passed_with_unreadable_gerrit_change_reports_unknown
+test_terminal_passed_reads_gitea_pull_request_state
 test_terminal_failed
 test_terminal_failed_ci_orphan_after_green_reads_done
 test_terminal_failed_ci_orphan_status_only_reads_done

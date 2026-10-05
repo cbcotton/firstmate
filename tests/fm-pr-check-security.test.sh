@@ -246,6 +246,36 @@ printf '{"ok":true,"op":"show","count":1,"missing":[],"changes":[{"change":%s,"s
   "${FM_TEST_GERRIT_REVISION:-5f07a68436929a527ddc7abadc8ef1abceae40ed}" \
   "${FM_TEST_GERRIT_URL:-https://gerrit.example/c/group/apps/console/+/4201}"
 SH
+  # tea, reproducing the real CLI's contract: `logins list --output json` prints
+  # the logins without tokens, and `api` prints the response body and exits zero
+  # even on an HTTP error, a non-zero exit with no stdout meaning the client
+  # itself failed. The default reading is an open, mergeable, up-to-date pull
+  # request on gitea.example whose fork point is the base tip.
+  cat > "$fakebin/tea" <<'SH'
+#!/usr/bin/env bash
+[ -z "${FM_TEST_TEA_LOG:-}" ] || printf '%s\n' "$*" >> "$FM_TEST_TEA_LOG"
+[ "${FM_TEST_TEA_FAIL:-0}" = 0 ] || exit 1
+base=1111111111111111111111111111111111111111
+logins='[{"name":"other","url":"https://other.example","ssh_host":"other.example","user":"u","default":"true"},{"name":"forge","url":"https://gitea.example","ssh_host":"gitea.example","user":"u","default":"false"}]'
+case "${1:-} ${2:-}" in
+  "logins list")
+    printf '%s\n' "${FM_TEST_TEA_LOGINS:-$logins}"
+    ;;
+  "api --login")
+    if [ -n "${FM_TEST_TEA_PULL_RAW:-}" ]; then
+      printf '%s\n' "$FM_TEST_TEA_PULL_RAW"
+      exit 0
+    fi
+    printf '{"number":%s,"state":"%s","merged":%s,"draft":%s,"mergeable":%s,"merge_base":"%s","head":{"ref":"fm/task","sha":"%s"},"base":{"ref":"%s","sha":"%s"}}\n' \
+      "${FM_TEST_TEA_NUMBER:-${4##*/}}" "${FM_TEST_TEA_STATE:-open}" \
+      "${FM_TEST_TEA_MERGED:-false}" "${FM_TEST_TEA_DRAFT:-false}" \
+      "${FM_TEST_TEA_MERGEABLE:-true}" "${FM_TEST_TEA_MERGE_BASE:-$base}" \
+      "${FM_TEST_TEA_HEAD:-0123456789abcdef0123456789abcdef01234567}" \
+      "${FM_TEST_TEA_BASE_REF:-main}" "${FM_TEST_TEA_BASE_SHA:-$base}"
+    ;;
+  *) exit 2 ;;
+esac
+SH
   # no-mistakes, answering only `axi status` the way the real CLI does from a
   # worker copy: a run object, then its branch_sync block. By default the run's
   # result is the copy's own passed HEAD and custody is returned; a case
@@ -266,12 +296,13 @@ if [ -n "${FM_TEST_NM_NEXT_ACTION:-}" ]; then
   printf '  next_action:\n    code: %s\n    command: no-mistakes axi status\n' "$FM_TEST_NM_NEXT_ACTION"
 fi
 SH
-  chmod +x "$fakebin/gh" "$fakebin/gh-axi" "$fakebin/glab" "$fakebin/gerrit-axi"
+  chmod +x "$fakebin/gh" "$fakebin/gh-axi" "$fakebin/glab" "$fakebin/gerrit-axi" "$fakebin/tea"
   chmod +x "$fakebin/no-mistakes"
   : > "$dir/gh.log"
   : > "$dir/gh-axi.log"
   : > "$dir/glab.log"
   : > "$dir/gerrit-axi.log"
+  : > "$dir/tea.log"
   : > "$dir/guard.log"
   printf '%s\n' "$dir"
 }
@@ -307,7 +338,7 @@ run_check_entry() {
   FM_ROOT_OVERRIDE="$dir/root" FM_HOME="$dir/home" \
     FM_TEST_GUARD_LOG="$dir/guard.log" FM_TEST_GH_LOG="$dir/gh.log" \
     FM_TEST_GH_AXI_LOG="$dir/gh-axi.log" FM_TEST_GLAB_LOG="$dir/glab.log" \
-    FM_TEST_GERRIT_AXI_LOG="$dir/gerrit-axi.log" \
+    FM_TEST_GERRIT_AXI_LOG="$dir/gerrit-axi.log" FM_TEST_TEA_LOG="$dir/tea.log" \
     PATH="$dir/fakebin:$BASE_PATH" \
     "$PR_CHECK" "$@"
 }
@@ -318,7 +349,7 @@ run_merge_entry() {
   FM_ROOT_OVERRIDE="$dir/root" FM_HOME="$dir/home" \
     FM_TEST_GUARD_LOG="$dir/guard.log" FM_TEST_GH_LOG="$dir/gh.log" \
     FM_TEST_GH_AXI_LOG="$dir/gh-axi.log" FM_TEST_GLAB_LOG="$dir/glab.log" \
-    FM_TEST_GERRIT_AXI_LOG="$dir/gerrit-axi.log" \
+    FM_TEST_GERRIT_AXI_LOG="$dir/gerrit-axi.log" FM_TEST_TEA_LOG="$dir/tea.log" \
     PATH="$dir/fakebin:$BASE_PATH" \
     "$PR_MERGE" "$@"
 }
@@ -367,6 +398,34 @@ INVALID_URLS=(
   'http://gerrit.example/c/proj/+/1'
   'https://github.com/c/proj/+/1'
   'https://gerrit.example/c/proj/+/1 '
+  'https://gitea.example/owner/pulls/1'
+  'https://gitea.example/group/owner/repo/pulls/1'
+  'https://gitea.example/owner/repo/pulls/0'
+  'https://gitea.example/owner/repo/pulls/01'
+  'https://gitea.example/owner/repo/pulls/1/'
+  'https://gitea.example/owner/repo/pulls/1/files'
+  'https://gitea.example/owner/repo/pulls/1?x=1'
+  'https://gitea.example/owner/repo/pulls/1#c'
+  'https://gitea.example/owner/repo/pull/1'
+  'https://gitea.example/owner/repo/issues/1'
+  'https://gitea.example//repo/pulls/1'
+  'https://gitea.example/owner//pulls/1'
+  'https://gitea.example/-owner/repo/pulls/1'
+  'https://gitea.example/.owner/repo/pulls/1'
+  'https://gitea.example/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/repo/pulls/1'
+  'https://gitea.example/owner/-repo/pulls/1'
+  'https://gitea.example/owner/./pulls/1'
+  'https://gitea.example/owner/../pulls/1'
+  'https://gitea.example/owner/repo.git/pulls/1'
+  'https://gitea.example/owner/re%2Fpo/pulls/1'
+  'https://Gitea.example/owner/repo/pulls/1'
+  'https://gitea.example:3000/owner/repo/pulls/1'
+  'https://user@gitea.example/owner/repo/pulls/1'
+  'https://.gitea.example/owner/repo/pulls/1'
+  'https://gitea.example./owner/repo/pulls/1'
+  'http://gitea.example/owner/repo/pulls/1'
+  'https://github.com/owner/repo/pulls/1'
+  'https://gitea.example/owner/repo/pulls/1 '
   'https://github.com/o/r/pull/1/'
   ' https://github.com/o/r/pull/1'
   'https://github.com/o/r/pull/1 '
@@ -520,6 +579,23 @@ https://review.internal/c/group/apps/console/+/4201|review.internal|group/apps/c
 https://gerrit.example/c/proj/+/1|gerrit.example|proj|1
 https://gerrit.example.co.uk/c/a/b/c/d/+/42|gerrit.example.co.uk|a/b/c/d|42
 https://review.internal/c/All-Projects/+/123456|review.internal|All-Projects|123456
+EOF
+  # A Gitea repository is exactly owner/repository on a self-hosted instance, so
+  # the host is identity and the path is never deeper than two segments.
+  while IFS='|' read -r url host path number; do
+    [ -n "$url" ] || continue
+    fm_pr_url_parse "$url" || fail "parser rejected a canonical Gitea pull request URL"
+    [ "$FM_PR_PROVIDER" = gitea ] || fail "parser did not tag a Gitea pull request URL as gitea"
+    [ "$FM_PR_URL" = "$url" ] || fail "parser changed a canonical Gitea pull request URL"
+    [ "$FM_PR_HOST" = "$host" ] || fail "parser returned wrong Gitea host"
+    [ "$FM_PR_PATH" = "$path" ] || fail "parser returned wrong Gitea repository path"
+    [ "$FM_PR_NUMBER" = "$number" ] || fail "parser returned wrong Gitea pull request number"
+    [ -z "$FM_PR_OWNER" ] && [ -z "$FM_PR_REPO" ] \
+      || fail "parser set GitHub owner/repository for a Gitea pull request URL"
+  done <<'EOF'
+https://gitea.example/owner/repo/pulls/1|gitea.example|owner/repo|1
+https://git.example.co.uk/Org.Name/repo-name_with.parts/pulls/123456|git.example.co.uk|Org.Name/repo-name_with.parts|123456
+https://gitea.example/c/proj/pulls/7|gitea.example|c/proj|7
 EOF
   fm_pr_url_parse https://github.com/a/b/pull/1 || fail "parser rejected canonical URL"
   [ "$FM_PR_PROVIDER" = github ] || fail "parser did not tag a pull request URL as github"
@@ -944,7 +1020,7 @@ make_poll_fixture() {
 run_poll() {
   local dir=$1
   FM_TEST_GH_LOG="$dir/gh.log" FM_TEST_GLAB_LOG="$dir/glab.log" \
-    FM_TEST_GERRIT_AXI_LOG="$dir/gerrit-axi.log" \
+    FM_TEST_GERRIT_AXI_LOG="$dir/gerrit-axi.log" FM_TEST_TEA_LOG="$dir/tea.log" \
     PATH="$dir/fakebin:$BASE_PATH" \
     bash "$dir/home/state/task-a.check.sh"
 }
@@ -1459,6 +1535,8 @@ test_teardown_removes_poll_artifacts() {
   printf 'data\n' > "$dir/home/state/task-a.pr-poll"
   printf 'registration\n' > "$dir/home/state/task-a.pr-poll-registration"
   printf 'trust\n' > "$dir/home/state/task-a.check-trust"
+  fm_pr_poll_condition_record "$dir/home/state" task-a 'closed: fixture' \
+    || fail "could not seed a delivered poll condition"
   cat > "$fakebin/tmux" <<'SH'
 #!/usr/bin/env bash
 exit 0
@@ -1469,6 +1547,7 @@ SH
   FM_HOME="$dir/home" FM_ROOT_OVERRIDE="$ROOT" PATH="$fakebin:$BASE_PATH" \
     "$TEARDOWN" task-a --force > "$dir/teardown.out" 2> "$dir/teardown.err" \
     || fail "teardown cleanup fixture failed"
+  [ ! -e "$dir/home/state/task-a.pr-poll-condition" ] || fail "teardown left the delivered poll condition"
   [ ! -e "$dir/home/state/task-a.check.sh" ] || fail "teardown left the runnable check"
   [ ! -e "$dir/home/state/task-a.pr-poll" ] || fail "teardown left the sidecar"
   [ ! -e "$dir/home/state/task-a.pr-poll-registration" ] || fail "teardown left the PR poll registration"
@@ -2081,6 +2160,341 @@ EOF
     || fail "merge wrapper merged despite an unreadable merge request state"
 
   pass "GitLab merge requests are followed on any instance and never wake falsely"
+}
+
+# A search path mirroring the case's fake tools and BASE_PATH minus the named
+# tools, because a real copy anywhere on PATH would make an absent-tool case
+# prove nothing.
+path_without() {  # <dir> <tool>...
+  local dir=$1 target bindir entry name tool skip
+  shift
+  target="$dir/path-without-$(printf '%s-' "$@")"
+  mkdir -p "$target"
+  while IFS= read -r bindir; do
+    [ -d "$bindir" ] || continue
+    for entry in "$bindir"/*; do
+      [ -e "$entry" ] || continue
+      name=$(basename "$entry")
+      skip=0
+      for tool in "$@"; do
+        if [ "$name" = "$tool" ]; then
+          skip=1
+        fi
+      done
+      [ "$skip" -eq 0 ] || continue
+      [ -e "$target/$name" ] || ln -s "$entry" "$target/$name" 2>/dev/null || true
+    done
+  done <<EOF
+$dir/fakebin
+$(printf '%s\n' "$BASE_PATH" | tr ':' '\n')
+EOF
+  for tool in "$@"; do
+    ! PATH="$target" command -v "$tool" >/dev/null 2>&1 \
+      || fail "the search path without $tool still resolved it"
+  done
+  printf '%s\n' "$target"
+}
+
+# The Gitea watch follows a pull request on a self-hosted instance through tea
+# under that host's own login, reports a merge exactly as every other forge
+# does, and reports a standing condition only when the pull request's own
+# fields prove it, staying silent on anything it could not read.
+test_gitea_merge_watch() {
+  local dir state url out value moved notea
+  dir=$(make_case gitea-merge-watch)
+  state="$dir/home/state"
+  url=https://gitea.example/owner/repo/pulls/7
+  moved=2222222222222222222222222222222222222222
+  ln -sf "$REAL_JQ" "$dir/fakebin/jq"
+
+  write_poll_meta "$state" task-a "$url"
+  fm_pr_poll_prepare "$state" task-a gitea "$url" gitea.example owner/repo 7 "$POLL" \
+    || fail "could not prepare a Gitea poll"
+  fm_pr_poll_publish_prepared || fail "could not publish a Gitea poll"
+  fm_pr_poll_artifacts_valid "$state" task-a "$POLL" \
+    || fail "published Gitea poll provenance or metadata binding was invalid"
+  [ "$(cat "$state/task-a.pr-poll")" = "gitea
+$url
+gitea.example
+owner/repo
+7" ] || fail "published Gitea sidecar bytes were not exact"
+
+  # A merged pull request is exactly one merged line, whatever else it reports.
+  out=$(FM_TEST_TEA_STATE=closed FM_TEST_TEA_MERGED=true run_poll "$dir")
+  [ "$out" = merged ] || fail "Gitea poll did not emit exactly one merged line"
+  out=$(FM_TEST_TEA_STATE=closed FM_TEST_TEA_MERGED=true FM_TEST_TEA_MERGEABLE=false \
+    FM_TEST_TEA_BASE_SHA=$moved run_poll "$dir")
+  [ "$out" = merged ] || fail "Gitea poll reported a merged pull request as anything but merged"
+  # tea is addressed under the login for this host, never tea's default login,
+  # which the fixture points at another instance.
+  grep -qxF -- "api --login forge /repos/owner/repo/pulls/7" "$dir/tea.log" \
+    || fail "Gitea poll did not read the pull request under the host's own login"
+  ! grep -qF -- "--login other" "$dir/tea.log" \
+    || fail "Gitea poll sent a request under another instance's login"
+
+  out=$(FM_TEST_TEA_STATE=closed run_poll "$dir")
+  [ "$out" = "closed: $url was closed without merging" ] \
+    || fail "Gitea poll did not report a pull request closed without merging"
+
+  # A pull request whose fork point is the base tip is healthy and silent, even
+  # while Gitea reads it unmergeable because it is still checking it.
+  for value in true false; do
+    out=$(FM_TEST_TEA_MERGEABLE=$value run_poll "$dir")
+    [ -z "$out" ] || fail "Gitea poll reported an up-to-date pull request (mergeable=$value)"
+  done
+
+  out=$(FM_TEST_TEA_BASE_SHA=$moved run_poll "$dir")
+  [ "$out" = "out-of-date: $url is behind main at $moved and possibly conflicting; merge main into its branch" ] \
+    || fail "Gitea poll did not report a pull request the base moved past: $out"
+  # Gitea reads a pull request unmergeable alike while its conflict check is
+  # pending, after a failed check, and for a real conflict, so the base having
+  # moved past it is reported out of date and possibly conflicting whichever it
+  # is, never as conflicting:.
+  out=$(FM_TEST_TEA_BASE_SHA=$moved FM_TEST_TEA_MERGEABLE=false run_poll "$dir")
+  [ "$out" = "out-of-date: $url is behind main at $moved and possibly conflicting; merge main into its branch" ] \
+    || fail "Gitea poll did not report an unmergeable pull request the base moved past as out of date: $out"
+  out=$(FM_TEST_TEA_BASE_SHA=$moved FM_TEST_TEA_BASE_REF='release v1' run_poll "$dir")
+  [ "$out" = "out-of-date: $url is behind its base branch at $moved and possibly conflicting; merge its base branch into its branch" ] \
+    || fail "Gitea poll echoed a base name outside the plain ref class: $out"
+  out=$(FM_TEST_TEA_BASE_SHA=$moved FM_TEST_TEA_MERGEABLE=false FM_TEST_TEA_DRAFT=true run_poll "$dir")
+  [ -z "$out" ] || fail "Gitea poll reported a condition for a draft"
+
+  # Anything not readable as exactly this pull request is silence: tea's HTTP
+  # error body, another number, a failed client, an unparseable reply, and a
+  # base tip that is not a commit id.
+  out=$(FM_TEST_TEA_PULL_RAW='{"errors":null,"message":"not found","url":"https://gitea.example/api/swagger"}' \
+    run_poll "$dir")
+  [ -z "$out" ] || fail "Gitea poll emitted for tea's not-found body"
+  out=$(FM_TEST_TEA_NUMBER=8 FM_TEST_TEA_STATE=closed FM_TEST_TEA_MERGED=true run_poll "$dir")
+  [ -z "$out" ] || fail "Gitea poll emitted for another pull request's record"
+  out=$(FM_TEST_TEA_FAIL=1 run_poll "$dir")
+  [ -z "$out" ] || fail "Gitea poll emitted after a tea failure"
+  out=$(FM_TEST_TEA_PULL_RAW='merged' run_poll "$dir")
+  [ -z "$out" ] || fail "Gitea poll emitted for an unparseable reply"
+  out=$(FM_TEST_TEA_BASE_SHA=not-a-commit run_poll "$dir")
+  [ -z "$out" ] || fail "Gitea poll emitted against a base tip that is not a commit id"
+
+  # The login is the one login for this host; anything else reads nothing
+  # rather than borrowing another login or guessing between several.
+  : > "$dir/tea.log"
+  out=$(FM_TEST_TEA_LOGINS='[{"name":"other","url":"https://other.example","default":"true"}]' \
+    FM_TEST_TEA_STATE=closed FM_TEST_TEA_MERGED=true run_poll "$dir")
+  [ -z "$out" ] || fail "Gitea poll emitted with no login for its host"
+  ! grep -qF -- "api " "$dir/tea.log" || fail "Gitea poll sent a request with no login for its host"
+  out=$(FM_TEST_TEA_LOGINS='[{"name":"first","url":"https://gitea.example/","default":"false"},{"name":"second","url":"https://gitea.example","default":"true"}]' \
+    FM_TEST_TEA_STATE=closed FM_TEST_TEA_MERGED=true run_poll "$dir")
+  [ -z "$out" ] || fail "Gitea poll chose between several logins for its host"
+  ! grep -qF -- "api " "$dir/tea.log" || fail "Gitea poll sent a request with several logins for its host"
+  out=$(FM_TEST_TEA_LOGINS='[{"name":"-x","url":"https://gitea.example","default":"true"}]' \
+    FM_TEST_TEA_STATE=closed FM_TEST_TEA_MERGED=true run_poll "$dir")
+  [ -z "$out" ] || fail "Gitea poll passed an option-shaped login name to tea"
+
+  notea=$(path_without "$dir" tea)
+  out=$(FM_TEST_TEA_STATE=closed FM_TEST_TEA_MERGED=true PATH="$notea" bash "$state/task-a.check.sh")
+  [ -z "$out" ] || fail "Gitea poll emitted with tea absent from PATH"
+
+  # A doctored sidecar cannot redirect the poll: the stored parts must rebuild
+  # the stored URL exactly.
+  printf '%s\n%s\n%s\n%s\n%s\n' gitea "$url" other.example owner/repo 7 > "$state/task-a.pr-poll"
+  out=$(FM_TEST_TEA_STATE=closed FM_TEST_TEA_MERGED=true run_poll "$dir")
+  [ -z "$out" ] || fail "Gitea poll emitted for a sidecar whose host was swapped"
+  printf '%s\n%s\n%s\n%s\n%s\n' gitea "$url" gitea.example owner/other 7 > "$state/task-a.pr-poll"
+  out=$(FM_TEST_TEA_STATE=closed FM_TEST_TEA_MERGED=true run_poll "$dir")
+  [ -z "$out" ] || fail "Gitea poll emitted for a sidecar whose repository was swapped"
+
+  pass "Gitea pull requests are followed under the host's own login and report only proven conditions"
+}
+
+test_gitea_arming_and_merge_refusal() {
+  local dir state url head out rc before path expected
+  dir=$(make_case gitea-arming)
+  state="$dir/home/state"
+  url=https://gitea.example/owner/repo/pulls/7
+  head=$(git -C "$dir/wt" rev-parse HEAD)
+  ln -sf "$REAL_JQ" "$dir/fakebin/jq"
+
+  # Arming records the canonical URL and the head Gitea reports.
+  write_task_meta "$dir" task-a
+  FM_TEST_TEA_HEAD=$head run_check_entry "$dir" task-a "$url" > "$dir/arm.out" 2> "$dir/arm.err" \
+    || fail "arming a Gitea watch failed: $(cat "$dir/arm.err")"
+  grep -qxF "pr=$url" "$state/task-a.meta" || fail "arming did not record the Gitea pull request URL"
+  grep -qxF "pr_head=$head" "$state/task-a.meta" || fail "arming did not record the head Gitea reports"
+  fm_pr_poll_artifacts_valid "$state" task-a "$POLL" || fail "arming left no valid Gitea poll"
+
+  # A draft is refused before anything is recorded or armed.
+  write_task_meta "$dir" task-b
+  set +e
+  out=$(FM_TEST_TEA_DRAFT=true run_check_entry "$dir" task-b "$url" 2>&1)
+  rc=$?
+  set -e
+  [ "$rc" -ne 0 ] || fail "arming accepted a Gitea draft"
+  case "$out" in
+    *"is a draft pull request"*) ;;
+    *) fail "the Gitea draft refusal did not name the draft state" ;;
+  esac
+  ! grep -q '^pr=' "$state/task-b.meta" || fail "a refused Gitea draft recorded pr="
+  [ ! -e "$state/task-b.check.sh" ] || fail "a refused Gitea draft left a poll armed"
+
+  # Arming is where a watch that could never read anything is reported.
+  for path in tea jq login several read; do
+    case "$path" in
+      read)
+        set +e
+        out=$(FM_TEST_TEA_PULL_RAW='{"errors":null,"message":"not found"}' \
+          run_check_entry "$dir" task-b "$url" 2>&1)
+        rc=$?
+        set -e
+        expected="could not read $url through tea"
+        ;;
+      login)
+        set +e
+        out=$(FM_TEST_TEA_LOGINS='[{"name":"other","url":"https://other.example","default":"true"}]' \
+          run_check_entry "$dir" task-b "$url" 2>&1)
+        rc=$?
+        set -e
+        expected='requires one tea login for https://gitea.example'
+        ;;
+      several)
+        set +e
+        out=$(FM_TEST_TEA_LOGINS='[{"name":"first","url":"https://gitea.example","default":"false"},{"name":"second","url":"https://gitea.example","default":"true"}]' \
+          run_check_entry "$dir" task-b "$url" 2>&1)
+        rc=$?
+        set -e
+        expected='requires one tea login for https://gitea.example'
+        ;;
+      *)
+        set +e
+        out=$(FM_ROOT_OVERRIDE="$dir/root" FM_HOME="$dir/home" \
+          FM_TEST_GUARD_LOG="$dir/guard.log" PATH="$(path_without "$dir" "$path")" \
+          "$PR_CHECK" task-b "$url" 2>&1)
+        rc=$?
+        set -e
+        expected="requires $path on PATH"
+        ;;
+    esac
+    [ "$rc" -ne 0 ] || fail "arming a Gitea watch succeeded without $path"
+    case "$out" in
+      *"$expected"*) ;;
+      *) fail "arming a Gitea watch without $path did not say so: $out" ;;
+    esac
+    [ ! -e "$state/task-b.check.sh" ] || fail "refused Gitea arming without $path left a poll armed"
+  done
+
+  # Merging is refused outright, before any forge read or recorded state.
+  : > "$dir/tea.log"
+  before=$(state_snapshot "$state")
+  set +e
+  out=$(run_merge_entry "$dir" task-a "$url" 2>&1)
+  rc=$?
+  set -e
+  [ "$rc" -eq 2 ] || fail "the merge path did not refuse a Gitea pull request (rc=$rc)"
+  case "$out" in
+    *"does not merge a Gitea pull request"*) ;;
+    *) fail "the Gitea merge refusal did not say firstmate does not merge it: $out" ;;
+  esac
+  [ ! -s "$dir/tea.log" ] || fail "the refused Gitea merge reached tea"
+  [ "$(state_snapshot "$state")" = "$before" ] || fail "the refused Gitea merge changed task state"
+
+  pass "Gitea arming records the forge head, refuses drafts and unreadable watches, and merging is refused"
+}
+
+# Count the durable check rows in a queue copy whose payload names <task>'s
+# poll and contains <text>.
+poll_condition_rows() {  # <queue-copy> <task> <text>
+  awk -F'\t' -v task="$2.check.sh: " -v text="$3" \
+    '$3 == "check" && index($5, task) && index($5, text) { n++ } END { print n + 0 }' "$1"
+}
+
+# One bounded watcher cycle with the given environment assignments, keeping a
+# copy of the durable queue it left before acknowledging it.
+run_gitea_watch_cycle() {  # <dir> <label> [NAME=value...]
+  local dir=$1 label=$2 rc=0 assignment
+  shift 2
+  rm -f "$dir/home/state/.last-check"
+  set +e
+  (
+    for assignment in "$@"; do
+      export "${assignment?}"
+    done
+    FM_TEST_TEA_LOG="$dir/tea.log" run_watcher_bounded "$dir/home" "$dir/fakebin"
+  ) > "$dir/watch-$label.out" 2> "$dir/watch-$label.err"
+  rc=$?
+  set -e
+  [ "$rc" -eq 0 ] || fail "Gitea watcher cycle $label failed: $(cat "$dir/watch-$label.err")"
+  cp "$dir/home/state/.wake-queue" "$dir/queue-$label" 2>/dev/null || : > "$dir/queue-$label"
+  ack_watcher_cycle "$dir/home/state" || fail "Gitea watcher cycle $label acknowledgement failed"
+}
+
+# A standing condition reads the same on every sweep, so it wakes once per
+# distinct line; conditions found in one sweep share one wake; and a merge still
+# takes the shared landing and retirement path.
+test_gitea_conditions_wake_once() {
+  local dir state url_a url_b moved moved_again out label
+  dir=$(make_case gitea-condition-wakes)
+  state="$dir/home/state"
+  url_a=https://gitea.example/owner/repo/pulls/7
+  url_b=https://gitea.example/owner/repo/pulls/8
+  moved=2222222222222222222222222222222222222222
+  moved_again=3333333333333333333333333333333333333333
+  ln -sf "$REAL_JQ" "$dir/fakebin/jq"
+  write_poll_meta "$state" task-a "$url_a"
+  write_poll_meta "$state" task-b "$url_b"
+  seed_canonical_poll "$dir" task-a "$url_a"
+  seed_canonical_poll "$dir" task-b "$url_b"
+
+  # Both pull requests fall behind in one sweep: a durable row each, one wake.
+  run_gitea_watch_cycle "$dir" behind FM_TEST_TEA_BASE_SHA=$moved
+  out=$(cat "$dir/watch-behind.out")
+  [ "$(printf '%s\n' "$out" | grep -c '^check: ')" -eq 2 ] \
+    || fail "one sweep's Gitea conditions did not share one wake: $out"
+  printf '%s\n' "$out" | grep -qxF "check: $state/task-a.check.sh: out-of-date: $url_a is behind main at $moved and possibly conflicting; merge main into its branch" \
+    || fail "the shared wake did not name the first pull request's condition: $out"
+  printf '%s\n' "$out" | grep -qxF "check: $state/task-b.check.sh: out-of-date: $url_b is behind main at $moved and possibly conflicting; merge main into its branch" \
+    || fail "the shared wake did not name the second pull request's condition: $out"
+  [ "$(poll_condition_rows "$dir/queue-behind" task-a "behind main at $moved")" -eq 1 ] \
+    && [ "$(poll_condition_rows "$dir/queue-behind" task-b "behind main at $moved")" -eq 1 ] \
+    || fail "each Gitea condition did not leave exactly one durable row"
+  [ "$(file_mode "$state/task-a.pr-poll-condition")" = 600 ] \
+    || fail "the delivered condition record is not private"
+
+  # The same reading on later sweeps is absorbed, including after a failed read,
+  # which is silence and keeps the delivered condition.
+  add_stop_custom_check "$dir"
+  run_gitea_watch_cycle "$dir" unchanged FM_TEST_TEA_BASE_SHA=$moved
+  run_gitea_watch_cycle "$dir" unreadable FM_TEST_TEA_FAIL=1
+  run_gitea_watch_cycle "$dir" unchanged-again FM_TEST_TEA_BASE_SHA=$moved
+  for label in unchanged unreadable unchanged-again; do
+    [ "$(poll_condition_rows "$dir/queue-$label" task-a out-of-date)" -eq 0 ] \
+      && [ "$(poll_condition_rows "$dir/queue-$label" task-b out-of-date)" -eq 0 ] \
+      || fail "an unchanged Gitea condition was queued again ($label)"
+  done
+
+  # The base moving again is a new condition and wakes again, once: the sweep
+  # that lands while Gitea is still checking the pull requests against the new
+  # tip reads them unmergeable, and the sweep after the check reads them
+  # mergeable, yet both are the one out-of-date condition.
+  run_gitea_watch_cycle "$dir" checking FM_TEST_TEA_BASE_SHA=$moved_again FM_TEST_TEA_MERGEABLE=false
+  [ "$(poll_condition_rows "$dir/queue-checking" task-a \
+    "out-of-date: $url_a is behind main at $moved_again and possibly conflicting; merge main into its branch")" -eq 1 ] \
+    && [ "$(poll_condition_rows "$dir/queue-checking" task-b "behind main at $moved_again")" -eq 1 ] \
+    || fail "the base moving again did not queue each pull request's new condition once"
+  [ "$(poll_condition_rows "$dir/queue-checking" task-a "conflicting:")" -eq 0 ] \
+    || fail "a pull request Gitea was still checking was reported conflicting"
+  run_gitea_watch_cycle "$dir" checked FM_TEST_TEA_BASE_SHA=$moved_again
+  [ "$(poll_condition_rows "$dir/queue-checked" task-a "main at $moved_again")" -eq 0 ] \
+    && [ "$(poll_condition_rows "$dir/queue-checked" task-b "main at $moved_again")" -eq 0 ] \
+    || fail "the completed check woke again for the same move of the base"
+
+  # A merge still takes the shared landing path and retires the poll.
+  run_gitea_watch_cycle "$dir" merged FM_TEST_TEA_STATE=closed FM_TEST_TEA_MERGED=true
+  case "$(cat "$dir/watch-merged.out")" in
+    check:*task-a.check.sh:*merged) ;;
+    *) fail "a merged Gitea pull request did not wake as merged: $(cat "$dir/watch-merged.out")" ;;
+  esac
+  assert_poll_absent "$state" task-a
+  grep -qxF "pr=$url_a" "$state/task-a.meta" || fail "Gitea retirement removed canonical metadata"
+
+  pass "Gitea conditions wake once per distinct line, share a sweep's wake, and merges retire as usual"
 }
 
 seed_canonical_poll() {
@@ -3441,6 +3855,9 @@ SH
 
 test_parser_matrix
 test_gitlab_merge_watch
+test_gitea_merge_watch
+test_gitea_arming_and_merge_refusal
+test_gitea_conditions_wake_once
 test_gerrit_merge_watch
 test_gerrit_arming_records_no_patch_set_revision
 test_gerrit_ready_gate_reads_the_published_tree
