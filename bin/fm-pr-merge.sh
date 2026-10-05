@@ -5,8 +5,8 @@
 # addressed through gh by the derived owner and repository; a GitLab merge
 # request is addressed through glab by the project URL rebuilt from the parsed
 # host and path, so any instance works and no host is hardcoded. A Gerrit change
-# is refused outright: that adapter is read-only, and the refusal at the parse
-# below owns why.
+# and a Gitea pull request are refused outright: both adapters are watch-only,
+# and the refusals at the parse below own why.
 #
 # Merge method on GitHub defaults to --squash when the caller passes none of
 # --squash, --merge, --rebase, or --method after the optional -- separator.
@@ -190,6 +190,13 @@ PROJECT_URL="https://$FM_PR_HOST/$FM_PR_PATH"
 # rather than a capability limit, so it is enforced here rather than assumed.
 if [ "$PROVIDER" = gerrit ]; then
   echo "error: firstmate does not submit a Gerrit change: submitting requires an attributed human approval it must not manufacture, so a human submits the change on the server" >&2
+  exit 2
+fi
+# A Gitea pull request is watched but never merged here: this path has no live
+# Gitea pre-merge verification to bind a merge to, so a person merges it on the
+# server and the merge poll records that landing for cleanup.
+if [ "$PROVIDER" = gitea ]; then
+  echo "error: firstmate does not merge a Gitea pull request: merge it on the Gitea server, and the merge watch records the landing for cleanup" >&2
   exit 2
 fi
 shift 2

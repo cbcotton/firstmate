@@ -83,7 +83,10 @@
 #                          an unhandled record's ladder cannot advance; quiet
 #                          successful attempts never wake firstmate
 #                          (bin/fm-task-inbox-lib.sh owns the ladder policy)
-#   check: <script>: <out> authenticated check output, always actionable
+#   check: <script>: <out> authenticated check output, always actionable; a PR
+#                          poll's non-merged condition line is reported once
+#                          per distinct line, and every such line new in one
+#                          sweep is joined into one wake, one line each
 #   check: process-event result captured: <keys>
 #                          a durably captured process-to-event result is queued
 #                          and has not been surfaced yet; reported once per
@@ -2762,6 +2765,7 @@ while :; do
   if [ "$(age_of "$STATE/.last-check")" -ge "$CHECK_INTERVAL" ]; then
     rejected_checks=
     contribution_check_output=
+    pr_condition_output=
     for c in "$STATE"/*.check.sh; do
       [ -e "$c" ] || continue
       is_pr_poll=0
@@ -2868,6 +2872,19 @@ EOF
           fi
           wake "$reason"
         fi
+        if [ "$is_pr_poll" -eq 1 ]; then
+          # Any other PR poll line is a standing condition that reads the same
+          # every sweep, so it wakes once per distinct line, and every new one in
+          # this sweep shares one wake (fm_pr_poll_condition_matches).
+          if ! fm_pr_poll_condition_matches "$STATE" "$id" "$out"; then
+            fm_wake_append check "$c" "$reason" || exit 1
+            fm_pr_poll_condition_record "$STATE" "$id" "$out" \
+              || triage_log "PR poll condition for $id was queued but not recorded; it may wake again"
+            pr_condition_output="${pr_condition_output}${reason}"$'\n'
+          fi
+          pr_poll_control_release || exit 1
+          continue
+        fi
         pr_poll_control_release || exit 1
         fm_wake_append check "$c" "$reason" || exit 1
         touch "$STATE/.last-check"
@@ -2882,8 +2899,8 @@ EOF
       wake "$reason"
     fi
     touch "$STATE/.last-check"
-    if [ -n "$contribution_check_output" ]; then
-      wake "$contribution_check_output"
+    if [ -n "$pr_condition_output$contribution_check_output" ]; then
+      wake "$pr_condition_output$contribution_check_output"
     fi
   fi
 

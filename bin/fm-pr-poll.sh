@@ -6,9 +6,14 @@
 # a merge. The provider-tagged identity is data in the sidecar and is never
 # interpolated into this source: these bytes are identical for every task.
 # Each provider is read through its own standard CLI, gh for GitHub, glab for
-# GitLab, and gerrit-axi for Gerrit, so an upstream checkout needs no extra
-# tooling to follow the first two. The Gerrit branch additionally needs jq,
-# which bin/fm-pr-check.sh refuses to arm a Gerrit watch without.
+# GitLab, gerrit-axi for Gerrit, and tea for Gitea, so an upstream checkout
+# needs no extra tooling to follow the first two. The Gerrit and Gitea branches
+# additionally need jq, which bin/fm-pr-check.sh refuses to arm either without.
+# A Gitea pull request also reports a standing condition as one line naming its
+# URL: "closed:" when it was closed without merging, and "conflicting:" or
+# "out-of-date:" when its base branch moved past it, naming the base tip, so
+# firstmate can have the base merged in. The watcher wakes once per distinct
+# condition line (bin/fm-pr-lib.sh fm_pr_poll_condition_matches).
 set -u
 LC_ALL=C
 export LC_ALL
@@ -170,6 +175,72 @@ case "$provider" in
         error("invalid gerrit record")
       end' 2>/dev/null) || exit 0
     [ "$status" = MERGED ] && printf '%s\n' merged
+    ;;
+  gitea)
+    [ "${#host}" -ge 1 ] && [ "${#host}" -le 253 ] || exit 0
+    [ "$host" != github.com ] || exit 0
+    case "$host" in
+      .*|*.|*..*|*[!a-z0-9.-]*) exit 0 ;;
+    esac
+    # A Gitea repository is exactly owner/repository.
+    owner=${path%%/*}
+    repo=${path#*/}
+    [ "${#owner}" -ge 1 ] && [ "${#owner}" -le 40 ] || exit 0
+    case "$owner" in
+      [!A-Za-z0-9]*|*[!A-Za-z0-9._-]*) exit 0 ;;
+    esac
+    [ "${#repo}" -ge 1 ] && [ "${#repo}" -le 100 ] || exit 0
+    case "$repo" in
+      .|..|-*|*.git|*[!A-Za-z0-9._-]*) exit 0 ;;
+    esac
+    [ "$url" = "https://$host/$owner/$repo/pulls/$number" ] || exit 0
+    # tea sends a request under one stored login, so the login is the one whose
+    # URL is this host and never tea's default for another instance. Only the
+    # login's name is read from the list, which carries no token.
+    logins=$(tea logins list --output json 2>/dev/null) || exit 0
+    login=$(printf '%s' "$logins" | jq -r --arg url "https://$host" '
+      if type == "array" then
+        [.[] | select(type == "object" and (.name | type) == "string"
+          and (.url | type) == "string" and (.url | sub("/+$"; "")) == $url)] as $match
+        | [$match[] | select(.default == true or .default == "true")] as $default
+        | if ($match | length) == 1 then $match[0].name
+          elif ($default | length) == 1 then $default[0].name
+          else error("no single login for this host")
+          end
+      else
+        error("invalid login list")
+      end' 2>/dev/null) || exit 0
+    case "$login" in
+      ''|-*|*[!A-Za-z0-9._@-]*) exit 0 ;;
+    esac
+    json=$(tea api --login "$login" "/repos/$owner/$repo/pulls/$number" 2>/dev/null) || exit 0
+    [ -n "$json" ] || exit 0
+    # tea exits zero on an HTTP error and prints the error body, so only the
+    # pull request with exactly this number is read. merge_base is the fork
+    # point Gitea last computed against the base tip base.sha, so the two differ
+    # exactly when the base branch has moved past the pull request. mergeable is
+    # also false while Gitea is still checking and for a work-in-progress pull
+    # request, so a conflict is reported only for a non-draft pull request the
+    # base has moved past: one whose base tip is already in its branch cannot
+    # conflict.
+    printf '%s' "$json" | jq -r --argjson number "$number" --arg url "$url" '
+      def shaish: type == "string" and test("^([0-9a-f]{40}|[0-9a-f]{64})$");
+      if type == "object" and .number == $number and (.merged | type) == "boolean" then
+        if .merged == true then "merged"
+        elif .state == "closed" then "closed: \($url) was closed without merging"
+        elif .state != "open" or .draft == true then empty
+        elif (.base | type) == "object" and (.base.sha | shaish) and (.merge_base | shaish)
+             and .merge_base != .base.sha then
+          (if (.base.ref | type) == "string" and (.base.ref | test("^[A-Za-z0-9._/-]{1,255}$"))
+           then .base.ref else "its base branch" end) as $base
+          | if .mergeable == false and .draft == false
+            then "conflicting: \($url) conflicts with \($base) at \(.base.sha); merge \($base) into its branch"
+            else "out-of-date: \($url) is behind \($base) at \(.base.sha); merge \($base) into its branch"
+            end
+        else empty
+        end
+      else empty
+      end' 2>/dev/null
     ;;
   *) exit 0 ;;
 esac

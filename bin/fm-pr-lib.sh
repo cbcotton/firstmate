@@ -4,13 +4,14 @@
 # URLs before constructing task paths or performing any side effect.
 #
 # The stored identity is provider-tagged: provider, url, host, path, number.
-# "path" is the full project path, which is owner/repository on GitHub, an
-# arbitrarily nested group/subgroup/project namespace on GitLab, and an
+# "path" is the full project path, which is owner/repository on GitHub and
+# Gitea, an arbitrarily nested group/subgroup/project namespace on GitLab, and an
 # arbitrarily nested project name on Gerrit, where "number" is the change
 # number. A GitLab or Gerrit project can sit at any depth, so no
 # owner/repository pair can address one and the sidecar carries the whole path
-# instead. Both also run on self-hosted instances, and Gerrit runs nowhere else,
-# so the host is part of that identity rather than a constant. Every consumer re-derives the identity
+# instead. GitLab, Gerrit, and Gitea also run on self-hosted instances, and
+# Gerrit and Gitea run nowhere else, so the host is part of that identity
+# rather than a constant. Every consumer re-derives the identity
 # from the stored URL and refuses any record whose parts do not reconstruct that
 # exact URL.
 #
@@ -188,18 +189,41 @@ fm_pr_gerrit_path_valid() {
   done
 }
 
+# A Gitea repository is always owner/repository, one level deep. An owner name
+# starts with a letter or digit, and a repository name is refused when it is a
+# dot segment, starts with a hyphen, or ends in ".git", which Gitea strips, so
+# each pull request keeps one canonical spelling. A Gitea served under a URL
+# sub-path is not supported: its extra leading segment fails the two-segment
+# rule instead of being misread as an owner.
+fm_pr_gitea_path_valid() {
+  local path=${1-} owner repo
+  local LC_ALL=C
+  case "$path" in
+    */*/*|/*|*/) return 1 ;;
+    */*) ;;
+    *) return 1 ;;
+  esac
+  owner=${path%%/*}
+  repo=${path#*/}
+  [[ "$owner" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,39}$ ]] || return 1
+  [ "${#repo}" -ge 1 ] && [ "${#repo}" -le 100 ] || return 1
+  case "$repo" in
+    .|..|-*|*.git|*[!A-Za-z0-9._-]*) return 1 ;;
+  esac
+}
+
 # Parse a canonical pull request, merge request, or Gerrit change URL into the
 # provider-tagged identity. Validation is strict and per provider: the GitHub
-# username and repository rules are unchanged, and GitLab and Gerrit each get
-# their own namespace rules rather than a loosened GitHub rule.
+# username and repository rules are unchanged, and GitLab, Gitea, and Gerrit
+# each get their own namespace rules rather than a loosened GitHub rule.
 #
 # FM_PR_OWNER and FM_PR_REPO are additionally set for github because
-# bin/fm-pr-merge.sh addresses GitHub by owner/repository. A gitlab or gerrit
-# URL leaves them empty, and those paths address the project by FM_PR_HOST and
-# FM_PR_PATH instead, so a change on any instance resolves without a hardcoded
-# host.
+# bin/fm-pr-merge.sh addresses GitHub by owner/repository. A gitlab, gitea, or
+# gerrit URL leaves them empty, and those paths address the project by
+# FM_PR_HOST and FM_PR_PATH instead, so a change on any instance resolves
+# without a hardcoded host.
 fm_pr_url_parse() {
-  local raw=${1-} pattern host path
+  local raw=${1-} pattern host path number
   local LC_ALL=C
   FM_PR_PROVIDER=
   FM_PR_URL=
@@ -238,6 +262,23 @@ fm_pr_url_parse() {
     FM_PR_HOST=$host
     FM_PR_PATH=$path
     FM_PR_NUMBER=${BASH_REMATCH[3]}
+    return 0
+  fi
+  # A Gitea pull request URL is https://<host>/<owner>/<repository>/pulls/<number>,
+  # where GitHub's singular "/pull/" is plural. Neither name class contains "/",
+  # so the match cannot shift a segment between owner and repository.
+  pattern='^https://([a-z0-9.-]{1,253})/([A-Za-z0-9._-]+/[A-Za-z0-9._-]+)/pulls/([1-9][0-9]*)$'
+  if [[ "$raw" =~ $pattern ]]; then
+    host=${BASH_REMATCH[1]}
+    path=${BASH_REMATCH[2]}
+    number=${BASH_REMATCH[3]}
+    fm_pr_forge_host_valid "$host" || return 1
+    fm_pr_gitea_path_valid "$path" || return 1
+    FM_PR_PROVIDER=gitea
+    FM_PR_URL=$raw
+    FM_PR_HOST=$host
+    FM_PR_PATH=$path
+    FM_PR_NUMBER=$number
     return 0
   fi
   # A Gerrit change URL is https://<host>/c/<project>/+/<number>. "+" is outside
@@ -1122,6 +1163,98 @@ fm_pr_gerrit_read_revision() {  # <host> <number>
   FM_PR_RECORD_REVISION=$revision
 }
 
+# The one tea login for a Gitea host: the login whose URL is exactly
+# https://<host>, or, among several such logins, the one marked default. tea
+# lists logins without their tokens and only the name is read from that list,
+# so no credential passes through here, and choosing by host is what keeps a
+# request to one instance from carrying another instance's token.
+fm_pr_gitea_login() {  # <host>
+  local host=$1 logins login
+  local LC_ALL=C
+  command -v tea >/dev/null 2>&1 || return 1
+  command -v jq >/dev/null 2>&1 || return 1
+  logins=$(tea logins list --output json 2>/dev/null) || return 1
+  login=$(printf '%s' "$logins" | jq -r --arg url "https://$host" '
+    if type == "array" then
+      [.[] | select(type == "object" and (.name | type) == "string"
+        and (.url | type) == "string" and (.url | sub("/+$"; "")) == $url)] as $match
+      | [$match[] | select(.default == true or .default == "true")] as $default
+      | if ($match | length) == 1 then $match[0].name
+        elif ($default | length) == 1 then $default[0].name
+        else error("no single login for this host")
+        end
+    else
+      error("invalid login list")
+    end' 2>/dev/null) || return 1
+  case "$login" in
+    ''|-*|*[!A-Za-z0-9._@-]*) return 1 ;;
+  esac
+  printf '%s\n' "$login"
+}
+
+# One Gitea pull request, read through tea's authenticated API client under the
+# host's own login. tea exits zero on an HTTP error and prints the error body,
+# so a reply counts only when it is the pull request with exactly this number.
+# Sets FM_PR_RECORD_STATE (Gitea's open or closed), FM_PR_RECORD_MERGED,
+# FM_PR_RECORD_DRAFT, and FM_PR_RECORD_HEAD, which stays empty unless the head
+# is a full commit id.
+fm_pr_gitea_read_record() {  # <host> <path> <number>
+  local host=$1 path=$2 number=$3 login json fields line
+  local total=0 named=0 state='' merged='' draft='' head=''
+  FM_PR_RECORD_STATE=
+  FM_PR_RECORD_MERGED=
+  FM_PR_RECORD_DRAFT=
+  FM_PR_RECORD_HEAD=
+  fm_pr_gitea_path_valid "$path" || return 1
+  case "$number" in
+    ''|0*|*[!0-9]*) return 1 ;;
+  esac
+  login=$(fm_pr_gitea_login "$host") || return 1
+  if ! json=$(tea api --login "$login" "/repos/$path/pulls/$number" 2>/dev/null) \
+    || [ -z "$json" ]; then
+    return 1
+  fi
+  if ! fields=$(printf '%s' "$json" | jq -r --argjson number "$number" '
+      if type == "object" and .number == $number
+         and (.state == "open" or .state == "closed")
+         and (.merged | type) == "boolean" and (.draft | type) == "boolean"
+      then
+        "state=" + .state,
+        "merged=" + (.merged | tostring),
+        "draft=" + (.draft | tostring),
+        "head=" + (if (.head | type) == "object" and (.head.sha | type) == "string"
+                   then .head.sha else "" end)
+      else
+        error("not this pull request")
+      end' 2>/dev/null); then
+    return 1
+  fi
+  while IFS= read -r line; do
+    total=$((total + 1))
+    case "$line" in
+      state=*) state=${line#state=} ;;
+      merged=*) merged=${line#merged=} ;;
+      draft=*) draft=${line#draft=} ;;
+      head=*) head=${line#head=} ;;
+      *) continue ;;
+    esac
+    named=$((named + 1))
+  done <<FIELDS
+$fields
+FIELDS
+  [ "$named" -eq 4 ] && [ "$total" -eq 4 ] || return 1
+  fm_pr_head_valid "$head" || head=
+  # Consumed by bin/fm-pr-check.sh.
+  # shellcheck disable=SC2034
+  FM_PR_RECORD_STATE=$state
+  # shellcheck disable=SC2034
+  FM_PR_RECORD_MERGED=$merged
+  # shellcheck disable=SC2034
+  FM_PR_RECORD_DRAFT=$draft
+  # shellcheck disable=SC2034
+  FM_PR_RECORD_HEAD=$head
+}
+
 fm_pr_poll_retirement_data_valid() {
   local state=$1 id=$2 state_device data data_hash data_identity
   state_device=$(fm_pr_file_device "$state") || return 1
@@ -1397,4 +1530,53 @@ fm_pr_poll_merge_notified_remove() {  # <state> <id>
   [ -e "$marker" ] || [ -L "$marker" ] || return 0
   [ -f "$marker" ] && [ ! -L "$marker" ] || return 1
   rm -f -- "$marker"
+}
+
+# --- standing-condition record -----------------------------------------------
+# A poll line other than "merged" names a standing condition of the pull request,
+# such as closed without merging or behind its base branch, that reads the same
+# on every sweep until something changes it. The watcher therefore wakes once per
+# distinct line: this record holds the last line delivered for the task, and a
+# matching line is absorbed. A silent poll, whether the pull request is healthy or
+# the read failed, leaves the record alone, so a transient read failure never
+# re-delivers a condition already reported. A poll that measures a condition
+# against the base branch names the base tip in its line, so the base moving again
+# is a new line and wakes again.
+fm_pr_poll_condition_matches() {  # <state> <id> <line>
+  local state=$1 id=$2 line=$3 record state_device version content
+  fm_pr_task_id_valid "$id" || return 1
+  [ -d "$state" ] && [ ! -L "$state" ] || return 1
+  state_device=$(fm_pr_file_device "$state") || return 1
+  record="$state/$id.pr-poll-condition"
+  fm_pr_private_file_valid "$record" 600 "$state_device" || return 1
+  { IFS= read -r version && content=$(cat); } < "$record" || return 1
+  [ "$version" = fm-pr-poll-condition-v1 ] && [ "$content" = "$line" ]
+}
+
+fm_pr_poll_condition_record() {  # <state> <id> <line>
+  local state=$1 id=$2 line=$3 record tmp state_device
+  fm_pr_task_id_valid "$id" || return 1
+  [ -d "$state" ] && [ ! -L "$state" ] || return 1
+  state_device=$(fm_pr_file_device "$state") || return 1
+  record="$state/$id.pr-poll-condition"
+  fm_pr_regular_destination_on_device_or_absent "$record" "$state_device" || return 1
+  tmp=$(umask 077 && mktemp "$state/.fm-pr-poll-condition.XXXXXX") || return 1
+  if ! printf '%s\n%s\n' fm-pr-poll-condition-v1 "$line" > "$tmp" \
+    || ! chmod 0600 "$tmp" \
+    || ! fm_pr_regular_destination_on_device_or_absent "$record" "$state_device" \
+    || ! mv -f -- "$tmp" "$record" \
+    || ! fm_pr_poll_condition_matches "$state" "$id" "$line"; then
+    rm -f -- "$tmp"
+    return 1
+  fi
+}
+
+# Removed at teardown with the other per-task PR-poll artifacts.
+fm_pr_poll_condition_remove() {  # <state> <id>
+  local state=$1 id=$2 record
+  fm_pr_task_id_valid "$id" || return 1
+  record="$state/$id.pr-poll-condition"
+  [ -e "$record" ] || [ -L "$record" ] || return 0
+  [ -f "$record" ] && [ ! -L "$record" ] || return 1
+  rm -f -- "$record"
 }
