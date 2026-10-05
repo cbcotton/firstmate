@@ -121,6 +121,28 @@ test_stale_recorded_pr_head_loses_to_fetched_pull_head() {
   pass "fm-review-diff prefers freshly fetched PR head over a stale recorded pr_head="
 }
 
+# Gitea serves the same refs/pull/<n>/head under its plural /pulls/ URL, and a
+# Gitea task records pr_head= at arming, so that head must lose to the fetched
+# one exactly as on GitHub.
+test_gitea_stale_recorded_pr_head_loses_to_fetched_pull_head() {
+  local case_dir out stale_sha
+  case_dir=$(make_case gitea-stale-recorded)
+  stale_and_pr_commits "$case_dir"
+  stale_sha=$(git -C "$case_dir/wt" rev-parse fm/task-x1)
+  git -C "$case_dir/wt" push -q origin "pr-head-tmp:refs/pull/9/head"
+  write_task_meta "$case_dir" \
+    "pr=https://gitea.example/example/repo/pulls/9" \
+    "pr_head=$stale_sha"
+
+  out=$(run_review_diff "$case_dir" task-x1 2> "$case_dir/stderr")
+
+  assert_contains "$out" '+pr-fixed' \
+    "gitea-stale-recorded: diff must show the fetched PR head, not the recorded stale SHA"
+  assert_not_contains "$out" 'stale-local' \
+    "gitea-stale-recorded: diff must not use the stale recorded content"
+  pass "fm-review-diff prefers a fetched Gitea pull head over a stale recorded pr_head="
+}
+
 test_pr_meta_fetches_pull_head_without_recorded_sha() {
   local case_dir out
   case_dir=$(make_case pr-fetch)
@@ -223,3 +245,4 @@ test_no_pr_meta_uses_local_branch
 test_unreachable_pr_head_falls_back_with_warning
 test_recorded_branch_beats_moved_worktree_head
 test_corrupt_recorded_branch_is_refused
+test_gitea_stale_recorded_pr_head_loses_to_fetched_pull_head
