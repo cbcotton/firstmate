@@ -11,8 +11,10 @@
 # additionally need jq, which bin/fm-pr-check.sh refuses to arm either without.
 # A Gitea pull request also reports a standing condition as one line naming its
 # URL: "closed:" when it was closed without merging, and "out-of-date:" when its
-# base branch moved past it, naming the base tip, so firstmate can have the base
-# merged in. The watcher wakes once per distinct condition line
+# base branch moved past it, naming the base tip and noting that it may also
+# conflict, so firstmate can have the base merged in. Gitea cannot tell a
+# conflict apart from a pending or failed conflict check, so a conflict is
+# reported through this one out-of-date line and never as "conflicting:". The watcher wakes once per distinct condition line
 # (bin/fm-pr-lib.sh fm_pr_poll_condition_matches).
 # "--gitea-login <host>" prints the one tea login for a Gitea host, the rule
 # bin/fm-pr-lib.sh fm_pr_gitea_login also reads through this program.
@@ -231,8 +233,9 @@ case "$provider" in
     # exactly when the base branch has moved past the pull request. Its
     # mergeable flag is not read: the API reports it false alike while Gitea is
     # still checking, after a failed check, and for a real conflict, so it
-    # cannot tell a conflict apart, and a pull request the base moved past is
-    # out of date whichever it is.
+    # cannot tell a conflict apart. A pull request the base moved past is out
+    # of date and possibly conflicting whichever it is, in one line that stays
+    # the same across the check so one move of the base wakes once.
     printf '%s' "$json" | jq -r --argjson number "$number" --arg url "$url" '
       def shaish: type == "string" and test("^([0-9a-f]{40}|[0-9a-f]{64})$");
       if type == "object" and .number == $number and (.merged | type) == "boolean" then
@@ -243,7 +246,7 @@ case "$provider" in
              and .merge_base != .base.sha then
           (if (.base.ref | type) == "string" and (.base.ref | test("^[A-Za-z0-9._/-]{1,255}$"))
            then .base.ref else "its base branch" end) as $base
-          | "out-of-date: \($url) is behind \($base) at \(.base.sha); merge \($base) into its branch"
+          | "out-of-date: \($url) is behind \($base) at \(.base.sha) and possibly conflicting; merge \($base) into its branch"
         else empty
         end
       else empty
