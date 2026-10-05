@@ -20,6 +20,8 @@
 # The receipt binds the terminal observation to the canonical registration and
 # lets a restart finish fixed-path removal without executing state-file bytes.
 
+FM_PR_LIB_DIR=${BASH_SOURCE[0]%/*}
+[ "$FM_PR_LIB_DIR" != "${BASH_SOURCE[0]}" ] || FM_PR_LIB_DIR=.
 FM_PR_PROVIDER=
 FM_PR_URL=
 FM_PR_HOST=
@@ -1163,33 +1165,13 @@ fm_pr_gerrit_read_revision() {  # <host> <number>
   FM_PR_RECORD_REVISION=$revision
 }
 
-# The one tea login for a Gitea host: the login whose URL is exactly
-# https://<host>, or, among several such logins, the one marked default. tea
-# lists logins without their tokens and only the name is read from that list,
-# so no credential passes through here, and choosing by host is what keeps a
-# request to one instance from carrying another instance's token.
+# The one tea login for a Gitea host, chosen by the rule the byte-static poll
+# program applies on every sweep (bin/fm-pr-poll.sh gitea_login), so arming and
+# polling can never address different logins.
 fm_pr_gitea_login() {  # <host>
-  local host=$1 logins login
-  local LC_ALL=C
   command -v tea >/dev/null 2>&1 || return 1
   command -v jq >/dev/null 2>&1 || return 1
-  logins=$(tea logins list --output json 2>/dev/null) || return 1
-  login=$(printf '%s' "$logins" | jq -r --arg url "https://$host" '
-    if type == "array" then
-      [.[] | select(type == "object" and (.name | type) == "string"
-        and (.url | type) == "string" and (.url | sub("/+$"; "")) == $url)] as $match
-      | [$match[] | select(.default == true or .default == "true")] as $default
-      | if ($match | length) == 1 then $match[0].name
-        elif ($default | length) == 1 then $default[0].name
-        else error("no single login for this host")
-        end
-    else
-      error("invalid login list")
-    end' 2>/dev/null) || return 1
-  case "$login" in
-    ''|-*|*[!A-Za-z0-9._@-]*) return 1 ;;
-  esac
-  printf '%s\n' "$login"
+  "$FM_PR_LIB_DIR/fm-pr-poll.sh" --gitea-login "$1"
 }
 
 # One Gitea pull request, read through tea's authenticated API client under the

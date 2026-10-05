@@ -2246,9 +2246,12 @@ owner/repo
   out=$(FM_TEST_TEA_BASE_SHA=$moved run_poll "$dir")
   [ "$out" = "out-of-date: $url is behind main at $moved; merge main into its branch" ] \
     || fail "Gitea poll did not report a pull request the base moved past: $out"
+  # Gitea reads a pull request unmergeable alike while its conflict check is
+  # pending, after a failed check, and for a real conflict, so the base having
+  # moved past it is reported out of date whichever it is, never conflicting.
   out=$(FM_TEST_TEA_BASE_SHA=$moved FM_TEST_TEA_MERGEABLE=false run_poll "$dir")
-  [ "$out" = "conflicting: $url conflicts with main at $moved; merge main into its branch" ] \
-    || fail "Gitea poll did not report a conflicting pull request: $out"
+  [ "$out" = "out-of-date: $url is behind main at $moved; merge main into its branch" ] \
+    || fail "Gitea poll did not report an unmergeable pull request the base moved past as out of date: $out"
   out=$(FM_TEST_TEA_BASE_SHA=$moved FM_TEST_TEA_BASE_REF='release v1' run_poll "$dir")
   [ "$out" = "out-of-date: $url is behind its base branch at $moved; merge its base branch into its branch" ] \
     || fail "Gitea poll echoed a base name outside the plain ref class: $out"
@@ -2270,8 +2273,8 @@ owner/repo
   out=$(FM_TEST_TEA_BASE_SHA=not-a-commit run_poll "$dir")
   [ -z "$out" ] || fail "Gitea poll emitted against a base tip that is not a commit id"
 
-  # The login is the one for this host, or the default among several for it;
-  # anything else reads nothing rather than borrowing another login.
+  # The login is the one login for this host; anything else reads nothing
+  # rather than borrowing another login or guessing between several.
   : > "$dir/tea.log"
   out=$(FM_TEST_TEA_LOGINS='[{"name":"other","url":"https://other.example","default":"true"}]' \
     FM_TEST_TEA_STATE=closed FM_TEST_TEA_MERGED=true run_poll "$dir")
@@ -2279,12 +2282,8 @@ owner/repo
   ! grep -qF -- "api " "$dir/tea.log" || fail "Gitea poll sent a request with no login for its host"
   out=$(FM_TEST_TEA_LOGINS='[{"name":"first","url":"https://gitea.example/","default":"false"},{"name":"second","url":"https://gitea.example","default":"true"}]' \
     FM_TEST_TEA_STATE=closed FM_TEST_TEA_MERGED=true run_poll "$dir")
-  [ "$out" = merged ] || fail "Gitea poll did not use the default among the host's logins"
-  grep -qxF -- "api --login second /repos/owner/repo/pulls/7" "$dir/tea.log" \
-    || fail "Gitea poll did not choose the default among the host's logins"
-  out=$(FM_TEST_TEA_LOGINS='[{"name":"first","url":"https://gitea.example","default":"false"},{"name":"second","url":"https://gitea.example","default":"false"}]' \
-    FM_TEST_TEA_STATE=closed FM_TEST_TEA_MERGED=true run_poll "$dir")
-  [ -z "$out" ] || fail "Gitea poll guessed between two non-default logins for its host"
+  [ -z "$out" ] || fail "Gitea poll chose between several logins for its host"
+  ! grep -qF -- "api " "$dir/tea.log" || fail "Gitea poll sent a request with several logins for its host"
   out=$(FM_TEST_TEA_LOGINS='[{"name":"-x","url":"https://gitea.example","default":"true"}]' \
     FM_TEST_TEA_STATE=closed FM_TEST_TEA_MERGED=true run_poll "$dir")
   [ -z "$out" ] || fail "Gitea poll passed an option-shaped login name to tea"
@@ -2336,7 +2335,7 @@ test_gitea_arming_and_merge_refusal() {
   [ ! -e "$state/task-b.check.sh" ] || fail "a refused Gitea draft left a poll armed"
 
   # Arming is where a watch that could never read anything is reported.
-  for path in tea jq login read; do
+  for path in tea jq login several read; do
     case "$path" in
       read)
         set +e
@@ -2349,6 +2348,14 @@ test_gitea_arming_and_merge_refusal() {
       login)
         set +e
         out=$(FM_TEST_TEA_LOGINS='[{"name":"other","url":"https://other.example","default":"true"}]' \
+          run_check_entry "$dir" task-b "$url" 2>&1)
+        rc=$?
+        set -e
+        expected='requires one tea login for https://gitea.example'
+        ;;
+      several)
+        set +e
+        out=$(FM_TEST_TEA_LOGINS='[{"name":"first","url":"https://gitea.example","default":"false"},{"name":"second","url":"https://gitea.example","default":"true"}]' \
           run_check_entry "$dir" task-b "$url" 2>&1)
         rc=$?
         set -e
@@ -2461,16 +2468,21 @@ test_gitea_conditions_wake_once() {
       || fail "an unchanged Gitea condition was queued again ($label)"
   done
 
-  # The base moving again is a new condition and wakes again, as does the pull
-  # request turning conflicting there.
-  run_gitea_watch_cycle "$dir" moved-again FM_TEST_TEA_BASE_SHA=$moved_again
-  [ "$(poll_condition_rows "$dir/queue-moved-again" task-a "behind main at $moved_again")" -eq 1 ] \
-    && [ "$(poll_condition_rows "$dir/queue-moved-again" task-b "behind main at $moved_again")" -eq 1 ] \
+  # The base moving again is a new condition and wakes again, once: the sweep
+  # that lands while Gitea is still checking the pull requests against the new
+  # tip reads them unmergeable, and the sweep after the check reads them
+  # mergeable, yet both are the one out-of-date condition.
+  run_gitea_watch_cycle "$dir" checking FM_TEST_TEA_BASE_SHA=$moved_again FM_TEST_TEA_MERGEABLE=false
+  [ "$(poll_condition_rows "$dir/queue-checking" task-a \
+    "out-of-date: $url_a is behind main at $moved_again; merge main into its branch")" -eq 1 ] \
+    && [ "$(poll_condition_rows "$dir/queue-checking" task-b "behind main at $moved_again")" -eq 1 ] \
     || fail "the base moving again did not queue each pull request's new condition once"
-  run_gitea_watch_cycle "$dir" conflicting FM_TEST_TEA_BASE_SHA=$moved_again FM_TEST_TEA_MERGEABLE=false
-  [ "$(poll_condition_rows "$dir/queue-conflicting" task-a \
-    "conflicting: $url_a conflicts with main at $moved_again; merge main into its branch")" -eq 1 ] \
-    || fail "a pull request turning conflicting was not queued"
+  [ "$(poll_condition_rows "$dir/queue-checking" task-a conflicting)" -eq 0 ] \
+    || fail "a pull request Gitea was still checking was reported conflicting"
+  run_gitea_watch_cycle "$dir" checked FM_TEST_TEA_BASE_SHA=$moved_again
+  [ "$(poll_condition_rows "$dir/queue-checked" task-a "main at $moved_again")" -eq 0 ] \
+    && [ "$(poll_condition_rows "$dir/queue-checked" task-b "main at $moved_again")" -eq 0 ] \
+    || fail "the completed check woke again for the same move of the base"
 
   # A merge still takes the shared landing path and retires the poll.
   run_gitea_watch_cycle "$dir" merged FM_TEST_TEA_STATE=closed FM_TEST_TEA_MERGED=true

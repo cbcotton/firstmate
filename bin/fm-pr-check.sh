@@ -11,9 +11,8 @@
 # pull request, or change on a self-hosted instance.
 # A Gitea watch is read through tea's api command under the tea login whose URL
 # is the pull request's host, so arming refuses without tea, without jq, without
-# exactly one such login (or one marked default among several), or when that
-# read fails; the poll's own header owns which conditions besides a merge it
-# reports.
+# exactly one such login, or when that read fails; the poll's own header owns
+# which conditions besides a merge it reports.
 # A GitHub or Gitea pull request the forge reports as a draft is refused, naming the draft
 # state and recording and arming nothing: a draft cannot be merged, so a poll armed on it
 # would wait for an event that cannot occur while nobody is asked to act.
@@ -112,7 +111,7 @@ if [ "$PROVIDER" = gitea ]; then
     exit 1
   fi
   if ! fm_pr_gitea_login "$HOST" >/dev/null; then
-    echo "error: watching a Gitea pull request requires one tea login for https://$HOST (add one with tea login add, or mark one default)" >&2
+    echo "error: watching a Gitea pull request requires one tea login for https://$HOST (add one with tea login add)" >&2
     exit 1
   fi
 fi
