@@ -1,0 +1,15 @@
+fm_pr_gitea_read_record (the reader bin/fm-crew-state.sh's gitea branch calls) against the live lab Gitea:
+pulls/1: state=closed merged=true draft=false head=109eada0a0f3fa4ad733d2962f8c121e11a124b7
+pulls/2: state=closed merged=false draft=false head=8a70d0bd433c064784ca6b837b07691c5bebedf6
+pulls/3: state=open merged=false draft=false head=1b7e2b0e822be53cf5168c9d75e453d782ffe9be
+pulls/99: unreadable (rc=1)
+
+$ bash tests/fm-crew-state.test.sh  (gitea case excerpt)
+ok - norepo complete-inventory failure reports unknown
+ok - a live rebased run beats an older failed run at the local head
+ok - legacy live rebased run is authoritative over an older failed row
+ok - a coarse failed record with a dead daemon reads unknown
+ok - the selected-run anchored continuation reports the dead daemon, not an identity failure
+ok - an unanswered probe never turns a failed coarse record into a gate
+ok - newer failed run remains failed beside an older live run
+all fm-crew-state tests passed

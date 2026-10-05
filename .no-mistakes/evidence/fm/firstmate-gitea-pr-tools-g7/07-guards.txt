@@ -1,0 +1,58 @@
+== A. draft PR #5 (Gitea reports draft=true):
+$ bin/fm-pr-check.sh g7-draft https://localhost/captain/gpr3d/pulls/5
+error: https://localhost/captain/gpr3d/pulls/5 is a draft pull request; a draft cannot be merged, so merge monitoring would wait for an event that cannot occur - mark it ready for review and arm again, or declare a wait instead of done if the draft is deliberate
+rc=
+/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.dXWB4o/state/g7-draft.meta
+
+== B. two tea logins for https://localhost:
+[{"name":"euroradar","url":"https://localhost"}]
+$ bin/fm-pr-check.sh g7-dup https://localhost/captain/gpr3d/pulls/4
+armed: state/g7-dup.check.sh
+rc=
+/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.dXWB4o/state/g7-dup.check.sh
+/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.dXWB4o/state/g7-dup.meta
+/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.dXWB4o/state/g7-dup.pr-poll
+/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.dXWB4o/state/g7-dup.pr-poll-registration
+$ state/g7-behind.check.sh   (sidecar-mode poll with two logins)
+bash: ./g7-behind.check.sh: Permission denied
+output: '' rc=126
+Gitea requests for pulls/4 during that poll: 0
+(dup login removed)
+$ state/g7-behind.check.sh   (one login again)
+bash: ./g7-behind.check.sh: Permission denied
+
+== C. firstmate merge path on a Gitea PR:
+$ bin/fm-pr-merge.sh g7-merge2 https://localhost/captain/gpr3d/pulls/4
+error: firstmate does not merge a Gitea pull request: merge it on the Gitea server, and the merge watch records the landing for cleanup
+rc=
+{"number":4,"state":"open","merged":false}
+== B (retry). second tea login for the same host (URL https://localhost/):
+Error: token already been used, delete login 'euroradar' first
+[{"name":"euroradar","url":"https://localhost"}]
+$ bin/fm-pr-poll.sh --gitea-login localhost
+euroradar
+rc=0
+$ bin/fm-pr-check.sh g7-dup2 https://localhost/captain/gpr3d/pulls/3
+armed: state/g7-dup2.check.sh
+g7-dup2.check.sh
+g7-dup2.meta
+g7-dup2.pr-poll
+g7-dup2.pr-poll-registration
+$ (cd state && bash g7-behind.check.sh)   # sidecar-mode poll copy, two logins
+output: 'out-of-date: https://localhost/captain/gpr3d/pulls/4 is behind main at cc68ec3f9c8ae87c4ea6ae8c6b13885803f5d004 and possibly conflicting; merge main into its branch'
+Gitea requests for pulls/4 during that poll: 1
+(dup login removed: ["euroradar"])
+$ (cd state && bash g7-behind.check.sh)   # one login again
+out-of-date: https://localhost/captain/gpr3d/pulls/4 is behind main at cc68ec3f9c8ae87c4ea6ae8c6b13885803f5d004 and possibly conflicting; merge main into its branch
+== B (retry 2, second token). two tea logins for host localhost:
+Login as captain on https://localhost successful. Added this login as dup
+[{"name":"euroradar","url":"https://localhost"},{"name":"dup","url":"https://localhost"}]
+$ bin/fm-pr-poll.sh --gitea-login localhost
+rc=1
+$ bin/fm-pr-check.sh g7-dup3 https://localhost/captain/gpr3d/pulls/3
+error: watching a Gitea pull request requires one tea login for https://localhost (add one with tea login add)
+state files for g7-dup3: g7-dup3.meta 
+$ (cd state && bash g7-behind.check.sh)   # sidecar-mode poll copy, two logins
+output: ''
+Gitea requests for pulls/4 during that poll: 0
+(dup login removed: ["euroradar"])

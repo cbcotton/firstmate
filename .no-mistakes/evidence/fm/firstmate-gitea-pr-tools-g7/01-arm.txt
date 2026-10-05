@@ -1,0 +1,58 @@
+$ FM_HOME=$LAB bin/fm-pr-check.sh g7-merge https://localhost/captain/gpr3d/pulls/1
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  4 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  watcher supervision needs Stop-owned automatic recovery; inspect the hook registration and startup status before ending the turn.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+armed: state/g7-merge.check.sh
+rc=0
+$ FM_HOME=$LAB bin/fm-pr-check.sh g7-close https://localhost/captain/gpr3d/pulls/2
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+armed: state/g7-close.check.sh
+rc=0
+$ FM_HOME=$LAB bin/fm-pr-check.sh g7-conflict https://localhost/captain/gpr3d/pulls/3
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+armed: state/g7-conflict.check.sh
+rc=0
+$ FM_HOME=$LAB bin/fm-pr-check.sh g7-behind https://localhost/captain/gpr3d/pulls/4
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+armed: state/g7-behind.check.sh
+rc=0
+
+--- state/g7-merge.meta
+window=firstmate:fm-g7-merge
+endpoint_task_id=g7-merge
+worktree=/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-gitea.rts9sS/wt
+project=/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-gitea.rts9sS/wt
+kind=ship
+mode=no-mistakes
+pr=https://localhost/captain/gpr3d/pulls/1
+pr_head=109eada0a0f3fa4ad733d2962f8c121e11a124b7
+--- sidecar g7-merge.pr-poll
+gitea
+https://localhost/captain/gpr3d/pulls/1
+localhost
+captain/gpr3d
+1
+--- check.sh identical to bin/fm-pr-poll.sh?
+identical
+contributions.check-trust
+contributions.check.sh
+g7-behind.check.sh
+g7-behind.meta
+g7-behind.pr-poll
+g7-behind.pr-poll-registration
+g7-close.check.sh
+g7-close.meta
+g7-close.pr-poll
+g7-close.pr-poll-registration
+g7-conflict.check.sh
+g7-conflict.meta
+g7-conflict.pr-poll
+g7-conflict.pr-poll-registration
+g7-merge.check.sh
+g7-merge.meta
+g7-merge.pr-poll
+g7-merge.pr-poll-registration

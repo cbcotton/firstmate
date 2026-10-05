@@ -1,0 +1,27 @@
+$ (forge) PATCH /repos/captain/gpr3d/pulls/2 {"state":"closed"}
+{"number":2,"state":"closed","merged":false}
+
+=== watcher sweep: PR #2 closed without merging  (09:14:30Z)
+--- fm-watch.sh exit=142 (142 = no actionable wake within 25s, kept blocking)
+--- fm-watch.sh stdout (wake reason firstmate receives):
+--- fm-wake-drain.sh (queued wake payload):
+
+(acked through 0)
+
+=== watcher sweep: same state again (must not re-wake)  (09:15:06Z)
+--- fm-watch.sh exit=0 (142 = no actionable wake within 25s, kept blocking)
+--- fm-watch.sh stdout (wake reason firstmate receives):
+check: /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.dXWB4o/state/g7-close.check.sh: closed: https://localhost/captain/gpr3d/pulls/2 was closed without merging
+
+--- fm-wake-drain.sh (queued wake payload):
+1791191715	1	check	/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.dXWB4o/state/g7-close.check.sh	check: /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.dXWB4o/state/g7-close.check.sh: closed: https://localhost/captain/gpr3d/pulls/2 was closed without merging
+(acked through 1)
+
+NOTE: the earlier sweep labelled 'PR #2 closed' hit the 25s harness bound before reaching that poll; the wake appeared on the next sweep. Bound raised to 75s.
+=== watcher sweep: PR #2 still closed (must not re-wake)  (09:15:33Z)
+--- fm-watch.sh exit=142 (142 = no actionable wake within 75s, kept blocking)
+--- fm-watch.sh stdout (wake reason firstmate receives):
+--- fm-wake-drain.sh (queued wake payload):
+
+(acked through 0)
+

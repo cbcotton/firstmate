@@ -1,0 +1,26 @@
+$ (forge) git push origin main  -> cc68ec3f9c8ae87c4ea6ae8c6b13885803f5d004
+remote: . Processing 1 references        
+{"number":3,"state":"open","mergeable":false,"merge_base":"aa36e73c6d7d7cf0b04e594911f909a7f26c79a1","base_sha":"cc68ec3f9c8ae87c4ea6ae8c6b13885803f5d004"}
+{"number":4,"state":"open","mergeable":false,"merge_base":"aa36e73c6d7d7cf0b04e594911f909a7f26c79a1","base_sha":"cc68ec3f9c8ae87c4ea6ae8c6b13885803f5d004"}
+
+=== watcher sweep: main moved again; PR #3 now truly conflicts (Gitea mergeable=false)  (09:21:44Z)
+--- fm-watch.sh exit=0 (142 = no actionable wake within 150s, kept blocking)
+--- fm-watch.sh stdout (wake reason firstmate receives):
+check: /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.dXWB4o/state/g7-behind.check.sh: out-of-date: https://localhost/captain/gpr3d/pulls/4 is behind main at cc68ec3f9c8ae87c4ea6ae8c6b13885803f5d004 and possibly conflicting; merge main into its branch
+check: /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.dXWB4o/state/g7-conflict.check.sh: out-of-date: https://localhost/captain/gpr3d/pulls/3 is behind main at cc68ec3f9c8ae87c4ea6ae8c6b13885803f5d004 and possibly conflicting; merge main into its branch
+
+--- fm-wake-drain.sh (queued wake payload):
+1791192107	5	check	/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.dXWB4o/state/g7-behind.check.sh	check: /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.dXWB4o/state/g7-behind.check.sh: out-of-date: https://localhost/captain/gpr3d/pulls/4 is behind main at cc68ec3f9c8ae87c4ea6ae8c6b13885803f5d004 and possibly conflicting; merge main into its branch
+1791192111	6	check	/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.dXWB4o/state/g7-conflict.check.sh	check: /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.dXWB4o/state/g7-conflict.check.sh: out-of-date: https://localhost/captain/gpr3d/pulls/3 is behind main at cc68ec3f9c8ae87c4ea6ae8c6b13885803f5d004 and possibly conflicting; merge main into its branch
+(acked through 6)
+
+=== watcher sweep: same main tip again (must not re-wake)  (09:21:54Z)
+--- fm-watch.sh exit=142 (142 = no actionable wake within 150s, kept blocking)
+--- fm-watch.sh stdout (wake reason firstmate receives):
+--- fm-wake-drain.sh (queued wake payload):
+
+(acked through 0)
+
+--- forge state after the 150s quiet sweep window:
+{"number":3,"state":"open","mergeable":false,"merge_base":"aa36e73c6d7d7cf0b04e594911f909a7f26c79a1","base_sha":"cc68ec3f9c8ae87c4ea6ae8c6b13885803f5d004"}
+{"number":4,"state":"open","mergeable":true,"merge_base":"aa36e73c6d7d7cf0b04e594911f909a7f26c79a1","base_sha":"cc68ec3f9c8ae87c4ea6ae8c6b13885803f5d004"}

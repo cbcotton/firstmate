@@ -1,0 +1,24 @@
+(lab: private tmux socket, isolated TREEHOUSE_ROOT pool, isolated tea config; real Gitea on https://localhost)
+--- before: g7-merge state files: [g7-merge.meta g7-merge.pr-poll-merge-notified ]
+--- lab tmux windows: fm-g7-merge fm-g7-close fm-g7-conflict 
+$ FM_HOME=$LAB bin/fm-teardown.sh g7-merge     # PR #1 merged on Gitea, wake 'merge landed' already delivered
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.dXWB4o
+🌳 Worktree returned to pool.
+/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-gitea.rts9sS/wt: already current
+teardown g7-merge complete (window firstmate:fm-g7-merge, worktree /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-gitea.rts9sS/th-pool/.treehouse/wt-53c1a7/1/wt)
+Backlog: g7-merge just finished (this home keeps no markdown backlog at /private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-lab.dXWB4o/data/backlog.md). Update /private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-lab.dXWB4o/data/backlog.md - move g7-merge to Done, keep Done to the 10 most recent, then re-scan Queued and dispatch only work whose blockers are gone and date is due.
+exit=
+--- after: g7-merge state files: []
+--- terminal outcomes:
+--- lab tmux windows: fm-g7-close fm-g7-conflict 
+--- treehouse slot status:
+
+--- before: g7-close state files: [g7-close.check.sh g7-close.meta g7-close.pr-poll g7-close.pr-poll-condition g7-close.pr-poll-registration ]
+$ FM_HOME=$LAB bin/fm-teardown.sh g7-close     # PR #2 closed without merging (closed: condition delivered)
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.dXWB4o
+🌳 Worktree returned to pool.
+/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-gitea.rts9sS/wt: already current
+teardown g7-close complete (window firstmate:fm-g7-close, worktree /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-gitea.rts9sS/th-pool/.treehouse/wt-53c1a7/2/wt)
+Backlog: g7-close just finished (this home keeps no markdown backlog at /private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-lab.dXWB4o/data/backlog.md). Update /private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-lab.dXWB4o/data/backlog.md - move g7-close to Done, keep Done to the 10 most recent, then re-scan Queued and dispatch only work whose blockers are gone and date is due.
+exit=
+--- after: g7-close state files: []

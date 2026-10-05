@@ -1,0 +1,5 @@
+$ (forge) POST /repos/captain/gpr3d/pulls/4/update   # Gitea "Update branch": merge main into PR #4
+HTTP 200
+{"number":4,"state":"open","mergeable":true,"merge_base":"cc68ec3f9c8ae87c4ea6ae8c6b13885803f5d004","base_sha":"cc68ec3f9c8ae87c4ea6ae8c6b13885803f5d004"}
+$ (cd state && bash g7-behind.check.sh)
+output: ''  (empty = no condition)

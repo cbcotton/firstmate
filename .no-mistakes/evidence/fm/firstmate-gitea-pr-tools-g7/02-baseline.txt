@@ -1,0 +1,7 @@
+=== watcher sweep: baseline: all 4 PRs open and current  (09:13:27Z)
+--- fm-watch.sh exit=142 (142 = no actionable wake within 25s, kept blocking)
+--- fm-watch.sh stdout (wake reason firstmate receives):
+--- fm-wake-drain.sh (queued wake payload):
+
+(acked through 0)
+

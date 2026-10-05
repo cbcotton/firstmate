@@ -1,0 +1,40 @@
+$ (forge) POST /repos/captain/gpr3d/pulls/1/merge {"Do":"merge"}
+HTTP 200
+{"number":1,"state":"closed","merged":true,"mergeable":true,"merge_base":"aa36e73c6d7d7cf0b04e594911f909a7f26c79a1","base_sha":"8d5e237f0c6701a0bb1f2c80e8b76e7248864f54"}
+{"number":3,"state":"open","merged":false,"mergeable":true,"merge_base":"aa36e73c6d7d7cf0b04e594911f909a7f26c79a1","base_sha":"8d5e237f0c6701a0bb1f2c80e8b76e7248864f54"}
+{"number":4,"state":"open","merged":false,"mergeable":true,"merge_base":"aa36e73c6d7d7cf0b04e594911f909a7f26c79a1","base_sha":"8d5e237f0c6701a0bb1f2c80e8b76e7248864f54"}
+
+=== watcher sweep: PR #1 merged; main moved past #3 and #4  (09:17:09Z)
+--- fm-watch.sh exit=142 (142 = no actionable wake within 75s, kept blocking)
+--- fm-watch.sh stdout (wake reason firstmate receives):
+--- fm-wake-drain.sh (queued wake payload):
+1791191832	2	check	/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.dXWB4o/state/g7-behind.check.sh	check: /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.dXWB4o/state/g7-behind.check.sh: out-of-date: https://localhost/captain/gpr3d/pulls/4 is behind main at 8d5e237f0c6701a0bb1f2c80e8b76e7248864f54 and possibly conflicting; merge main into its branch
+1791191837	3	check	/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.dXWB4o/state/g7-conflict.check.sh	check: /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.dXWB4o/state/g7-conflict.check.sh: out-of-date: https://localhost/captain/gpr3d/pulls/3 is behind main at 8d5e237f0c6701a0bb1f2c80e8b76e7248864f54 and possibly conflicting; merge main into its branch
+1791191871	4	check	merged-g7-merge-https://localhost/captain/gpr3d/pulls/1	check: merge landed: g7-merge https://localhost/captain/gpr3d/pulls/1 external
+(acked through 4)
+
+=== watcher sweep: follow-up sweep  (09:18:58Z)
+--- fm-watch.sh exit=142 (142 = no actionable wake within 75s, kept blocking)
+--- fm-watch.sh stdout (wake reason firstmate receives):
+--- fm-wake-drain.sh (queued wake payload):
+
+(acked through 0)
+
+--- lab state after merge:
+g7-behind.check.sh
+g7-behind.meta
+g7-behind.pr-poll
+g7-behind.pr-poll-condition
+g7-behind.pr-poll-registration
+g7-close.check.sh
+g7-close.meta
+g7-close.pr-poll
+g7-close.pr-poll-condition
+g7-close.pr-poll-registration
+g7-conflict.check.sh
+g7-conflict.meta
+g7-conflict.pr-poll
+g7-conflict.pr-poll-condition
+g7-conflict.pr-poll-registration
+g7-merge.meta
+g7-merge.pr-poll-merge-notified
