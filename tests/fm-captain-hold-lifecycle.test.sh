@@ -4080,6 +4080,30 @@ set_single_done_retention() {  # <home>
     'done_keep = 1' > "$1/.tasks.toml"
 }
 
+answer_and_archive_call() {  # <home> <origin> <call> <archive-file>
+  local home=$1 id=$2 call=$3 archive=$4
+  mkdir -p "$home/data/$id"
+  tasks_in "$home" add "$id" "Investigate the archive" --kind scout --repo sample --start >/dev/null \
+    || fail "could not create the archive origin"
+  write_origin_meta "$home" "$id"
+  printf 'done: report complete\n' > "$home/state/$id.status"
+  printf '# Report\n\nOne captain choice remains.\n' > "$home/data/$id/report.md"
+  run_captain "$home" hold "$call" --title "Choose the archive path" \
+    --reason "captain choice pending" --repo sample --origin "$id" >/dev/null \
+    || fail "could not hold the captain call"
+  printf 'Take the first path.\n' > "$home/answer.txt"
+  run_captain "$home" answer "$call" --decision-file "$home/answer.txt" >/dev/null \
+    || fail "could not record the answer"
+  # A later completion pushes the answered row past the retention window.
+  tasks_in "$home" add sample-archive-later "Later finished work" --kind ship --repo sample >/dev/null
+  tasks_in "$home" "done" sample-archive-later >/dev/null
+  assert_grep "Resolution mode: answered" "$archive" \
+    "retention did not archive the answered captain call"
+  if tasks_in "$home" show "$call" >/dev/null 2>&1; then
+    fail "the answered call is still live, so this fixture does not exercise the archive"
+  fi
+}
+
 test_archived_answered_call_stays_durable_for_scout_cleanup() {
   local home id call
   home=$(make_home archived-answered)
@@ -4114,6 +4138,35 @@ test_archived_answered_call_stays_durable_for_scout_cleanup() {
   run_teardown "$home" "$id" >/dev/null 2> "$home/teardown.err" \
     || fail "scout cleanup refused an archived answered call: $(cat "$home/teardown.err")"
   pass "an answered captain call moved to the done archive still passes scout cleanup"
+}
+
+test_archive_named_only_in_user_config_is_read() {
+  local home id call
+  home=$(make_home archived-user-config)
+  mkdir -p "$home/user/.tasks-axi"
+  printf '%s\n' 'backend = "markdown"' '' '[markdown]' \
+    'path = "data/backlog.md"' 'done_keep = 1' > "$home/.tasks.toml"
+  printf '%s\n' '[markdown]' 'archive = "data/answered-calls.md"' \
+    > "$home/user/.tasks-axi/config.toml"
+  id=sample-archive-user
+  call=sample-archive-user-call
+  HOME="$home/user" answer_and_archive_call "$home" "$id" "$call" "$home/data/answered-calls.md"
+  write_scout_with_attested_inventory "$home" "$id" "$call"
+  HOME="$home/user" run_captain "$home" verify "$id" >/dev/null 2> "$home/verify.err" \
+    || fail "an answer archived where the user config points stopped verifying: $(cat "$home/verify.err")"
+  pass "an archive named only in the user tasks-axi config still carries the answer"
+}
+
+test_archived_legacy_identity_stays_durable() {
+  local home id
+  home=$(make_home archived-legacy)
+  set_single_done_retention "$home"
+  id=sample-archive-legacy
+  answer_and_archive_call "$home" "$id" "$id-decision-choice" "$home/data/done-archive.md"
+  write_scout_with_attested_inventory "$home" "$id" choice
+  run_captain "$home" verify "$id" >/dev/null 2> "$home/verify.err" \
+    || fail "an archived legacy-identity answer stopped verifying: $(cat "$home/verify.err")"
+  pass "an answered call archived under its legacy identity still verifies"
 }
 
 test_archived_call_without_a_recorded_answer_still_refuses() {
@@ -4212,3 +4265,5 @@ test_hold_creates_a_captain_row_when_beads_requires_due_without_custom_type
 test_archived_answered_call_stays_durable_for_scout_cleanup
 test_archived_call_without_a_recorded_answer_still_refuses
 test_missing_call_still_refuses_with_an_archive_present
+test_archive_named_only_in_user_config_is_read
+test_archived_legacy_identity_stays_durable

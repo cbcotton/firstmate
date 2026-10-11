@@ -547,16 +547,8 @@ verify_hold_durable() {  # <task-id>
   fail "captain-held task $id is neither held for the captain nor closed with a recorded captain answer"
 }
 
-# The done archive the markdown backend's retention writes: `[markdown] archive`
-# in the root's .tasks.toml, resolved against that root, else done-archive.md
-# beside the backlog file. Prints nothing and fails for any other backend.
-done_archive_path() {
-  local data root backend configured
-  data=$(fm_backlog_data_absolute "$DATA") || return 1
-  root=$(fm_backlog_root "$data") || return 1
-  backend=$(fm_tasks_axi_backend "$root" 2>/dev/null) || return 1
-  [ "$backend" = markdown ] || return 1
-  configured=$(LC_ALL=C awk '
+markdown_archive_setting() {  # <toml-file>
+  LC_ALL=C awk '
     /^[[:space:]]*\[/ { in_markdown = ($0 ~ /^[[:space:]]*\[markdown\][[:space:]]*(#.*)?$/); next }
     in_markdown && /^[[:space:]]*archive[[:space:]]*=/ {
       line = $0
@@ -566,7 +558,23 @@ done_archive_path() {
       print line
       exit
     }
-  ' "$root/.tasks.toml" 2>/dev/null) || configured=''
+  ' "$1" 2>/dev/null
+}
+
+# The done archive the markdown backend's retention writes: `[markdown] archive`
+# in the root's .tasks.toml, else in $HOME/.tasks-axi/config.toml (the order
+# tasks-axi reads them), resolved against that root, else done-archive.md
+# beside the backlog file. Prints nothing and fails for any other backend.
+done_archive_path() {
+  local data root backend configured
+  data=$(fm_backlog_data_absolute "$DATA") || return 1
+  root=$(fm_backlog_root "$data") || return 1
+  backend=$(fm_tasks_axi_backend "$root" 2>/dev/null) || return 1
+  [ "$backend" = markdown ] || return 1
+  configured=$(markdown_archive_setting "$root/.tasks.toml") || configured=''
+  if [ -z "$configured" ] && [ -n "${HOME:-}" ]; then
+    configured=$(markdown_archive_setting "$HOME/.tasks-axi/config.toml") || configured=''
+  fi
   case "$configured" in
     '') printf '%s/done-archive.md\n' "$data" ;;
     /*) printf '%s\n' "$configured" ;;
@@ -784,9 +792,10 @@ resolve_migrated_entry() {  # <origin-or-empty> <entry>
 
 # Resolve one inventory entry or channel key to the task that carries it: the
 # exact task id when it exists, else the legacy derived identity, else - on the
-# beads backend - the migrated row the markdown-to-beads hold migration wrote.
-# Prints "<resolved id> <how>", where <how> is exact, legacy, migrated-note or
-# migrated-prefix, so a caller can record which evidence carried the attestation.
+# beads backend - the migrated row the markdown-to-beads hold migration wrote,
+# else the exact or legacy row the done archive holds with a resolution block.
+# Prints "<resolved id> <how>", where <how> is exact, legacy, migrated-note,
+# migrated-prefix or archived, so a caller can record which evidence carried the attestation.
 resolve_entry() {  # <origin-or-empty> <entry>; prints "<id> <how>" or fails
   local origin=$1 entry=$2 legacy migrated rc
   if task_show "$entry"; then
@@ -807,8 +816,16 @@ resolve_entry() {  # <origin-or-empty> <entry>; prints "<id> <how>" or fails
     2) return 2 ;;
     124) return 124 ;;
   esac
+  if archived_resolution_durable "$entry"; then
+    printf '%s archived' "$entry"
+    return 0
+  fi
   if [ -n "$origin" ] && [ "$origin" != "$BINDING_ANY" ]; then
     legacy=$(legacy_hold_id "$origin" "$entry")
+    if archived_resolution_durable "$legacy"; then
+      printf '%s archived' "$legacy"
+      return 0
+    fi
     fail "no captain-held task $entry and no migrated hold for it in this home's configured backlog (data directory $DATA); the nearest legacy identity $legacy also resolves to nothing"
   fi
   fail "no captain-held task $entry and no migrated hold for it in this home's configured backlog (data directory $DATA)"
@@ -862,10 +879,6 @@ write_hold_set_stamp() {  # <task-id> <shown-body> <timestamp> <preserve-existin
 # attestation evidence.
 verify_entry_durable() {  # <origin-or-empty> <entry>; prints "<id> <how>"
   local origin=$1 entry=$2 resolved resolve_status=0
-  if ! task_show "$entry" && archived_resolution_durable "$entry"; then
-    printf '%s archived\n' "$entry"
-    return 0
-  fi
   resolved=$(resolve_entry "$origin" "$entry") || resolve_status=$?
   if [ "$resolve_status" -ne 0 ]; then
     [ "$resolve_status" -ne 124 ] \
@@ -873,7 +886,7 @@ verify_entry_durable() {  # <origin-or-empty> <entry>; prints "<id> <how>"
     exit "$resolve_status"
   fi
   printf '%s\n' "$resolved"
-  verify_hold_durable "${resolved%% *}"
+  [ "${resolved##* }" = archived ] || verify_hold_durable "${resolved%% *}"
 }
 
 command_hold() {
