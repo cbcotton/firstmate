@@ -141,6 +141,9 @@
 # `captain-held [key=...]` status close naming the inventory. Later review
 # passes may add ids. A post-teardown visual review can complete against the
 # surviving report and tasks without recreating task state.
+# A recorded answer stays durable after retention moves its task into the
+# configured done archive: an entry absent from the live backlog is accepted
+# when the archive holds it as a closed task carrying a resolution block.
 # `verify` is read-only and is called by scout teardown, so teardown cannot
 # erase a source before this gate has succeeded: every recorded inventory
 # entry must still be durable and no keyed status decision may be open.
@@ -544,6 +547,57 @@ verify_hold_durable() {  # <task-id>
   fail "captain-held task $id is neither held for the captain nor closed with a recorded captain answer"
 }
 
+markdown_archive_setting() {  # <toml-file>
+  LC_ALL=C awk '
+    /^[[:space:]]*\[/ { in_markdown = ($0 ~ /^[[:space:]]*\[markdown\][[:space:]]*(#.*)?$/); next }
+    in_markdown && /^[[:space:]]*archive[[:space:]]*=/ {
+      line = $0
+      sub(/^[^=]*=[[:space:]]*/, "", line)
+      sub(/[[:space:]]*#.*$/, "", line)
+      gsub(/^["\x27]|["\x27]$/, "", line)
+      print line
+      exit
+    }
+  ' "$1" 2>/dev/null
+}
+
+# The done archive the markdown backend's retention writes: `[markdown] archive`
+# in the root's .tasks.toml, else in $HOME/.tasks-axi/config.toml (the order
+# tasks-axi reads them), resolved against that root, else done-archive.md
+# beside the backlog file. Prints nothing and fails for any other backend.
+done_archive_path() {
+  local data root backend configured
+  data=$(fm_backlog_data_absolute "$DATA") || return 1
+  root=$(fm_backlog_root "$data") || return 1
+  backend=$(fm_tasks_axi_backend "$root" 2>/dev/null) || return 1
+  [ "$backend" = markdown ] || return 1
+  configured=$(markdown_archive_setting "$root/.tasks.toml") || configured=''
+  if [ -z "$configured" ] && [ -n "${HOME:-}" ]; then
+    configured=$(markdown_archive_setting "$HOME/.tasks-axi/config.toml") || configured=''
+  fi
+  case "$configured" in
+    '') printf '%s/done-archive.md\n' "$data" ;;
+    /*) printf '%s\n' "$configured" ;;
+    *) printf '%s/%s\n' "$root" "$configured" ;;
+  esac
+}
+
+# Retention moves an answered captain call out of the live backlog, so a call
+# the live backlog no longer has is still durable when the done archive holds
+# it as a closed task carrying a recorded resolution block.
+archived_resolution_durable() {  # <task-id>
+  local id=$1 archive block
+  archive=$(done_archive_path) || return 1
+  [ -f "$archive" ] || return 1
+  block=$(LC_ALL=C awk -v id="$id" '
+    /^- \[/ { keep = (index($0, "- [x] " id " - ") == 1) }
+    /^## / { keep = 0 }
+    keep { print }
+  ' "$archive") || return 1
+  [ -n "$block" ] || return 1
+  body_has_resolution_record "$block"
+}
+
 # --- migrated legacy-id resolution on the Beads backend ---------------------
 #
 # A home that moved its backlog from markdown to Beads no longer carries the
@@ -812,16 +866,36 @@ write_hold_set_stamp() {  # <task-id> <shown-body> <timestamp> <preserve-existin
 # resolution failure that is not the read bound keeps resolve_entry's own
 # status - its stderr already named the entry; 124 means the backend never
 # answered, which is not the same as an unknown entry and must not be spent
-# as absence. On success prints "<id> <how>" so the caller can keep the
-# attestation evidence.
+# as absence. Any other failure still passes when the done archive holds the
+# exact or legacy row with a resolution block. On success prints "<id> <how>"
+# so the caller can keep the attestation evidence.
 verify_entry_durable() {  # <origin-or-empty> <entry>; prints "<id> <how>"
-  local origin=$1 entry=$2 resolved resolve_status=0
-  resolved=$(resolve_entry "$origin" "$entry") || resolve_status=$?
+  local origin=$1 entry=$2 resolved resolve_status=0 err candidates candidate
+  err=$(umask 077; mktemp "${TMPDIR:-/tmp}/fm-captain-hold-resolve.XXXXXX") \
+    || fail "cannot stage the resolution of $entry"
+  resolved=$(resolve_entry "$origin" "$entry" 2>"$err") || resolve_status=$?
   if [ "$resolve_status" -ne 0 ]; then
+    if [ "$resolve_status" -ne 124 ]; then
+      candidates=$entry
+      if [ -n "$origin" ] && [ "$origin" != "$BINDING_ANY" ]; then
+        candidates="$candidates $(legacy_hold_id "$origin" "$entry")"
+      fi
+      for candidate in $candidates; do
+        if archived_resolution_durable "$candidate"; then
+          rm -f -- "$err"
+          printf '%s archived\n' "$candidate"
+          return 0
+        fi
+      done
+    fi
+    cat -- "$err" >&2
+    rm -f -- "$err"
     [ "$resolve_status" -ne 124 ] \
       || fail "the backlog backend exceeded its read bound resolving $entry"
     exit "$resolve_status"
   fi
+  cat -- "$err" >&2
+  rm -f -- "$err"
   printf '%s\n' "$resolved"
   verify_hold_durable "${resolved%% *}"
 }
