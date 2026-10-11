@@ -1,0 +1,39 @@
+=== S1: answered call archived -> verify, complete --none, teardown ===
+error: "Task \"lab-archive-call\" not found in this backlog"
+code: NOT_FOUND
+help[1]: Run `tasks-axi list` to see existing tasks
+window=firstmate:fm-lab-archive-review
+worktree=/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.CfI2hK/projects/missing-lab-archive-review
+project=/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.CfI2hK/projects/sample
+harness=codex
+kind=scout
+mode=scout
+spawn_gen=lab-lab-archive-review
+decisions_reviewed=1
+decision_keys=lab-archive-call
+
+$ cap verify lab-archive-review
+fm-captain-hold: no captain-held task lab-archive-call and no migrated hold for it in this home's configured backlog (data directory /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.CfI2hK/data); the nearest legacy identity lab-archive-review-decision-lab-archive-call also resolves to nothing
+[exit 1]
+
+$ cap complete lab-archive-review --none
+fm-captain-hold: no captain-held task lab-archive-call and no migrated hold for it in this home's configured backlog (data directory /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.CfI2hK/data); the nearest legacy identity lab-archive-review-decision-lab-archive-call also resolves to nothing
+[exit 1]
+
+$ /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-base.aMQvIh/bin/fm-teardown.sh lab-archive-review
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.CfI2hK
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  watcher supervision needs Stop-owned automatic recovery; inspect the hook registration and startup status before ending the turn.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+fm-captain-hold: no captain-held task lab-archive-call and no migrated hold for it in this home's configured backlog (data directory /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.CfI2hK/data); the nearest legacy identity lab-archive-review-decision-lab-archive-call also resolves to nothing
+REFUSED: scout task lab-archive-review has not passed the captain-call completion gate.
+Inventory its report and any visual review through bin/fm-captain-hold.sh before teardown.
+[exit 1]
+lab-archive-review.meta
+lab-archive-review.status
+
+=== S2: archived row WITHOUT resolution block still refuses ===
