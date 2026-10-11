@@ -141,6 +141,9 @@
 # `captain-held [key=...]` status close naming the inventory. Later review
 # passes may add ids. A post-teardown visual review can complete against the
 # surviving report and tasks without recreating task state.
+# A recorded answer stays durable after retention moves its task into the
+# configured done archive: an entry absent from the live backlog is accepted
+# when the archive holds it as a closed task carrying a resolution block.
 # `verify` is read-only and is called by scout teardown, so teardown cannot
 # erase a source before this gate has succeeded: every recorded inventory
 # entry must still be durable and no keyed status decision may be open.
@@ -544,6 +547,49 @@ verify_hold_durable() {  # <task-id>
   fail "captain-held task $id is neither held for the captain nor closed with a recorded captain answer"
 }
 
+# The done archive the markdown backend's retention writes: `[markdown] archive`
+# in the root's .tasks.toml, resolved against that root, else done-archive.md
+# beside the backlog file. Prints nothing and fails for any other backend.
+done_archive_path() {
+  local data root backend configured
+  data=$(fm_backlog_data_absolute "$DATA") || return 1
+  root=$(fm_backlog_root "$data") || return 1
+  backend=$(fm_tasks_axi_backend "$root" 2>/dev/null) || return 1
+  [ "$backend" = markdown ] || return 1
+  configured=$(LC_ALL=C awk '
+    /^[[:space:]]*\[/ { in_markdown = ($0 ~ /^[[:space:]]*\[markdown\][[:space:]]*(#.*)?$/); next }
+    in_markdown && /^[[:space:]]*archive[[:space:]]*=/ {
+      line = $0
+      sub(/^[^=]*=[[:space:]]*/, "", line)
+      sub(/[[:space:]]*#.*$/, "", line)
+      gsub(/^["\x27]|["\x27]$/, "", line)
+      print line
+      exit
+    }
+  ' "$root/.tasks.toml" 2>/dev/null) || configured=''
+  case "$configured" in
+    '') printf '%s/done-archive.md\n' "$data" ;;
+    /*) printf '%s\n' "$configured" ;;
+    *) printf '%s/%s\n' "$root" "$configured" ;;
+  esac
+}
+
+# Retention moves an answered captain call out of the live backlog, so a call
+# the live backlog no longer has is still durable when the done archive holds
+# it as a closed task carrying a recorded resolution block.
+archived_resolution_durable() {  # <task-id>
+  local id=$1 archive block
+  archive=$(done_archive_path) || return 1
+  [ -f "$archive" ] || return 1
+  block=$(LC_ALL=C awk -v id="$id" '
+    /^- \[/ { keep = (index($0, "- [x] " id " - ") == 1) }
+    /^## / { keep = 0 }
+    keep { print }
+  ' "$archive") || return 1
+  [ -n "$block" ] || return 1
+  body_has_resolution_record "$block"
+}
+
 # --- migrated legacy-id resolution on the Beads backend ---------------------
 #
 # A home that moved its backlog from markdown to Beads no longer carries the
@@ -816,6 +862,10 @@ write_hold_set_stamp() {  # <task-id> <shown-body> <timestamp> <preserve-existin
 # attestation evidence.
 verify_entry_durable() {  # <origin-or-empty> <entry>; prints "<id> <how>"
   local origin=$1 entry=$2 resolved resolve_status=0
+  if ! task_show "$entry" && archived_resolution_durable "$entry"; then
+    printf '%s archived\n' "$entry"
+    return 0
+  fi
   resolved=$(resolve_entry "$origin" "$entry") || resolve_status=$?
   if [ "$resolve_status" -ne 0 ]; then
     [ "$resolve_status" -ne 124 ] \
