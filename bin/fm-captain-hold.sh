@@ -792,10 +792,9 @@ resolve_migrated_entry() {  # <origin-or-empty> <entry>
 
 # Resolve one inventory entry or channel key to the task that carries it: the
 # exact task id when it exists, else the legacy derived identity, else - on the
-# beads backend - the migrated row the markdown-to-beads hold migration wrote,
-# else the exact or legacy row the done archive holds with a resolution block.
-# Prints "<resolved id> <how>", where <how> is exact, legacy, migrated-note,
-# migrated-prefix or archived, so a caller can record which evidence carried the attestation.
+# beads backend - the migrated row the markdown-to-beads hold migration wrote.
+# Prints "<resolved id> <how>", where <how> is exact, legacy, migrated-note or
+# migrated-prefix, so a caller can record which evidence carried the attestation.
 resolve_entry() {  # <origin-or-empty> <entry>; prints "<id> <how>" or fails
   local origin=$1 entry=$2 legacy migrated rc
   if task_show "$entry"; then
@@ -816,16 +815,8 @@ resolve_entry() {  # <origin-or-empty> <entry>; prints "<id> <how>" or fails
     2) return 2 ;;
     124) return 124 ;;
   esac
-  if archived_resolution_durable "$entry"; then
-    printf '%s archived' "$entry"
-    return 0
-  fi
   if [ -n "$origin" ] && [ "$origin" != "$BINDING_ANY" ]; then
     legacy=$(legacy_hold_id "$origin" "$entry")
-    if archived_resolution_durable "$legacy"; then
-      printf '%s archived' "$legacy"
-      return 0
-    fi
     fail "no captain-held task $entry and no migrated hold for it in this home's configured backlog (data directory $DATA); the nearest legacy identity $legacy also resolves to nothing"
   fi
   fail "no captain-held task $entry and no migrated hold for it in this home's configured backlog (data directory $DATA)"
@@ -875,18 +866,38 @@ write_hold_set_stamp() {  # <task-id> <shown-body> <timestamp> <preserve-existin
 # resolution failure that is not the read bound keeps resolve_entry's own
 # status - its stderr already named the entry; 124 means the backend never
 # answered, which is not the same as an unknown entry and must not be spent
-# as absence. On success prints "<id> <how>" so the caller can keep the
-# attestation evidence.
+# as absence. Any other failure still passes when the done archive holds the
+# exact or legacy row with a resolution block. On success prints "<id> <how>"
+# so the caller can keep the attestation evidence.
 verify_entry_durable() {  # <origin-or-empty> <entry>; prints "<id> <how>"
-  local origin=$1 entry=$2 resolved resolve_status=0
-  resolved=$(resolve_entry "$origin" "$entry") || resolve_status=$?
+  local origin=$1 entry=$2 resolved resolve_status=0 err candidates candidate
+  err=$(umask 077; mktemp "${TMPDIR:-/tmp}/fm-captain-hold-resolve.XXXXXX") \
+    || fail "cannot stage the resolution of $entry"
+  resolved=$(resolve_entry "$origin" "$entry" 2>"$err") || resolve_status=$?
   if [ "$resolve_status" -ne 0 ]; then
+    if [ "$resolve_status" -ne 124 ]; then
+      candidates=$entry
+      if [ -n "$origin" ] && [ "$origin" != "$BINDING_ANY" ]; then
+        candidates="$candidates $(legacy_hold_id "$origin" "$entry")"
+      fi
+      for candidate in $candidates; do
+        if archived_resolution_durable "$candidate"; then
+          rm -f -- "$err"
+          printf '%s archived\n' "$candidate"
+          return 0
+        fi
+      done
+    fi
+    cat -- "$err" >&2
+    rm -f -- "$err"
     [ "$resolve_status" -ne 124 ] \
       || fail "the backlog backend exceeded its read bound resolving $entry"
     exit "$resolve_status"
   fi
+  cat -- "$err" >&2
+  rm -f -- "$err"
   printf '%s\n' "$resolved"
-  [ "${resolved##* }" = archived ] || verify_hold_durable "${resolved%% *}"
+  verify_hold_durable "${resolved%% *}"
 }
 
 command_hold() {
