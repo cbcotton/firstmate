@@ -248,7 +248,7 @@ PROJECTS="${FM_PROJECTS_OVERRIDE:-$FM_HOME/projects}"
 . "$SCRIPT_DIR/fm-privateer-lib.sh"
 FLAG="$CONFIG/privateer"
 DISPATCH="$CONFIG/crew-dispatch.json"
-SESSION=privateer
+SESSION=$FM_PRIVATEER_SESSION
 OPENCODE_ROOT="$STATE/privateer/opencode"
 EGRESS="$STATE/privateer/egress"
 POOL="$STATE/privateer/treehouse"
@@ -472,11 +472,11 @@ socket_name() {
 }
 
 tmux_socket_path() {  # <socket-name>
-  printf '%s/tmux-%s/%s\n' "${TMUX_TMPDIR:-/tmp}" "$(id -u)" "$1"
+  fm_privateer_socket_path "$1"
 }
 
 session_running() {  # <socket-name>
-  tmux -L "$1" has-session -t "$SESSION" 2>/dev/null
+  fm_privateer_session_running "$1"
 }
 
 # forge_origins: one `<host>:<port>\t<repo>` line per forge origin: the origin

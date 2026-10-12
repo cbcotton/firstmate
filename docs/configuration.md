@@ -1077,7 +1077,7 @@ Its `bin/` is then the home's own, so no worker can rewrite the scripts that gov
 Before creating `forks/`, add a `forks/` line to the Claude-orchestrated checkout's `.git/info/exclude`.
 The tracked `.gitignore` excludes `forks/` too, but only once that checkout carries the entry, and until then the untracked directory makes the checkout dirty, so its self-update skips it.
 Add `"Read(./forks/**)"` to the `permissions.deny` list in that checkout's `.claude/settings.local.json`, so its Claude first mate never reads the Privateer home's private projects.
-To update the Privateer home, stop its session with `stop`, fast-forward the clone from outside it with `git -C forks/<name> pull --ff-only`, and start it again; the session cannot update itself, because its `bin/`, instructions, skills, docs, and plugins are denied to it.
+To update the Privateer home, stop its session with `stop`, run `/updatefirstmate` (or `git -C forks/<name> pull --ff-only`), and start it again; the session cannot update itself, because its `bin/`, instructions, skills, docs, and plugins are denied to it.
 A project the home shares with a Claude-orchestrated home takes its own ship-branch prefix in this home's `data/projects.md`.
 The flag is not inherited, because a Privateer home spawns no secondmate.
 
