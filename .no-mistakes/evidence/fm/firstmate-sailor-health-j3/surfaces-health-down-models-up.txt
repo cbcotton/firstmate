@@ -1,0 +1,15 @@
+===== healthPath 503, /models 200 (adversarial) =====
+--- $ bin/fm-sailor.sh health
+tiller down http://127.0.0.1:61092/health
+--- $ bin/fm-sailor.sh status --all
+tiller live not-answering endpoint=http://127.0.0.1:61092/v1 tasks=0/2
+flint placeholder not-answering endpoint=http://127.0.0.1:1/v1 tasks=0/1
+--- $ bin/fm-fleet-snapshot.sh --json | jq .sailors
+[{"name":"tiller","status":"live","answering":false,"endpoint":"http://127.0.0.1:61092/v1","tasks":0,"capacity":2,"line":"tiller live not-answering endpoint=http://127.0.0.1:61092/v1 tasks=0/2"}]
+--- $ bin/fm-bearings-snapshot.sh --json | jq .sailors
+[{"name":"tiller","answering":false,"tasks":0,"capacity":2}]
+--- $ bin/fm-bearings-snapshot.sh (TOON, sailors rows)
+sailors[1]{name,answering,tasks,capacity}:
+  tiller,false,0,2
+omitted[6]{surface,reveal}:
+  backlog item bodies,"--fields bodies"

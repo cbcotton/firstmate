@@ -1,0 +1,6 @@
+--- healthPath 503, /models 200: $ fm-sailor.sh check tiller qwen-coder
+ok: sailor tiller serves qwen-coder at http://127.0.0.1:61092/v1 (0 of 2 tasks busy; model loaded)
+rc=0
+--- healthPath 200, /models 500: $ fm-sailor.sh check tiller qwen-coder
+refused: sailor tiller is not answering at http://127.0.0.1:61092/v1
+rc=1

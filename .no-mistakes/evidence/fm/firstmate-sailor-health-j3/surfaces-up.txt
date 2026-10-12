@@ -1,0 +1,15 @@
+===== both healthPath and /models answer =====
+--- $ bin/fm-sailor.sh health
+tiller up http://127.0.0.1:61092/health
+--- $ bin/fm-sailor.sh status --all
+tiller live answering endpoint=http://127.0.0.1:61092/v1 tasks=0/2 models=qwen-coder(loaded)
+flint placeholder not-answering endpoint=http://127.0.0.1:1/v1 tasks=0/1
+--- $ bin/fm-fleet-snapshot.sh --json | jq .sailors
+[{"name":"tiller","status":"live","answering":true,"endpoint":"http://127.0.0.1:61092/v1","tasks":0,"capacity":2,"line":"tiller live answering endpoint=http://127.0.0.1:61092/v1 tasks=0/2 models=qwen-coder(loaded)"}]
+--- $ bin/fm-bearings-snapshot.sh --json | jq .sailors
+[{"name":"tiller","answering":true,"tasks":0,"capacity":2}]
+--- $ bin/fm-bearings-snapshot.sh (TOON, sailors rows)
+sailors[1]{name,answering,tasks,capacity}:
+  tiller,true,0,2
+omitted[6]{surface,reveal}:
+  backlog item bodies,"--fields bodies"

@@ -1,0 +1,4 @@
+ok - watch: a sailor flipping up, down, and up wakes exactly twice and ledgers each change
+ok - watch: a live sailor first seen down wakes once
+ok - watch: a home that declares no sailors stays silent
+# all fm-watch-sailor-health tests passed

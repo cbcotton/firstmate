@@ -1,0 +1,9 @@
+# healthPath=503, /v1/models=200; real bin/fm-session-start.sh in lab home
+PRIVATEER
+================================================================================
+first mate: tiller/qwen-coder
+delivery: local-only (a ready branch waits for the captain; nothing is pushed)
+sailors:
+  tiller live not-answering endpoint=http://127.0.0.1:61092/v1 tasks=0/2
+  flint placeholder not-answering endpoint=http://127.0.0.1:1/v1 tasks=0/1
+front door: bin/fm-helm.sh helm

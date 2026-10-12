@@ -1,0 +1,13 @@
+# live watcher legs in lab home (tmux -L fm-lab), stub mlx-serve /health flipped 200 -> 503 -> 200
+--- leg up stdout (rc=0)
+check: sailor tiller down
+--- leg stilldown stdout (rc=0)
+check: sailor tiller up
+--- drained wake rows
+1791811588	1	check	sailor-tiller-down-1791811587	check: sailor tiller down
+--- state/fleet-ledger.jsonl
+{"v":1,"ts":1791811591,"event":"sailor.state","task":null,"name":"tiller","state":"down"}
+{"v":1,"ts":1791811706,"event":"sailor.state","task":null,"name":"tiller","state":"up"}
+--- state/.sailor-health
+tiller up
+--- stub requests: /health=13 /v1/models=0 (counted since the watcher legs began: the watcher reads only the mlx-serve healthPath)
