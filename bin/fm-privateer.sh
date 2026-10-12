@@ -13,7 +13,7 @@
 #   fm-privateer.sh launch-env
 #   fm-privateer.sh start
 #   fm-privateer.sh attach
-#   fm-privateer.sh stop
+#   fm-privateer.sh stop [--stow]
 #
 # The quarantine is on while config/privateer exists. Its content is optional:
 # one line `<sailor>/<model>` names the sailor and model the first mate itself
@@ -202,14 +202,30 @@
 # stops the watcher and any egress proxy left behind and says so, and refuses
 # only when there was no proxy to stop.
 #
+# stop --stow is the captain's stop with a /stow first, for a caller such as a
+# Dock app. It applies the same refusals as stop, then, as the front door acting
+# on its own session, waits until the first mate's pane reads idle, refuses
+# unless its input line is proven empty, types /stow there with the shared
+# verified submit (bin/fm-tmux-lib.sh fm_tmux_submit_core), waits until the
+# pane reads busy at least once, so the stow turn is seen to start, and then
+# waits until it reads idle again; idle is the OpenCode delivery-busy footer
+# read (fm_pane_busy_state) absent STOW_IDLE_READS times in a row. Only then,
+# and only while still no task record exists, does it run the stop sequence.
+# All waits share one deadline, FM_PRIVATEER_STOW_WAIT seconds (600), read
+# every FM_PRIVATEER_STOW_POLL seconds (2); a stow that is not delivered, not
+# seen to start, or not finished by then refuses and leaves the session
+# running. Its output names no socket or port. When the session has already
+# ended there is nothing to stow, and it cleans up as stop does.
+#
 # Environment: FM_HOME, FM_STATE_OVERRIDE, FM_CONFIG_OVERRIDE, and
 # FM_PROJECTS_OVERRIDE resolve the home exactly as the other bin/ scripts do. With FM_TEST_SEAM=1, FM_PRIVATEER_PRIMARY names a command to launch in
 # place of opencode, with the same arguments, so a test can prove the launch
 # environment with a stub.
 #
 # Exit status: 0 success, 1 refused (a violation, a missing prerequisite, work
-# in flight, or, for inside, a caller outside the session), 2 usage or
-# configuration error, 3 (inside only) no config/privateer.
+# in flight, a stow not delivered, not started, or not finished, or, for
+# inside, a caller outside the session), 2 usage or configuration error, 3
+# (inside only) no config/privateer.
 set -u
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -228,10 +244,11 @@ EGRESS="$STATE/privateer/egress"
 POOL="$STATE/privateer/treehouse"
 HELM="$STATE/privateer/helm"
 RULEBOOK="$FM_ROOT/docs/privateer"
+STOW_IDLE_READS=3
 FORBIDDEN_NAME_RE='^(ANTHROPIC_[A-Za-z0-9_]*|CLAUDE_[A-Za-z0-9_]*|CLAUDECODE)$'
 
 usage() {
-  echo "usage: fm-privateer.sh check | inside | launch-env | start | attach | stop" >&2
+  echo "usage: fm-privateer.sh check | inside | launch-env | start | attach | stop [--stow]" >&2
   exit 2
 }
 
@@ -769,20 +786,10 @@ cmd_attach() {
   exec tmux -L "$socket" attach-session -t "$SESSION"
 }
 
-cmd_stop() {
-  local socket meta
+refuse_work_in_flight() {
+  local meta
   local -a live
   live=()
-  active || refuse "config/privateer is absent; this launcher stops only a Privateer home"
-  command -v tmux >/dev/null 2>&1 || refuse "tmux is required"
-  socket=$(socket_name)
-  if ! session_running "$socket"; then
-    FM_HOME="$FM_HOME" FM_STATE_OVERRIDE="$STATE" "$SCRIPT_DIR/fm-watch-arm.sh" --stop >/dev/null 2>&1 || true
-    [ -e "$EGRESS/pid" ] || refuse "the Privateer session is not running, and no egress proxy was left behind"
-    stop_egress_proxy
-    echo "privateer: the session on tmux socket $socket had already ended; stopped its watcher and its egress proxy"
-    return 0
-  fi
   for meta in "$STATE"/*.meta; do
     [ -f "$meta" ] || continue
     meta=${meta##*/}
@@ -791,10 +798,86 @@ cmd_stop() {
   if [ "${#live[@]}" -gt 0 ]; then
     refuse "work is in flight (${live[*]}); finish or clean it up before stopping the session"
   fi
+}
+
+# first_mate_reads <target> <deadline> <poll> <state> <reads>: 0 once the
+# first mate's pane reads <state> (busy or idle) <reads> times in a row, 1 at
+# the deadline (in SECONDS). Needs bin/fm-tmux-lib.sh and the stow_session tmux
+# wrapper.
+first_mate_reads() {
+  local target=$1 deadline=$2 poll=$3 state=$4 reads=$5 streak=0
+  while [ "$SECONDS" -lt "$deadline" ]; do
+    if [ "$(fm_pane_busy_state "$target" opencode)" = "$state" ]; then
+      streak=$((streak + 1))
+      [ "$streak" -lt "$reads" ] || return 0
+    else
+      streak=0
+    fi
+    sleep "$poll"
+  done
+  return 1
+}
+
+# stow_session <socket>: /stow delivered to the first mate's own pane and its
+# turn waited out, as the header describes; refuses (exit 1) otherwise.
+stow_session() {
+  local socket=$1 wait=${FM_PRIVATEER_STOW_WAIT:-600} poll=${FM_PRIVATEER_STOW_POLL:-2} status
+  case "$wait" in '' | *[!0-9]*) die "FM_PRIVATEER_STOW_WAIT must be a whole number of seconds: $wait" ;; esac
+  case "$poll" in '' | . | *[!0-9.]* | *.*.*) die "FM_PRIVATEER_STOW_POLL must be a number of seconds: $poll" ;; esac
+  (
+    # shellcheck source=bin/fm-tmux-lib.sh
+    . "$SCRIPT_DIR/fm-tmux-lib.sh"
+    # Every pane read and keystroke the library makes goes to this home's server.
+    # shellcheck disable=SC2329
+    tmux() { command tmux -L "$socket" "$@"; }
+    target="$SESSION:firstmate"
+    deadline=$((SECONDS + wait))
+    first_mate_reads "$target" "$deadline" "$poll" idle "$STOW_IDLE_READS" || exit 3
+    [ "$(fm_tmux_composer_state "$target")" = empty ] || exit 4
+    [ "$(fm_tmux_submit_core "$target" /stow 3 0.5 0.3)" = empty ] || exit 5
+    first_mate_reads "$target" "$deadline" "$poll" busy 1 || exit 7
+    first_mate_reads "$target" "$deadline" "$poll" idle "$STOW_IDLE_READS" || exit 6
+  )
+  status=$?
+  case "$status" in
+    0) return 0 ;;
+    3) refuse "the first mate stayed busy for ${wait}s, so /stow was not delivered; the session is still running" ;;
+    4) refuse "the first mate's input line holds text or cannot be read, so /stow was not typed; the session is still running" ;;
+    5) refuse "the first mate did not take /stow; the session is still running" ;;
+    7) refuse "the first mate's /stow did not start within ${wait}s; the session is still running" ;;
+    6) refuse "the first mate's /stow did not finish within ${wait}s; the session is still running" ;;
+    *) refuse "the stow could not be run; the session is still running" ;;
+  esac
+}
+
+cmd_stop() {  # [--stow]
+  local socket stow=0 where
+  [ "${1:-}" != --stow ] || stow=1
+  active || refuse "config/privateer is absent; this launcher stops only a Privateer home"
+  command -v tmux >/dev/null 2>&1 || refuse "tmux is required"
+  socket=$(socket_name)
+  where=" on tmux socket $socket"
+  [ "$stow" -eq 0 ] || where=
+  if ! session_running "$socket"; then
+    FM_HOME="$FM_HOME" FM_STATE_OVERRIDE="$STATE" "$SCRIPT_DIR/fm-watch-arm.sh" --stop >/dev/null 2>&1 || true
+    [ -e "$EGRESS/pid" ] || refuse "the Privateer session is not running, and no egress proxy was left behind"
+    stop_egress_proxy
+    echo "privateer: the session$where had already ended; stopped its watcher and its egress proxy"
+    return 0
+  fi
+  refuse_work_in_flight
+  if [ "$stow" -eq 1 ]; then
+    stow_session "$socket"
+    refuse_work_in_flight
+  fi
   FM_HOME="$FM_HOME" FM_STATE_OVERRIDE="$STATE" "$SCRIPT_DIR/fm-watch-arm.sh" --stop >/dev/null 2>&1 || true
   tmux -L "$socket" kill-server 2>/dev/null || refuse "the Privateer tmux server could not be stopped"
   stop_egress_proxy
-  echo "privateer: stopped session $SESSION on tmux socket $socket"
+  if [ "$stow" -eq 1 ]; then
+    echo "privateer: the first mate stowed; stopped session $SESSION"
+  else
+    echo "privateer: stopped session $SESSION$where"
+  fi
 }
 
 [ "$#" -ge 1 ] || usage
@@ -823,8 +906,11 @@ case "$cmd" in
     cmd_attach
     ;;
   stop)
-    [ "$#" -eq 0 ] || usage
-    cmd_stop
+    case "$*" in
+      '' | --stow) ;;
+      *) usage ;;
+    esac
+    cmd_stop "$@"
     ;;
   -h | --help)
     sed -n '2,/^set -u/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'

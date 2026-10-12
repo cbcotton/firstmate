@@ -397,7 +397,7 @@ case "$VERB" in
     no_arguments helm "$#"
     "$SCRIPT_DIR/fm-session-start.sh"
     status=$?
-    say "front door: /scout <project> <ask>, /ship <project> <ask>, /queue, /sailors, /steer <task-id> <text>, /land <task-id>, /wake"
+    say "front door: /scout <project> <ask>, /ship <project> <ask>, /queue, /sailors, /steer <task-id> <text>, /land <task-id>, /wake, /stow"
     exit "$status"
     ;;
   scout | ship) intake "$VERB" "$@" ;;

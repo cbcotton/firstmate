@@ -330,7 +330,7 @@ test_helm_runs_the_session_start() {
   out=$(cat "$CASE_DIR/helm.out")
   expect_code 0 "$status" "helm must run the session start"$'\n'"$out"
   assert_contains "$out" "NEXT STEP" "helm must print the whole session-start digest"
-  assert_equals "front door: /scout <project> <ask>, /ship <project> <ask>, /queue, /sailors, /steer <task-id> <text>, /land <task-id>, /wake" \
+  assert_equals "front door: /scout <project> <ask>, /ship <project> <ask>, /queue, /sailors, /steer <task-id> <text>, /land <task-id>, /wake, /stow" \
     "$(printf '%s\n' "$out" | tail -1)" "helm must end by naming the front door's commands"
   pass "helm runs the session start and then names the front door's commands"
 }
