@@ -1,0 +1,78 @@
+
+$ fm-privateer.sh reload   (no proxy yet)
+fm-privateer: refused: the Privateer egress proxy is not running; start the session with fm-privateer.sh start
+  exit=1
+
+$ initial allow file
+127.0.0.1:18741
+  GET http://127.0.0.1:18741/ via proxy -> 200 hello from upstream-ONE
+
+  GET http://127.0.0.1:18742/ via proxy -> 403 refused by the Privateer egress proxy
+
+
+$ add sailor 'two' to config/crew-dispatch.json, then: fm-privateer.sh reload
+privateer: added 127.0.0.1:18742
+privateer: added github.com:443
+privateer: reloaded the egress allowlist
+  exit=0  proxy pid still 84244, alive: 84244
+  GET http://127.0.0.1:18741/ via proxy -> 200 hello from upstream-ONE
+
+  GET http://127.0.0.1:18742/ via proxy -> 200 hello from upstream-TWO
+
+
+$ fm-privateer.sh reload   (nothing changed)
+privateer: the egress allowlist is unchanged
+privateer: reloaded the egress allowlist
+
+$ remove sailor 'one', then: fm-privateer.sh reload
+privateer: removed 127.0.0.1:18741
+privateer: reloaded the egress allowlist
+  GET http://127.0.0.1:18741/ via proxy -> 403 refused by the Privateer egress proxy
+
+  GET http://127.0.0.1:18742/ via proxy -> 200 hello from upstream-TWO
+
+
+$ adversarial: allow file deleted
+  GET http://127.0.0.1:18741/ via proxy -> 403 refused by the Privateer egress proxy
+
+  GET http://127.0.0.1:18742/ via proxy -> 200 hello from upstream-TWO
+
+
+$ adversarial (review fix): new allow file listing ONE only lands unreadable (chmod 000), request, then chmod 644 with no mtime change
+  GET http://127.0.0.1:18741/ via proxy -> 403 refused by the Privateer egress proxy
+
+  GET http://127.0.0.1:18742/ via proxy -> 200 hello from upstream-TWO
+
+  mtime before/after chmod: 1791809265 / 1791809265
+  GET http://127.0.0.1:18741/ via proxy -> 200 hello from upstream-ONE
+
+  GET http://127.0.0.1:18742/ via proxy -> 403 refused by the Privateer egress proxy
+
+
+$ adversarial: reload from inside the session (TMUX names the home's socket)
+fm-privateer: refused: reload is the captain's command and runs outside the Privateer session
+  exit=1
+
+$ proxy log (reload lines)
+{"time":"2026-10-12T12:47:44Z","verdict":"reload","method":"-","dest":"+2 -0"}
+{"time":"2026-10-12T12:47:45Z","verdict":"reload","method":"-","dest":"+0 -1"}
+{"time":"2026-10-12T12:47:45Z","verdict":"reload-failed","method":"-","dest":"[Errno 2] No such file or directory: '/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.iNvXFI/state/privateer/egress/allow'"}
+{"time":"2026-10-12T12:47:45Z","verdict":"reload-failed","method":"-","dest":"[Errno 13] Permission denied: '/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.iNvXFI/state/privateer/egress/allow'"}
+{"time":"2026-10-12T12:47:45Z","verdict":"reload","method":"-","dest":"+1 -2"}
+
+$ proxy log (request verdicts)
+allowed GET 127.0.0.1:18741
+refused GET 127.0.0.1:18742
+allowed GET 127.0.0.1:18741
+allowed GET 127.0.0.1:18742
+refused GET 127.0.0.1:18741
+allowed GET 127.0.0.1:18742
+refused GET 127.0.0.1:18741
+allowed GET 127.0.0.1:18742
+refused GET 127.0.0.1:18741
+allowed GET 127.0.0.1:18742
+allowed GET 127.0.0.1:18741
+refused GET 127.0.0.1:18742
+/tmp/fm-live-reload.sh: line 43: 84200 Terminated: 15          python3 -m http.server 18741 --bind 127.0.0.1 -d "$LAB/up1" > /dev/null 2>&1
+/tmp/fm-live-reload.sh: line 43: 84202 Terminated: 15          python3 -m http.server 18742 --bind 127.0.0.1 -d "$LAB/up2" > /dev/null 2>&1
+/tmp/fm-live-reload.sh: line 43: 84244 Terminated: 15          nohup python3 bin/fm-privateer-proxy.py "$EG/port" "$EG/log" "$EG/allow" < /dev/null >> "$EG/proxy.err" 2>&1
