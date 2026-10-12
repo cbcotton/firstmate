@@ -723,7 +723,7 @@ test_matrix_opencode_wrapped_footer() {
   # and provider cells continue on further left-bar rows. Rows captured live
   # from opencode 1.18.33 (`--agent privateer`, then the Build agent) as the
   # pane narrowed; every one read `pending` on a visibly empty composer, the
-  # verdict that refused fm-privateer.sh stop --stow and fm-control relaunch.
+  # verdict that refused fm-privateer.sh stop --stow.
   local a m t screen hint
   a="${ESC}[38;2;92;156;245m" m="${ESC}[38;2;128;128;128m" t="${ESC}[38;2;238;238;238m"
   # 74 columns: squeezed onto one row, with a blank row under it.

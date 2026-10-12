@@ -805,7 +805,10 @@ Verified on 2026-10-12 on macOS arm64 (Darwin 25.6.0) against opencode 1.18.33 o
 OpenCode draws its mode/model footer (`Privateer · <model> <provider>`) inside its left-bar composer, and a pane narrower than that footer wraps it rather than truncating it.
 The spaces around the `·` go first, then the agent label breaks across rows (`Privatee ·Qwen…` over `r  (local)`) and the model and provider cells continue on further left-bar rows, sometimes above a blank left-bar row.
 The fresh-session idle hint (`Ask anything… "…"`) wraps the same way, with the cursor parked on its first row.
-The classifier matched only the run's last row against the footer pattern, so a narrowed empty composer read `pending`, the verdict that refused `bin/fm-privateer.sh stop --stow` and `bin/fm-control.sh relaunch`.
+The classifier matched only the run's last row against the footer pattern, so a narrowed empty composer read `pending`, the verdict behind the `bin/fm-privateer.sh stop --stow` refusal; this fix covers that narrow-pane footer wrap.
+
+Follow-up, cause not established: the same morning `bin/fm-control.sh <task> relaunch` refused an OpenCode worker for visibly pending composer text on a 169-column pane that showed an OpenCode model-server error block, and one C-c cleared it.
+That pane was too wide for the footer to wrap, so this fix does not claim to explain or resolve that refusal.
 
 Each scratch pane was resized with `tmux resize-window` and read with the shipped tmux adapter through a `-L` wrapper, then given a typed probe that was never submitted:
 
