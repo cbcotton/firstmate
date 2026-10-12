@@ -1,0 +1,2 @@
+footer_re=default -> composer=pending
+footer_re=^(Build|Plan|Privateer)[[:space:]]+·[[:space:]]+ -> composer=empty

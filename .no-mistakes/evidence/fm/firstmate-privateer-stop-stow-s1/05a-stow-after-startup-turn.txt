@@ -1,0 +1,5 @@
+$ fm-privateer.sh stop --stow   # idle session after its startup turn, empty composer
+fm-privateer: refused: the first mate's input line holds text or cannot be read, so /stow was not typed; the session is still running
+exit=1
+--- session still running?
+yes

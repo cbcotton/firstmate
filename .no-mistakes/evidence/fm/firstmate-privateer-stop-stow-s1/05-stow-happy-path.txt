@@ -1,0 +1,13 @@
+$ fm-privateer.sh stop --stow   # fresh idle session, no turn yet
+egress proxy pid before: 99782
+fm-privateer: refused: the first mate's input line holds text or cannot be read, so /stow was not typed; the session is still running
+exit=1 (took 4s, finished at 1791795411)
+--- session still running?
+yes
+--- egress proxy alive?
+yes
+--- model log (stow turn):
+--- stow tool finished at:
+cat: /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.XT571D/data/stow-tool-done: No such file or directory
+--- data/learnings.md:
+cat: /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.XT571D/data/learnings.md: No such file or directory

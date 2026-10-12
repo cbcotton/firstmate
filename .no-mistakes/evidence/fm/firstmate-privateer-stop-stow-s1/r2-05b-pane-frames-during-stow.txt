@@ -1,0 +1,132 @@
+== 1791796309
+   ┃
+   ┃  Ask anything… "Fix broken tests"
+   ┃
+   ┃  Privateer · scripted Stow
+   ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                                                   tab agents  ctrl+p commands
+  /private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-lab.     1.18.33
+  bJfayl/state/privateer/helm:main
+== 1791796311
+   ┃
+   ┃  Ask anything… "Fix broken tests"
+   ┃
+   ┃  Privateer · scripted Stow
+   ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                                                   tab agents  ctrl+p commands
+  /private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-lab.     1.18.33
+  bJfayl/state/privateer/helm:main
+== 1791796313
+   ┃
+   ┃  /stow
+   ┃
+   ┃  Privateer · scripted Stow
+   ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                                                   tab agents  ctrl+p commands
+  /private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-lab.     1.18.33
+  bJfayl/state/privateer/helm:main
+== 1791796315
+  ┃
+  ┃
+  ┃
+  ┃  Privateer · scripted Stow
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+   /private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gntab      ctrl+p
+   T/fm-lab.bJfayl/state/privateer/helm                  agents   commands
+== 1791796317
+  ┃
+  ┃
+  ┃
+  ┃  Privateer · scripted Stow
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+   /private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gntab      ctrl+p
+   T/fm-lab.bJfayl/state/privateer/helm                  agents   commands
+== 1791796319
+  ┃
+  ┃
+  ┃
+  ┃  Privateer · scripted Stow
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+   /private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gntab      ctrl+p
+   T/fm-lab.bJfayl/state/privateer/helm                  agents   commands
+== 1791796321
+  ┃
+     ▣  Privateer · scripted
+  ┃
+  ┃
+  ┃
+  ┃  Privateer · scripted Stow
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+   ■■■■■■⬝⬝  esc interrupt                         tab agents  ctrl+p commands
+== 1791796324
+  ┃
+     ▣  Privateer · scripted
+  ┃
+  ┃
+  ┃
+  ┃  Privateer · scripted Stow
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+   ⬝⬝■■■■■■  esc interrupt                         tab agents  ctrl+p commands
+== 1791796326
+       learnings.md"; date +%s > "$FM_HOME/data/stow-tool-done"
+     ▣  Privateer · scripted
+  ┃
+  ┃
+  ┃
+  ┃  Privateer · scripted Stow
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+   ⬝⬝⬝⬝⬝■■■  esc interrupt                         tab agents  ctrl+p commands
+== 1791796328
+  ┃
+     ▣  Privateer · scripted
+  ┃
+  ┃
+  ┃
+  ┃  Privateer · scripted Stow
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+   ⬝⬝⬝⬝⬝⬝⬝⬝  esc interrupt                         tab agents  ctrl+p commands
+== 1791796330
+  ┃
+     ▣  Privateer · scripted
+  ┃
+  ┃
+  ┃
+  ┃  Privateer · scripted Stow
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+   ⬝⬝⬝⬝⬝⬝■■  esc interrupt                         tab agents  ctrl+p commands
+== 1791796332
+  ┃
+     ▣  Privateer · scripted
+  ┃
+  ┃
+  ┃
+  ┃  Privateer · scripted Stow
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+   ⬝⬝⬝⬝■■■■  esc interrupt                         tab agents  ctrl+p commands
+== 1791796335
+  ┃
+     ▣  Privateer · scripted
+  ┃
+  ┃
+  ┃
+  ┃  Privateer · scripted Stow
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+   ⬝■■■■■■⬝  esc interrupt                         tab agents  ctrl+p commands
+== 1791796337
+     ▣  Privateer · scripted · 15.1s
+  ┃
+  ┃
+  ┃
+  ┃  Privateer · scripted Stow
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+   /private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/ab      ctrl+p
+   T/fm-lab.bJfayl/state/privateer/helm                  agents   commands
+== 1791796339
+     ▣  Privateer · scripted · 15.1s
+  ┃
+  ┃
+  ┃
+  ┃  Privateer · scripted Stow
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+   /private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/ab      ctrl+p
+   T/fm-lab.bJfayl/state/privateer/helm                  agents   commands

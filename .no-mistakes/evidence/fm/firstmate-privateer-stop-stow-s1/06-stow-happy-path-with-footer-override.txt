@@ -1,0 +1,16 @@
+$ FM_COMPOSER_LEFTBAR_FOOTER_RE='^(Build|Plan|Privateer)[[:space:]]+·[[:space:]]+' fm-privateer.sh stop --stow   # diagnosis override: footer regex widened to the privateer agent
+egress proxy pid before: 38049
+privateer: the first mate stowed; stopped session privateer
+exit=0 (started 1791795512, finished 1791795541)
+--- session still running?
+no
+--- egress proxy alive?
+no
+--- model log (t = unix time):
+{"kind": "stow-turn-request", "user_excerpt": "gations\\ndone: 0 retained\\n\\n\\nThat is this home's backlog, shown for the captain's /stow.\\nThe session may stop right a", "t": 1791795520.57}
+{"kind": "stow-tool-call-sent", "t": 1791795524.64}
+{"kind": "stow-final-reply", "t": 1791795534.85}
+--- stow tool (sleep 6 then write) finished at:
+1791795531
+--- data/learnings.md:
+- live stow proof 1791795531

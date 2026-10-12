@@ -1,0 +1,6 @@
+# tmux server killed directly; egress proxy 78533 left behind
+$ fm-privateer.sh stop --stow
+privateer: the session had already ended; stopped its watcher and its egress proxy
+exit=0
+--- egress proxy alive?
+no

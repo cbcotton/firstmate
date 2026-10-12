@@ -1,0 +1,6 @@
+{"kind": "stow-turn-request", "user_excerpt": "gations\\ndone: 0 retained\\n\\n\\nThat is this home's backlog, shown for the captain's /stow.\\nThe session may stop right a", "t": 1791795520.57}
+{"kind": "stow-tool-call-sent", "t": 1791795524.64}
+{"kind": "stow-final-reply", "t": 1791795534.85}
+{"kind": "plain", "tools": true, "t": 1791795598.47}
+{"kind": "slow-turn", "t": 1791795612.49}
+{"kind": "plain", "tools": true, "t": 1791795637.57}

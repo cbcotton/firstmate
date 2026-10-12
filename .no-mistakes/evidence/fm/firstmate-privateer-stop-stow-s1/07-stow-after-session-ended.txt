@@ -1,0 +1,3 @@
+$ fm-privateer.sh stop --stow   # session already ended (stopped by the previous stow)
+fm-privateer: refused: the Privateer session is not running, and no egress proxy was left behind
+exit=1

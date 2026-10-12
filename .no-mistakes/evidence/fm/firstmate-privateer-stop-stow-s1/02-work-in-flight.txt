@@ -1,0 +1,12 @@
+$ fm-privateer.sh stop --stow   # with state/task-live1.meta present
+fm-privateer: refused: work is in flight (task-live1); finish or clean it up before stopping the session
+exit=1
+--- session still running?
+yes
+--- stow requests reaching the model:
+0
+--- pane composer:
+   ┃
+   ┃  Ask anything… "What is the tech stack of this project?"
+   ┃
+   ┃  Privateer · scripted Stow

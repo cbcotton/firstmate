@@ -1,0 +1,10 @@
+$ fm-privateer.sh stop   # plain stop, no --stow
+privateer: stopped session privateer on tmux socket fm-privateer-8ea8b74d737c
+exit=0
+--- session still running?
+no
+--- egress proxy alive?
+no
+$ fm-privateer.sh stop --bogus
+usage: fm-privateer.sh check | inside | launch-env | start | attach | stop [--stow]
+exit=2

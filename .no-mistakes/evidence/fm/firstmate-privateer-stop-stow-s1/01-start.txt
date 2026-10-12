@@ -1,0 +1,1 @@
+privateer: started session privateer on tmux socket fm-privateer-e04d4a89acce (first mate tiller/scripted, egress proxy 127.0.0.1:58214); attach with: FM_HOME='/private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-lab.XT571D' '/tmp/pv-stow.bjh4UU/root/bin/fm-privateer.sh' attach

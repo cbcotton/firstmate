@@ -1,0 +1,10 @@
+--- pane footer while the first mate is mid-turn (model answers after 25s):
+   ⬝⬝⬝⬝⬝■■■  esc interrupt                         tab agents  ctrl+p commands
+$ FM_PRIVATEER_STOW_WAIT=8 fm-privateer.sh stop --stow
+fm-privateer: refused: the first mate stayed busy for 8s, so /stow was not delivered; the session is still running
+--- session still running?
+yes
+--- model log:
+{"kind": "stow-final-reply", "t": 1791795534.85}
+{"kind": "plain", "tools": true, "t": 1791795598.47}
+{"kind": "slow-turn", "t": 1791795612.49}

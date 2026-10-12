@@ -1,0 +1,177 @@
+== 1791795512
+                     █▀▀█ █▀▀█ █▀▀█ █▀▀▄ █▀▀▀ █▀▀█ █▀▀█ █▀▀█
+                     █  █ █  █ █▀▀▀ █  █ █    █  █ █  █ █▀▀▀
+                     ▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀
+   ┃
+   ┃  Ask anything… "Fix broken tests"
+   ┃
+   ┃  Privateer · scripted Stow
+   ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                                                   tab agents  ctrl+p commands
+      ● Tip Press ctrl+g , home to jump to the beginning of the conversation
+  /private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-lab.     1.18.33
+  XT571D/state/privateer/helm:main
+== 1791795514
+                     █▀▀█ █▀▀█ █▀▀█ █▀▀▄ █▀▀▀ █▀▀█ █▀▀█ █▀▀█
+                     █  █ █  █ █▀▀▀ █  █ █    █  █ █  █ █▀▀▀
+                     ▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀
+   ┃
+   ┃  Ask anything… "Fix broken tests"
+   ┃
+   ┃  Privateer · scripted Stow
+   ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                                                   tab agents  ctrl+p commands
+      ● Tip Press ctrl+g , home to jump to the beginning of the conversation
+  /private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-lab.     1.18.33
+  XT571D/state/privateer/helm:main
+== 1791795516
+                     █▀▀█ █▀▀█ █▀▀█ █▀▀▄ █▀▀▀ █▀▀█ █▀▀█ █▀▀█
+                     █  █ █  █ █▀▀▀ █  █ █    █  █ █  █ █▀▀▀
+                     ▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀
+   ┃
+   ┃  Ask anything… "Fix broken tests"
+   ┃
+   ┃  Privateer · scripted Stow
+   ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                                                   tab agents  ctrl+p commands
+      ● Tip Press ctrl+g , home to jump to the beginning of the conversation
+  /private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-lab.     1.18.33
+  XT571D/state/privateer/helm:main
+== 1791795518
+  ┃
+  ┃
+  ┃
+  ┃  Privateer · scripted Stow
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+   /private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gntab      ctrl+p
+   T/fm-lab.XT571D/state/privateer/helm                  agents   commands
+== 1791795520
+  ┃
+  ┃  The digest above is complete for this session start. The READ-ONCE
+  ┃  CONTRACT
+  ┃  section near the top of it governs what may still be read from disk.
+  ┃
+     ▣  Privateer · scripted
+  ┃
+  ┃
+  ┃
+  ┃  Privateer · scripted Stow
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+   ⬝⬝⬝⬝■■■■  esc interrupt                         tab agents  ctrl+p commands
+== 1791795522
+  ┃
+  ┃  The digest above is complete for this session start. The READ-ONCE
+  ┃  CONTRACT
+  ┃  section near the top of it governs what may still be read from disk.
+  ┃
+     ▣  Privateer · scripted
+  ┃
+  ┃
+  ┃
+  ┃  Privateer · scripted Stow
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+   ⬝■■■■■■⬝  esc interrupt                         tab agents  ctrl+p commands
+== 1791795524
+  ┃
+  ┃  The digest above is complete for this session start. The READ-ONCE
+  ┃  CONTRACT
+  ┃  section near the top of it governs what may still be read from disk.
+  ┃
+     ▣  Privateer · scripted
+  ┃
+  ┃
+  ┃
+  ┃  Privateer · scripted Stow
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+   ■■■■⬝⬝⬝⬝  esc interrupt                         tab agents  ctrl+p commands
+== 1791795526
+  ┃
+  ┃
+  ┃  ⠸ sleep 6; echo "- live stow proof $(date +%s)" >> "$FM_HOME/data/
+  ┃    learnings.md"; date +%s > "$FM_HOME/data/stow-tool-done"
+  ┃
+     ▣  Privateer · scripted
+  ┃
+  ┃
+  ┃
+  ┃  Privateer · scripted Stow
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+   ⬝⬝⬝⬝⬝⬝⬝⬝  esc interrupt                         tab agents  ctrl+p commands
+== 1791795528
+  ┃
+  ┃
+  ┃  ⠇ sleep 6; echo "- live stow proof $(date +%s)" >> "$FM_HOME/data/
+  ┃    learnings.md"; date +%s > "$FM_HOME/data/stow-tool-done"
+  ┃
+     ▣  Privateer · scripted
+  ┃
+  ┃
+  ┃
+  ┃  Privateer · scripted Stow
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+   ⬝⬝⬝⬝⬝⬝⬝⬝  esc interrupt                         tab agents  ctrl+p commands
+== 1791795530
+  ┃
+  ┃
+  ┃  ⠸ sleep 6; echo "- live stow proof $(date +%s)" >> "$FM_HOME/data/
+  ┃    learnings.md"; date +%s > "$FM_HOME/data/stow-tool-done"
+  ┃
+     ▣  Privateer · scripted
+  ┃
+  ┃
+  ┃
+  ┃  Privateer · scripted Stow
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+   ⬝⬝⬝⬝⬝⬝⬝⬝  esc interrupt                         tab agents  ctrl+p commands
+== 1791795533
+  ┃  $ sleep 6; echo "- live stow proof $(date +%s)" >> "$FM_HOME/data/
+  ┃  learnings.md"; date +%s > "$FM_HOME/data/stow-tool-done"
+  ┃
+  ┃  (no output)
+  ┃
+     ▣  Privateer · scripted
+  ┃
+  ┃
+  ┃
+  ┃  Privateer · scripted Stow
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+   ⬝⬝⬝⬝⬝⬝⬝⬝  esc interrupt                         tab agents  ctrl+p commands
+== 1791795535
+  ┃
+  ┃  (no output)
+  ┃
+     Captain, stowed: 0 rows filed, 0 corrected, 1 learning.
+     ▣  Privateer · scripted · 15.0s
+  ┃
+  ┃
+  ┃
+  ┃  Privateer · scripted Stow
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+   /private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/ab      ctrl+p
+   T/fm-lab.XT571D/state/privateer/helm                  agents   commands
+== 1791795537
+  ┃
+  ┃  (no output)
+  ┃
+     Captain, stowed: 0 rows filed, 0 corrected, 1 learning.
+     ▣  Privateer · scripted · 15.0s
+  ┃
+  ┃
+  ┃
+  ┃  Privateer · scripted Stow
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+   /private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/ab      ctrl+p
+   T/fm-lab.XT571D/state/privateer/helm                  agents   commands
+== 1791795539
+  ┃
+  ┃  (no output)
+  ┃
+     Captain, stowed: 0 rows filed, 0 corrected, 1 learning.
+     ▣  Privateer · scripted · 15.0s
+  ┃
+  ┃
+  ┃
+  ┃  Privateer · scripted Stow
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+   /private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/ab      ctrl+p
+   T/fm-lab.XT571D/state/privateer/helm                  agents   commands

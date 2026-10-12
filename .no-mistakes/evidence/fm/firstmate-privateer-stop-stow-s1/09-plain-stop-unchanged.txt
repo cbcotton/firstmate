@@ -1,0 +1,3 @@
+$ fm-privateer.sh stop   # plain stop, unchanged contract
+privateer: stopped session privateer on tmux socket fm-privateer-e04d4a89acce
+exit=0
