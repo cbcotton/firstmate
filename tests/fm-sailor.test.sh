@@ -714,6 +714,25 @@ stoker down http://127.0.0.1:1/v1/models" "$out" "an mlx-serve sailor must be pr
   pass "health probes an mlx-serve sailor at its server's healthPath and any other sailor at its model list"
 }
 
+test_status_answering_agrees_with_the_health_probe() {
+  local out
+  stub_reset
+  make_stub_case status-health "$(stub_map)"
+  jq -n --arg b "$STUB/" '{servers: [{id: "mlx-serve", kind: "mlx-serve", baseURL: $b, healthPath: "/health"}]}' > "$CASE_DIR/servers.json"
+
+  out=$(run_real status)
+  expect_code 0 "$?" "status is a view and exits 0"
+  assert_equals "tiller live not-answering endpoint=$STUB/v1 tasks=0/1" "$out" "a sailor whose healthPath fails must read not-answering even while its model list answers"
+  assert_contains "$(run_real health)" "tiller down" "health must agree that the sailor is down"
+
+  printf '{"status":"ok"}' > "$STUB_DIR/health.json"
+  rm -f "$STUB_DIR/models.json"
+  out=$(run_real status)
+  assert_equals "tiller live answering endpoint=$STUB/v1 tasks=0/1" "$out" "a sailor whose healthPath answers must read answering even while its model list fails"
+  assert_contains "$(run_real health)" "tiller up" "health must agree that the sailor is up"
+  pass "status reads a sailor as answering by the same probe health uses, its mlx-serve healthPath"
+}
+
 test_health_probes_every_sailor_at_once_within_the_bound() {
   local hole_dir="$TMP_ROOT/hole" hole_pid port start elapsed out
   mkdir -p "$hole_dir"
@@ -774,6 +793,7 @@ test_retire_refuses_busy_sailors_and_removes_emptied_rules
 test_add_and_set_edit_one_sailor
 test_add_from_mlx_serve_reads_the_registry_and_nothing_more
 test_health_probes_the_mlx_serve_health_path
+test_status_answering_agrees_with_the_health_probe
 test_health_probes_every_sailor_at_once_within_the_bound
 
 echo "# all fm-sailor tests passed"

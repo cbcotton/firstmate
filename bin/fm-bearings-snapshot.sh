@@ -52,7 +52,7 @@
 # posture row is reserved ahead of that ordering and bound so it always surfaces.
 #
 # sailors projects the canonical snapshot's live named sailors, so a sailor
-# whose endpoint is not answering (answering false) is visible to the digest.
+# that fails its health probe (answering false) is visible to the digest.
 #
 # Main-home inventory validity comes from the canonical snapshot's main_inventory
 # object (orphan structured in-flight without meta, unstructured current rows).
