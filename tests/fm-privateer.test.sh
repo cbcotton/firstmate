@@ -15,11 +15,13 @@
 # runs each new session's command in the background and records every call,
 # and a fake sandbox-exec records the profile it was given and runs the
 # command, so the launch shape is pinned on every platform. Where sandbox-exec
-# and tmux really run, two cases start the real session: one proves that a
+# and tmux really run, cases start the real session: one proves that a
 # command the first mate starts through tmux reaches nothing but the proxy and
-# cannot stop or rewrite it, and one that a first mate running as opencode
+# cannot stop or rewrite it, one that a first mate running as opencode
 # detects its harness and owns the fleet lock while a plain shell in the same
-# session stays read-only. The live egress audit
+# session stays read-only, and one that such a command can move aside, replace,
+# link over, or plant no directory leading to a Git config or hooks while the
+# session's own pool worktrees are still added and removed. The live egress audit
 # (tests/fm-privateer-egress-live-e2e.test.sh) and session lock check
 # (tests/fm-privateer-session-lock-live-e2e.test.sh) run the real OpenCode.
 # docs/configuration.md ("Privateer quarantine") owns the contract.
@@ -616,12 +618,19 @@ JS
 # --- launcher ---------------------------------------------------------------
 
 test_start_refuses_without_the_flag() {
-  local dir home root out status
+  local dir home root proj before out status
   dir="$TMP_ROOT/start-no-flag"
   home=$(make_home start-no-flag)
   rm "$home/config/privateer"
   root="$dir/root"
   make_checkout "$root"
+  # A clone with a linked worktree and a submodule's git dir, whose Git
+  # metadata a home without the quarantine keeps exactly as it was.
+  proj="$home/projects/proj"
+  fm_git_init_commit "$proj"
+  git -C "$proj" worktree add -q -b side "$dir/side"
+  mkdir -p "$proj/.git/modules/lib/sub"
+  before=$(cd "$proj/.git" && find . | LC_ALL=C sort)
   make_launcher_fakebin "$dir" >/dev/null
   make_stub_primary "$dir" >/dev/null
   out=$(run_launcher "$dir" "$home" "$root" start)
@@ -629,7 +638,9 @@ test_start_refuses_without_the_flag() {
   expect_code 1 "$status" "start must refuse without config/privateer"
   assert_contains "$out" "config/privateer is absent" "the refusal must name the flag"
   [ ! -e "$dir/tmux.log" ] || fail "start must not touch tmux without the flag"
-  pass "start refuses a home without config/privateer"
+  [ ! -e "$dir/profile.sb" ] || fail "start must render no sandbox without the flag"
+  assert_equals "$before" "$(cd "$proj/.git" && find . | LC_ALL=C sort)" "a home without the flag must keep its clones' Git metadata untouched"
+  pass "start refuses a home without config/privateer and leaves its Git metadata untouched"
 }
 
 test_start_refuses_with_a_forbidden_file() {
@@ -731,13 +742,19 @@ test_start_passes_only_the_allowlist() {
   (regex #\"^$(rq "$helm_real")\$\")
   (regex #\"^$(rq "$home_real")/state/privateer\$\")
   (regex #\"^$(rq "$home_real")/state\$\")
-  (regex #\"^$(rq "$root_real")/\\.git(\$|/(worktrees/[^/]+/|modules/.+/)?(hooks(/|\$)|config))\")
+  (regex #\"^$(rq "$root_real")/\\.git(\$|/(modules(/[^/]+)?\$|(worktrees/[^/]+/|modules/.+/)?(hooks(/|\$)|config)))\")
   (regex #\"^$(rq "$home_real")/projects/[^/]+\$\")
-  (regex #\"^$(rq "$home_real")/projects/[^/]+/(.+/)?\\.git(\$|/(worktrees/[^/]+/|modules/.+/)?(hooks(/|\$)|config))\")
+  (regex #\"^$(rq "$home_real")/projects/[^/]+/(.+/)?\\.git(\$|/(modules(/[^/]+)?\$|(worktrees/[^/]+/|modules/.+/)?(hooks(/|\$)|config)))\")
   (regex #\"^$(rq "$home_real")/projects\$\")
-  (regex #\"^$(rq "$root_real")/\\.git/worktrees/side(\$|/(commondir|gitdir)\$)\")
+  (regex #\"^$(rq "$root_real")/\\.git/worktrees/side(\$|/(commondir|gitdir)\$|/modules(\$|/[^/]+\$|/.+/(hooks(/|\$)|config)))\")
 )" "$(sed -n '/^(deny file-write\*$/,/^)$/p' "$profile")" \
-    "the sandbox must take back only the egress record, the home's config and scripts, the helm and the directories leading to it, and every Git config and hook, so every worker's OpenCode directories stay writable"
+    "the sandbox must take back only the egress record, the home's config and scripts, the helm and the directories leading to it, and every Git config and hook and the directories leading to them, so every worker's OpenCode directories stay writable"
+  assert_equals "(deny file-write-unlink (regex #\"^$(rq "$root_real")/\\.git/worktrees\$\"))
+(deny file-write-create (require-all (regex #\"^$(rq "$root_real")/\\.git/worktrees\$\") (vnode-type SYMLINK)))
+(deny file-write-unlink (regex #\"^$(rq "$home_real")/projects/[^/]+/(.+/)?\\.git/worktrees\$\"))
+(deny file-write-create (require-all (regex #\"^$(rq "$home_real")/projects/[^/]+/(.+/)?\\.git/worktrees\$\") (vnode-type SYMLINK)))" \
+    "$(grep -E '^\(deny file-write-(unlink|create) ' "$profile")" \
+    "the worktrees directory of the checkout's and every clone's git dir must be creatable for the pool but never moved, removed, or replaced with a symlink"
   assert_grep '(deny signal)' "$profile" "the sandbox must deny signals outside itself"
   assert_grep '(allow signal (target same-sandbox))' "$profile" "the sandbox must allow signals within itself"
   assert_grep "(subpath \"$root_real/.opencode\")" "$profile" "the sandbox must allow OpenCode's scratch in the checkout"
@@ -1518,9 +1535,9 @@ test_session_sandbox_pins_git_metadata() {
   # the worktree's own.
   fm_git_init_commit "$dir/sub"
   for repo in "$root" "$proj"; do
-    git -C "$repo" -c protocol.file.allow=always submodule add -q "$dir/sub" lib/sub >/dev/null 2>&1 &&
-      git -C "$repo" -c user.name=t -c user.email=t@example.invalid commit -qm sub ||
+    git -C "$repo" -c protocol.file.allow=always submodule add -q "$dir/sub" lib/sub >/dev/null 2>&1 ||
       fail "the fixture submodule could not be added to $repo"
+    git -C "$repo" -c user.name=t -c user.email=t@example.invalid commit -qm sub
   done
   git -C "$proj" worktree add -q -b side "$dir/wt"
   git -C "$dir/wt" -c protocol.file.allow=always submodule update --init -q >/dev/null 2>&1
@@ -1538,19 +1555,15 @@ test_session_sandbox_pins_git_metadata() {
   jq -n --arg e "http://127.0.0.1:$sport/v1" '{sailors: {tiller: {title: "Tiller", endpoint: $e, status: "live", models: ["coder"]}}, default: {harness: "opencode", sailor: "tiller", model: "coder"}}' \
     > "$home/config/crew-dispatch.json"
   # A command the first mate starts through tmux, as a worker's pane is: it
-  # tries to move aside each directory that leads to a Git config or hooks, to
-  # create, link, or move a directory of its own into a place one would be
-  # adopted, and to write a submodule's config under the linked worktree; then
-  # it renames a directory of the home, and adds, commits in, and removes a
-  # worktree in the home's own pool for the checkout and for the clone.
+  # tries to create, link, or move a directory of its own into a place one
+  # would be adopted, to write a submodule's config under the linked worktree,
+  # and, innermost first so no attempt hides another, to move aside each
+  # directory that leads to a Git config or hooks; then it renames a directory
+  # of the home, and adds, commits in, and removes a worktree in the home's own
+  # pool for the checkout and for the clone.
   cat > "$dir/window" <<SH
 #!/bin/sh
 planted=
-for t in '$root_git/modules' '$root_git/modules/lib' '$root_git/modules/lib/sub' '$proj_git/worktrees' '$wt_git' \
-  '$proj_git/modules' '$proj_git/modules/lib' '$proj_git/modules/lib/sub' \
-  '$wt_git/modules' '$wt_git/modules/lib' '$wt_git/modules/lib/sub'; do
-  mv "\$t" "\$t.aside" 2>/dev/null && planted="\$planted move:\$t"
-done
 for t in '$root_git/modules' '$root_git/modules/lib' '$proj_git/modules' '$proj_git/modules/lib' '$wt_git/modules/lib'; do
   mkdir "\$t/new" 2>/dev/null && planted="\$planted mkdir:\$t/new"
   ln -s '$home/state/prepared' "\$t/link" 2>/dev/null && planted="\$planted symlink:\$t/link"
@@ -1562,6 +1575,11 @@ done
 ln -s '$home/state/prepared' '$root_git/worktrees' 2>/dev/null && planted="\$planted symlink:$root_git/worktrees"
 for t in '$wt_git/modules/lib/sub/config' '$wt_git/modules/lib/sub/hooks/post-checkout'; do
   ( : >> "\$t" ) 2>/dev/null && planted="\$planted write:\$t"
+done
+for t in '$root_git/modules/lib/sub' '$root_git/modules/lib' '$root_git/modules' \
+  '$proj_git/modules/lib/sub' '$proj_git/modules/lib' '$proj_git/modules' \
+  '$wt_git/modules/lib/sub' '$wt_git/modules/lib' '$wt_git/modules' '$wt_git' '$proj_git/worktrees'; do
+  mv "\$t" "\$t.aside" 2>/dev/null && planted="\$planted move:\$t"
 done
 echo "planted=\${planted:-none}" > '$probe.tmp'
 mkdir '$home/state/control' && mv '$home/state/control' '$home/state/control.moved'
