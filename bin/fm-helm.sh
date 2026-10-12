@@ -54,8 +54,9 @@
 # When config/active-project names a registered project with a clone (the
 # captain sets it outside the session with bin/fm-privateer.sh project), scout
 # and ship accept the ask without a project word and use that project, saying
-# so in the first output line; a first word that is itself a registered project
-# with a clone still wins. A value that is malformed is not used.
+# so in the first output line; a first word that data/projects.md registers is
+# the project, and is refused as before when it has no clone. A value that is
+# malformed is not used.
 #
 # project prints every registered project that has a clone, the active one
 # marked `*`, and the active project; it only reads. The session cannot write
@@ -206,12 +207,12 @@ check_project() {
   fi
 }
 
-# project_ready <name>: 0 when <name> is a registered project with a clone.
-project_ready() {
+# project_registered <name>: 0 when data/projects.md registers <name>.
+project_registered() {
   case "$1" in
     '' | */* | .*) return 1 ;;
   esac
-  "$SCRIPT_DIR/fm-project-mode.sh" --registered "$1" && [ -d "$PROJECTS/$1" ]
+  "$SCRIPT_DIR/fm-project-mode.sh" --registered "$1"
 }
 
 # again <kind> <project> <ask>: the same call with --rule left to fill in.
@@ -357,7 +358,7 @@ intake() {
     0* | *[!0-9]*) misuse "--rule takes a rule number from 1, or default, not '$RULE'" ;;
   esac
   [ "$#" -ge 1 ] || misuse "$kind needs a project and the ask"
-  if [ -n "${1:-}" ] && ! project_ready "$1" &&
+  if [ -n "${1:-}" ] && ! project_registered "$1" &&
     project=$(fm_privateer_active_project "$CONFIG" "$DATA" "$PROJECTS" "$SCRIPT_DIR"); then
     ask=$(trim "${ASK_FULL:-$*}")
     [ -n "$ask" ] || misuse "$kind needs the ask"

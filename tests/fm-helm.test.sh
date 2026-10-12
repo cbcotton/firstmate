@@ -410,6 +410,19 @@ test_active_project_is_the_default_project() {
   assert_not_contains "$out" "the active project" "an explicit project must not be reported as the active one"
   assert_equals other "$(row "$ID" repo)" "an explicit registered project must win over the active one"
 
+  printf -- '- ghost [local-only branch=gh/] - registered without a clone (added 2026-09-30)\n' >> "$HOME_DIR/data/projects.md"
+  out=$(run_helm ship ghost "add a flag")
+  status=$?
+  expect_code 1 "$status" "a registered project without a clone must be refused, not replaced by the active one"$'\n'"$out"
+  assert_contains "$out" "'ghost' is not a registered project with a clone" "the refusal must name the uncloned project"
+  assert_contains "$out" "the projects here are:" "the refusal must list the projects"
+  assert_not_contains "$out" "the active project" "an uncloned project must not fall back to the active one"
+  out=$(opencode_text 'ghost add a flag' 'ghost add a flag' 'ghost add a flag' | run_helm ship --stdin)
+  status=$?
+  expect_code 1 "$status" "the slash-command form must refuse a registered project without a clone"$'\n'"$out"
+  assert_contains "$out" "'ghost' is not a registered project with a clone" "the stdin refusal must name the uncloned project"
+  assert_not_contains "$out" "the active project" "the stdin form must not fall back to the active one"
+
   out=$(run_helm project)
   assert_contains "$out" "* app" "the project view must mark the active project"
   assert_contains "$out" "  other" "the project view must list the other projects"
