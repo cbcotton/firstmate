@@ -225,9 +225,9 @@
 # atomically (a temporary file renamed over it); `project --clear` removes the
 # file; `project` alone prints every registered project that has a clone, the
 # active one marked `*`. The session sandbox denies writes to config/, so the
-# set and clear forms also refuse inside the session, and in a home without
-# config/privateer: the main home never sets an active project. The bare form
-# only reads, so it works in both places.
+# set and clear forms also refuse inside the session; every form refuses in a
+# home without config/privateer, so the main home never sets an active project.
+# The bare form only reads, so it also works inside the session.
 #
 # Environment: FM_HOME, FM_STATE_OVERRIDE, FM_CONFIG_OVERRIDE, and
 # FM_PROJECTS_OVERRIDE resolve the home exactly as the other bin/ scripts do. With FM_TEST_SEAM=1, FM_PRIVATEER_PRIMARY names a command to launch in

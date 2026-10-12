@@ -1049,8 +1049,8 @@ The captain's words reach the front door exactly, or not at all: OpenCode ends a
 ### Active project (config/active-project)
 
 `config/active-project` holds one project name: the default project for a request that names none.
-The captain sets it outside the session with `bin/fm-privateer.sh project <name>`, which refuses unless `data/projects.md` registers the name and a clone exists under `projects/`, and writes the file atomically; `project --clear` removes it, and `project` alone lists the registered projects with the active one marked.
-The session sandbox denies writes to `config/`, so setting or clearing it also refuses inside the session, and in a home without `config/privateer`: the main home never sets one.
+The captain sets it outside the session with `bin/fm-privateer.sh project <name>`, which refuses unless `data/projects.md` registers the name and a clone exists under `projects/`, and writes the file atomically; `project --clear` removes it, and `project` alone lists the registered projects that have a clone, with the active one marked.
+The session sandbox denies writes to `config/`, so setting or clearing it also refuses inside the session; every form refuses in a home without `config/privateer`, so the main home never sets one.
 The first mate only reads it: `/project` (`bin/fm-helm.sh project`) shows the same list, and when the captain asks to switch, the first mate gives the outside command.
 While the file names a valid project, `bin/fm-helm.sh scout` and `ship` accept the ask without a project word, use that project, and say so on their first output line; a first word that `data/projects.md` registers is still the project, and is refused when it has no clone.
 A malformed value, meaning several lines, a name that is not a plain project name, an unregistered name, or a name with no clone, is never used: the digest prints `active project: not used` with the reason, and the snapshot reports `privateer.active_project` as null.
