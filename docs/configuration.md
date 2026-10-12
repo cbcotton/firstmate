@@ -955,7 +955,7 @@ Version 1 ships local-only because the shared no-mistakes daemon's agent resolve
 ### How a Privateer session runs
 
 Start the first mate with `FM_HOME=<home> bin/fm-privateer.sh start`, attach a terminal with `attach`, and end it with `stop`, which refuses while any task record exists so a worker's copy is never orphaned.
-`stop --stow`, for a caller such as a Dock app, applies the same refusals, then types `/stow` into the first mate's own pane and waits until that turn has finished before it stops anything; a stow that cannot be delivered or does not finish in time refuses and leaves the session running.
+`stop --stow`, for a caller such as a Dock app, applies the same refusals, then types `/stow` into the first mate's own pane and waits until that turn has been seen to start and has finished before it stops anything; a stow that cannot be delivered, is never seen to start, or does not finish in time refuses and leaves the session running.
 The script's header owns the wait and its bound.
 The launcher starts a dedicated tmux server for the home and runs the OpenCode primary in the helm, described below, from an empty environment plus a fixed allowlist of home, path, user, shell, terminal (including `TERM`, `TERMINFO`, and `TERMINFO_DIRS`, which only locate terminal descriptions), locale, and temp variables, `FM_HOME`, OpenCode's directories, and OpenCode's inline configuration.
 No `ANTHROPIC_*`, `CLAUDE_*`, or `CLAUDECODE` variable can enter the tree, and the server copies no variable from a client that attaches later.

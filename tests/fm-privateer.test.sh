@@ -1055,15 +1055,15 @@ stow_case() {
   printf '%s\n' "$dir"
 }
 
-run_stow() {  # <case-dir>: stop --stow with short waits
-  FM_PRIVATEER_STOW_WAIT=3 FM_PRIVATEER_STOW_POLL=0.1 \
+run_stow() {  # <case-dir> [wait]: stop --stow with short waits (3s by default)
+  FM_PRIVATEER_STOW_WAIT=${2:-3} FM_PRIVATEER_STOW_POLL=0.1 \
     run_launcher "$1" "$(cat "$1/home-path")" "$1/root" stop --stow
 }
 
 test_stop_stow_delivers_the_stow_then_stops() {
   local dir out status
   dir=$(stow_case stow-delivered)
-  out=$(run_stow "$dir")
+  out=$(run_stow "$dir" 30)
   status=$?
   expect_code 0 "$status" "stop --stow must stow and stop an idle session: $out"
   [ "$(cat "$dir/pane-submitted" 2>/dev/null)" = /stow ] || fail "the first mate must receive exactly /stow once, got: $(cat "$dir/pane-submitted" 2>/dev/null)"
@@ -1104,6 +1104,21 @@ test_stop_stow_timeout_leaves_the_session_running() {
   assert_no_grep "kill-server" "$dir/tmux.log" "a timed-out stow must not stop the server"
   [ -e "$dir/tmux-running" ] || fail "a timed-out stow must leave the session running"
   pass "stop --stow refuses with exit 1 and leaves the session running when the stow turn does not finish in time"
+}
+
+test_stop_stow_refuses_when_the_stow_never_starts() {
+  local dir out status
+  dir=$(stow_case stow-never-busy)
+  echo 0 > "$dir/pane-turn-reads"
+  out=$(run_stow "$dir")
+  status=$?
+  expect_code 1 "$status" "a stow never seen to start must refuse"
+  assert_contains "$out" "the first mate's /stow did not start within 3s; the session is still running" "the refusal must say the stow did not start"
+  assert_not_contains "$out" "socket" "the refusal must name no socket"
+  [ "$(cat "$dir/pane-submitted" 2>/dev/null)" = /stow ] || fail "the stow must have been delivered before the wait timed out"
+  assert_no_grep "kill-server" "$dir/tmux.log" "a stow never seen to start must not stop the server"
+  [ -e "$dir/tmux-running" ] || fail "a stow never seen to start must leave the session running"
+  pass "stop --stow refuses with exit 1 and leaves the session running when the stow turn never reads busy"
 }
 
 test_stop_cleans_up_after_a_session_that_ended() {
@@ -1753,6 +1768,7 @@ test_stop_refuses_with_work_in_flight_and_stops_an_idle_session
 test_stop_stow_delivers_the_stow_then_stops
 test_stop_stow_refuses_with_work_in_flight_before_any_delivery
 test_stop_stow_timeout_leaves_the_session_running
+test_stop_stow_refuses_when_the_stow_never_starts
 test_stop_cleans_up_after_a_session_that_ended
 test_attach_refuses_without_a_session
 test_spawn_refuses_a_claude_harness

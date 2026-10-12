@@ -206,15 +206,16 @@
 # Dock app. It applies the same refusals as stop, then, as the front door acting
 # on its own session, waits until the first mate's pane reads idle, refuses
 # unless its input line is proven empty, types /stow there with the shared
-# verified submit (bin/fm-tmux-lib.sh fm_tmux_submit_core), and waits until the
-# pane reads idle again; idle is the OpenCode delivery-busy footer read
-# (fm_pane_busy_state) absent STOW_IDLE_READS times in a row. Only then, and
-# only while still no task record exists, does it run the stop sequence. Both
-# waits share one deadline, FM_PRIVATEER_STOW_WAIT seconds (600), read every
-# FM_PRIVATEER_STOW_POLL seconds (2); a stow that is not delivered or does not
-# finish by then refuses and leaves the session running. Its output names no
-# socket or port. When the session has already ended there is nothing to stow,
-# and it cleans up as stop does.
+# verified submit (bin/fm-tmux-lib.sh fm_tmux_submit_core), waits until the
+# pane reads busy at least once, so the stow turn is seen to start, and then
+# waits until it reads idle again; idle is the OpenCode delivery-busy footer
+# read (fm_pane_busy_state) absent STOW_IDLE_READS times in a row. Only then,
+# and only while still no task record exists, does it run the stop sequence.
+# All waits share one deadline, FM_PRIVATEER_STOW_WAIT seconds (600), read
+# every FM_PRIVATEER_STOW_POLL seconds (2); a stow that is not delivered, not
+# seen to start, or not finished by then refuses and leaves the session
+# running. Its output names no socket or port. When the session has already
+# ended there is nothing to stow, and it cleans up as stop does.
 #
 # Environment: FM_HOME, FM_STATE_OVERRIDE, FM_CONFIG_OVERRIDE, and
 # FM_PROJECTS_OVERRIDE resolve the home exactly as the other bin/ scripts do. With FM_TEST_SEAM=1, FM_PRIVATEER_PRIMARY names a command to launch in
@@ -222,9 +223,9 @@
 # environment with a stub.
 #
 # Exit status: 0 success, 1 refused (a violation, a missing prerequisite, work
-# in flight, a stow not delivered or not finished, or, for inside, a caller
-# outside the session), 2 usage or configuration error, 3 (inside only) no
-# config/privateer.
+# in flight, a stow not delivered, not started, or not finished, or, for
+# inside, a caller outside the session), 2 usage or configuration error, 3
+# (inside only) no config/privateer.
 set -u
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -799,15 +800,16 @@ refuse_work_in_flight() {
   fi
 }
 
-# first_mate_idle <target> <deadline> <poll>: 0 once the first mate's pane
-# reads idle STOW_IDLE_READS times in a row, 1 at the deadline (in SECONDS).
-# Needs bin/fm-tmux-lib.sh and the stow_session tmux wrapper.
-first_mate_idle() {
-  local target=$1 deadline=$2 poll=$3 streak=0
+# first_mate_reads <target> <deadline> <poll> <state> <reads>: 0 once the
+# first mate's pane reads <state> (busy or idle) <reads> times in a row, 1 at
+# the deadline (in SECONDS). Needs bin/fm-tmux-lib.sh and the stow_session tmux
+# wrapper.
+first_mate_reads() {
+  local target=$1 deadline=$2 poll=$3 state=$4 reads=$5 streak=0
   while [ "$SECONDS" -lt "$deadline" ]; do
-    if [ "$(fm_pane_busy_state "$target" opencode)" = idle ]; then
+    if [ "$(fm_pane_busy_state "$target" opencode)" = "$state" ]; then
       streak=$((streak + 1))
-      [ "$streak" -lt "$STOW_IDLE_READS" ] || return 0
+      [ "$streak" -lt "$reads" ] || return 0
     else
       streak=0
     fi
@@ -830,10 +832,11 @@ stow_session() {
     tmux() { command tmux -L "$socket" "$@"; }
     target="$SESSION:firstmate"
     deadline=$((SECONDS + wait))
-    first_mate_idle "$target" "$deadline" "$poll" || exit 3
+    first_mate_reads "$target" "$deadline" "$poll" idle "$STOW_IDLE_READS" || exit 3
     [ "$(fm_tmux_composer_state "$target")" = empty ] || exit 4
     [ "$(fm_tmux_submit_core "$target" /stow 3 0.5 0.3)" = empty ] || exit 5
-    first_mate_idle "$target" "$deadline" "$poll" || exit 6
+    first_mate_reads "$target" "$deadline" "$poll" busy 1 || exit 7
+    first_mate_reads "$target" "$deadline" "$poll" idle "$STOW_IDLE_READS" || exit 6
   )
   status=$?
   case "$status" in
@@ -841,6 +844,7 @@ stow_session() {
     3) refuse "the first mate stayed busy for ${wait}s, so /stow was not delivered; the session is still running" ;;
     4) refuse "the first mate's input line holds text or cannot be read, so /stow was not typed; the session is still running" ;;
     5) refuse "the first mate did not take /stow; the session is still running" ;;
+    7) refuse "the first mate's /stow did not start within ${wait}s; the session is still running" ;;
     6) refuse "the first mate's /stow did not finish within ${wait}s; the session is still running" ;;
     *) refuse "the stow could not be run; the session is still running" ;;
   esac
