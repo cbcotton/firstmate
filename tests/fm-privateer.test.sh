@@ -821,6 +821,27 @@ test_start_denies_the_instructions_of_a_checkout_that_is_the_home() {
   pass "start denies writes to every path a checkout that is the home gives its first mate's OpenCode, and leaves the rest of .opencode writable"
 }
 
+test_start_denies_the_scripts_of_a_checkout_nested_in_the_home() {
+  local dir home root out status root_real deny
+  dir="$TMP_ROOT/start-nested"
+  home=$(make_home start-nested)
+  root="$home/nest/root"
+  make_checkout "$root"
+  make_launcher_fakebin "$dir" >/dev/null
+  make_stub_primary "$dir" >/dev/null
+  out=$(run_launcher "$dir" "$home" "$root" start)
+  status=$?
+  expect_code 0 "$status" "start must succeed from a checkout nested below the home: $out"
+  root_real=$(cd "$root" && pwd -P)
+  [ -f "$dir/profile.sb" ] || fail "the tmux server never started inside the sandbox"
+  deny=$(sed -n '/^(deny file-write\*$/,/^)$/p' "$dir/profile.sb")
+  assert_contains "$deny" "  (subpath \"$root_real/bin\")" "the sandbox must deny writes to the nested checkout's bin/"
+  assert_contains "$deny" "  (subpath \"$root_real/AGENTS.md\")" "the sandbox must deny writes to the nested checkout's instructions"
+  out=$(run_launcher "$dir" "$home" "$root" stop)
+  expect_code 0 "$?" "stop must end the session: $out"
+  pass "start denies writes to the scripts of a checkout nested below the home, which the captain runs outside the session"
+}
+
 test_start_renders_the_helm_afresh() {
   local dir home root out status helm helm_real root_real skill name
   dir="$TMP_ROOT/start-helm"
@@ -2069,6 +2090,7 @@ test_start_refuses_with_a_forbidden_file
 test_start_refuses_without_a_first_mate_line
 test_start_passes_only_the_allowlist
 test_start_denies_the_instructions_of_a_checkout_that_is_the_home
+test_start_denies_the_scripts_of_a_checkout_nested_in_the_home
 test_start_renders_the_helm_afresh
 test_start_refuses_without_the_rulebook
 test_start_refuses_when_the_proxy_cannot_bind

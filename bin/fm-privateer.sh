@@ -150,7 +150,8 @@
 # directory, config/, or bin/; the grant ledger state/permission-grants.jsonl,
 # which the captain writes from outside (bin/fm-permission-grant.sh); the
 # helm, or any directory entry between this home and it; when this checkout
-# is inside this home, any path in it an
+# is inside this home, its bin/, the scripts the captain runs outside the
+# session, and any path in it an
 # OpenCode first mate loads or the helm is rendered from: its AGENTS.md, CLAUDE.md,
 # CONTEXT.md, opencode.json(c), tui.json(c), .agents/, docs/, the .claude
 # entry and its skills link, the .opencode entry, and, under .opencode/, the
