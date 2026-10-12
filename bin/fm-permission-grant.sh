@@ -8,15 +8,17 @@
 # Usage:
 #   fm-permission-grant.sh grant --scope task|session|standing [--task <id>] \
 #     --permission <name> [--pattern <pattern>] --action allow|deny \
-#     --words-file <path> --channel chat|pinnace [--ref <note-or-message-id>]
-#   fm-permission-grant.sh revoke <grant-id> --words-file <path> --channel chat|pinnace [--ref <id>]
+#     [--words-file <path>] [--summary <text>] --channel chat|pinnace [--ref <note-or-message-id>]
+#   fm-permission-grant.sh revoke <grant-id> [--words-file <path>] [--summary <text>] \
+#     --channel chat|pinnace [--ref <id>]
 #   fm-permission-grant.sh list [--task <id>]
 #   fm-permission-grant.sh active --task <id>
 #
 # grant appends one record to state/permission-grants.jsonl: a new grant id,
 # the time, the scope, the OpenCode permission name and pattern (default "*"),
-# allow or deny, the captain's exact words from --words-file (non-empty, at
-# most 8192 bytes), the channel they came through, and an optional reference.
+# allow or deny, the captain's exact words (non-empty, at most 8192 bytes),
+# the channel they came through, and an optional reference. The words come
+# from --words-file, which every home but a Privateer home requires.
 # It changes nothing that is already running: the grant reaches a worker at its
 # next launch, so apply it to a running worker with
 # `bin/fm-control.sh <task> relaunch`, which keeps the task and its sailor.
@@ -57,14 +59,21 @@
 # grant or revocation, from their own shell outside the home's session, whose
 # sandbox denies the ledger to the first mate and every worker alike. Inside
 # the session grant and revoke refuse before reading anything, naming the same
-# call as a command the captain can run; list and active run on both sides.
+# call, less any --words-file, as a command the captain can run; list and
+# active run on both sides. Any worker can write anywhere in the home, so
+# there the captain's words never come from a file in it: with no
+# --words-file, grant and revoke read them on stdin once every other check has
+# passed, after showing on a terminal what the record holds and, as context
+# only, the first mate's one-line --summary of the request; a --words-file
+# whose real path is in the home is refused, naming that stdin command.
 #
 # Environment: FM_HOME, FM_STATE_OVERRIDE, and FM_CONFIG_OVERRIDE resolve the
 # home exactly as the other bin/ scripts do.
 #
 # Exit status: 0 success, 1 refused (a grant from the refusal list, an unknown
-# grant id, or a scope that cannot bind), 2 usage or configuration error, or a
-# grant or revoke called from inside a Privateer home's session.
+# grant id, or a scope that cannot bind), 2 usage or configuration error,
+# including a Privateer home's words file in the home, or a grant or revoke
+# called from inside a Privateer home's session.
 set -u
 export LC_ALL=C
 
@@ -72,11 +81,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FM_ROOT="${FM_ROOT_OVERRIDE:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 FM_HOME="${FM_HOME:-${FM_ROOT_OVERRIDE:-$FM_ROOT}}"
 STATE="${FM_STATE_OVERRIDE:-$FM_HOME/state}"
+CONFIG="${FM_CONFIG_OVERRIDE:-$FM_HOME/config}"
 # shellcheck source=bin/fm-privateer-lib.sh
 . "$SCRIPT_DIR/fm-privateer-lib.sh"
 LOG="$STATE/permission-grants.jsonl"
 LOCK_FILE="$STATE/.lock"
 WORDS_MAX=8192
+CAPTAIN_CALL=''
+WORDS_JQ=()
 
 usage() {
   sed -n '/^# Usage:/,/^#$/p' "$0" | sed 's/^# \{0,1\}//' >&2
@@ -101,15 +113,28 @@ shell_word() {
   esac
 }
 
-# captain_side_only <verb> [args...]: inside a Privateer home's session, refuse
-# with the call as the command the captain runs from their own shell.
+# captain_call <verb> [args...]: the call as the command the captain runs from
+# their own shell, less any --words-file, so it takes their words on stdin.
+captain_call() {
+  local call
+  call="FM_HOME=$(shell_word "$FM_HOME") $(shell_word "$SCRIPT_DIR/fm-permission-grant.sh") $(shell_word "$1")"
+  shift
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --words-file) shift 2 || shift ;;
+      --*) call="$call $(shell_word "$1")${2+ $(shell_word "$2")}"; shift 2 || shift ;;
+      *) call="$call $(shell_word "$1")"; shift ;;
+    esac
+  done
+  printf '%s\n' "$call"
+}
+
+# captain_side_only: inside a Privateer home's session, refuse with
+# CAPTAIN_CALL as the command the captain runs from their own shell.
 captain_side_only() {
-  local call arg
-  fm_privateer_home "${FM_CONFIG_OVERRIDE:-$FM_HOME/config}" || return 0
+  fm_privateer_home "$CONFIG" || return 0
   fm_privateer_inside_session "$FM_HOME" || return 0
-  call="FM_HOME=$(shell_word "$FM_HOME") $(shell_word "$SCRIPT_DIR/fm-permission-grant.sh")"
-  for arg in "$@"; do call="$call $(shell_word "$arg")"; done
-  echo "error: fm-permission-grant.sh refused: in a Privateer home only the captain records a grant or revocation, from their own shell outside this session; ask the captain to run it there, then relaunch the worker once the captain says it is recorded: $call" >&2
+  echo "error: fm-permission-grant.sh refused: in a Privateer home only the captain records a grant or revocation, from their own shell outside this session, typing their own words when it asks; ask the captain to run it there, then relaunch the worker once the captain says it is recorded: $CAPTAIN_CALL" >&2
   exit "$FM_PRIVATEER_SEALED_EXIT"
 }
 
@@ -137,13 +162,49 @@ session_stamp() {
   printf '%s@%s\n' "$pid" "$mtime"
 }
 
-read_words() {  # <path>
-  local size
+# read_words <path-or-empty>: check --words-file. In a Privateer home, with
+# none take_words reads the words on stdin, and a file whose real path is in
+# the home is refused, since any worker can rewrite it.
+read_words() {
+  local size real home
+  if fm_privateer_home "$CONFIG"; then
+    [ -n "$1" ] || return 0
+    real=$(perl -MCwd=realpath -e '$p = realpath($ARGV[0]); defined($p) or exit 1; print "$p\n"' "$1" 2>/dev/null) ||
+      die "--words-file must be a readable file"
+    home=$(cd "$FM_HOME" 2>/dev/null && pwd -P) || die "cannot resolve $FM_HOME"
+    case "$real/" in
+      "$home"/*) die "--words-file is in this Privateer home, where any worker can rewrite it; run the command without it and type the captain's words on stdin: $CAPTAIN_CALL" ;;
+    esac
+  fi
   [ -f "$1" ] && [ -r "$1" ] || die "--words-file must be a readable file"
   size=$(wc -c <"$1" | tr -d ' ')
   [ "$size" -gt 0 ] || die "--words-file is empty; record the captain's actual words"
   [ "$size" -le "$WORDS_MAX" ] || die "--words-file is larger than $WORDS_MAX bytes"
   [ -n "$(tr -d '[:space:]' <"$1")" ] || die "--words-file holds only whitespace; record the captain's actual words"
+}
+
+# take_words <path-or-empty> <record> <summary>: set WORDS_JQ to the jq
+# arguments carrying the captain's words: the --words-file read_words checked,
+# or the words on stdin, read after showing <record> and the first mate's
+# <summary> when stdin is a terminal.
+take_words() {
+  local text
+  if [ -n "$1" ]; then
+    WORDS_JQ=(--rawfile words "$1")
+    return 0
+  fi
+  if [ -t 0 ]; then
+    {
+      [ -z "$3" ] || printf "The first mate's summary of the request (context only, never recorded): %s\n" "$3"
+      printf 'This records: %s\n' "$2"
+      printf 'Type your own words for the record, then press Ctrl-D on a new line:\n'
+    } >&2
+  fi
+  text=$(head -c "$((WORDS_MAX + 1))"; printf x)
+  text=${text%x}
+  [ -n "${text//[[:space:]]/}" ] || die "no words on stdin; record the captain's actual words"
+  [ "${#text}" -le "$WORDS_MAX" ] || die "the words on stdin are larger than $WORDS_MAX bytes"
+  WORDS_JQ=(--arg words "$text")
 }
 
 # bash_shape_reason <lowercased pattern>: why a shell allow's shape can run
@@ -250,7 +311,7 @@ append_record() {  # <json>
 }
 
 cmd_grant() {
-  local scope='' task='' perm='' pat='*' action='' words='' channel='' ref='' reason stamp='' session='' id now
+  local scope='' task='' perm='' pat='*' action='' words='' summary='' channel='' ref='' reason stamp='' session='' id now
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --scope) scope=${2:-}; shift 2 || usage ;;
@@ -259,6 +320,7 @@ cmd_grant() {
       --pattern) pat=${2:-}; shift 2 || usage ;;
       --action) action=${2:-}; shift 2 || usage ;;
       --words-file) words=${2:-}; shift 2 || usage ;;
+      --summary) summary=${2:-}; shift 2 || usage ;;
       --channel) channel=${2:-}; shift 2 || usage ;;
       --ref) ref=${2:-}; shift 2 || usage ;;
       *) usage ;;
@@ -270,6 +332,7 @@ cmd_grant() {
   case "$perm" in '' | *[!a-z_*]*) die "--permission must be an OpenCode permission name such as bash, edit, or external_directory" ;; esac
   [ -n "$pat" ] || die "--pattern must not be empty"
   case "$pat" in *[[:cntrl:]]*) die "--pattern must be one line" ;; esac
+  case "$summary" in *[[:cntrl:]]*) die "--summary must be one line" ;; esac
   read_words "$words"
   if [ "$scope" = task ]; then
     task_ok "$task" || die "--scope task needs --task <id>"
@@ -286,11 +349,12 @@ cmd_grant() {
     reason=$(refusal_reason "$perm" "$pat")
     [ -z "$reason" ] || refuse "$reason; the captain approves that one action in the moment and firstmate performs it"
   fi
+  take_words "$words" "$action $perm \"$pat\" for $scope${task:+ $task}" "$summary"
   now=$(date +%s)
   id="g$now-$$-$RANDOM"
   append_record "$(jq -cn --arg id "$id" --argjson ts "$now" --arg scope "$scope" --arg task "$task" \
     --arg stamp "$stamp" --arg session "$session" --arg perm "$perm" --arg pat "$pat" --arg action "$action" \
-    --rawfile words "$words" --arg channel "$channel" --arg ref "$ref" '
+    "${WORDS_JQ[@]}" --arg channel "$channel" --arg ref "$ref" '
     {v: 1, op: "grant", id: $id, ts: $ts, scope: $scope,
      task: (if $task == "" then null else $task end),
      task_dispatched_at: (if $scope == "task" then $stamp else null end),
@@ -301,23 +365,26 @@ cmd_grant() {
 }
 
 cmd_revoke() {
-  local id=${1:-} words='' channel='' ref=''
+  local id=${1:-} words='' summary='' channel='' ref=''
   [ -n "$id" ] || usage
   shift
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --words-file) words=${2:-}; shift 2 || usage ;;
+      --summary) summary=${2:-}; shift 2 || usage ;;
       --channel) channel=${2:-}; shift 2 || usage ;;
       --ref) ref=${2:-}; shift 2 || usage ;;
       *) usage ;;
     esac
   done
   case "$channel" in chat | pinnace) ;; *) die "--channel must be chat or pinnace" ;; esac
+  case "$summary" in *[[:cntrl:]]*) die "--summary must be one line" ;; esac
   read_words "$words"
   if [ ! -f "$LOG" ] || ! jq -e --arg id "$id" 'select(.op == "grant" and .id == $id)' "$LOG" >/dev/null 2>&1; then
     refuse "no grant $id in this home"
   fi
-  append_record "$(jq -cn --arg id "$id" --argjson ts "$(date +%s)" --rawfile words "$words" --arg channel "$channel" --arg ref "$ref" '
+  take_words "$words" "revoke grant $id" "$summary"
+  append_record "$(jq -cn --arg id "$id" --argjson ts "$(date +%s)" "${WORDS_JQ[@]}" --arg channel "$channel" --arg ref "$ref" '
     {v: 1, op: "revoke", id: $id, ts: $ts, words: $words, channel: $channel, ref: (if $ref == "" then null else $ref end)}')"
   echo "$id: revoked; it no longer applies from each OpenCode worker's next launch"
 }
@@ -361,8 +428,11 @@ command -v jq >/dev/null 2>&1 || die "jq is required"
 cmd=$1
 shift
 case "$cmd" in
-  grant) captain_side_only grant "$@"; cmd_grant "$@" ;;
-  revoke) captain_side_only revoke "$@"; cmd_revoke "$@" ;;
+  grant | revoke)
+    CAPTAIN_CALL=$(captain_call "$cmd" "$@")
+    captain_side_only
+    if [ "$cmd" = grant ]; then cmd_grant "$@"; else cmd_revoke "$@"; fi
+    ;;
   list) cmd_list "$@" ;;
   active) cmd_active "$@" ;;
   -h | --help) sed -n '2,/^set -u/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//' ;;
