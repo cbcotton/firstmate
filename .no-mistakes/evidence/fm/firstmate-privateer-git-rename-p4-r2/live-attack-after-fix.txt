@@ -1,0 +1,19 @@
+== fm-privateer.sh start exit=0
+   privateer: started session privateer on tmux socket fm-privateer-45957635b614 (first mate tiller/coder, egress proxy 127.0.0.1:64378); attach with: FM_HOME='/private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fmpv.3PzKjs/home' '/Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M4R5HN8MS2F9HR81PWMXQ8PT/bin/fm-privateer.sh' attach
+== in-session attack results (paths relative to /private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fmpv.3PzKjs)
+refused $W/home/projects/proj/.git/modules/lib/sub
+refused $W/home/projects/proj/.git/modules/lib
+refused $W/home/projects/proj/.git/modules
+refused $W/root/.git/modules/lib/sub
+refused $W/home/projects/proj/.git/worktrees/wt/modules/lib/sub
+refused $W/home/projects/proj/.git/worktrees/wt/modules
+refused $W/home/projects/proj/.git/worktrees
+refused symlink $W/home/projects/proj/.git/modules/lib/evil
+refused mkdir $W/home/projects/proj/.git/modules/lib/sub/modules
+refused write $W/home/projects/proj/.git/worktrees/wt/modules/lib/sub/config
+pool worktree add/commit/remove: ok
+/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fmpv-scripts/attack.sh: line 61: 50322 Terminated: 15          ( cd "$W/sailor" && exec python3 -u -m http.server 0 --bind 127.0.0.1 ) > "$W/sailor.log" 2>&1
+== after session: planted hooks in Git metadata
+   none
+== git status in the linked worktree submodule (does a planted hook run?)
+   no planted hook ran

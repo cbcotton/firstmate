@@ -1,0 +1,30 @@
+== fm-privateer.sh start exit=0
+   privateer: started session privateer on tmux socket fm-privateer-d250b14ce498 (first mate tiller/coder, egress proxy 127.0.0.1:64396); attach with: FM_HOME='/private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fmpv.kSBQ3b/home' '/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fmpv-base.S22vq5/bin/fm-privateer.sh' attach
+== in-session attack results (paths relative to /private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fmpv.kSBQ3b)
+cp: $W/home/projects/proj/.git/modules/lib/sub/config: Operation not permitted
+cp: $W/home/projects/proj/.git/modules/lib/sub/hooks: Operation not permitted
+SWAPPED $W/home/projects/proj/.git/modules/lib/sub
+cp: $W/home/projects/proj/.git/modules/lib/sub.aside/config: Operation not permitted
+cp: $W/home/projects/proj/.git/modules/lib/sub.aside/hooks: Operation not permitted
+SWAPPED $W/home/projects/proj/.git/modules/lib
+cp: $W/home/projects/proj/.git/modules/lib.aside/sub.aside/config: Operation not permitted
+cp: $W/home/projects/proj/.git/modules/lib.aside/sub.aside/hooks: Operation not permitted
+SWAPPED $W/home/projects/proj/.git/modules
+cp: $W/root/.git/modules/lib/sub/config: Operation not permitted
+cp: $W/root/.git/modules/lib/sub/hooks: Operation not permitted
+SWAPPED $W/root/.git/modules/lib/sub
+SWAPPED $W/home/projects/proj/.git/worktrees/wt/modules/lib/sub
+SWAPPED $W/home/projects/proj/.git/worktrees/wt/modules
+cp: $W/home/projects/proj/.git/worktrees/wt: Operation not permitted
+SWAPPED $W/home/projects/proj/.git/worktrees
+SYMLINKED $W/home/projects/proj/.git/modules/lib/evil
+PLANTED $W/home/projects/proj/.git/modules/lib/sub/modules
+refused write $W/home/projects/proj/.git/worktrees/wt/modules/lib/sub/config
+pool worktree add/commit/remove: ok
+== after session: planted hooks in Git metadata
+$W/home/projects/proj/.git/worktrees.aside/wt/modules.aside/lib/sub/hooks/post-checkout
+$W/home/projects/proj/.git/worktrees.aside/wt/modules/hooks/post-checkout
+$W/home/projects/proj/.git/worktrees.aside/wt/modules/lib/sub/hooks/post-checkout
+== git status in the linked worktree submodule (does a planted hook run?)
+fatal: not a git repository: (null)
+   no planted hook ran
