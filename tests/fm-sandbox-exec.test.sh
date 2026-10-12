@@ -103,7 +103,7 @@ test_deny_move_keeps_an_entry_in_place() {
   local wt re out
   mkdir -p "$TMP_ROOT/move/wt"
   wt="$TMP_ROOT/move/wt"
-  re="^$(printf '%s' "$wt" | sed 's/[][\.^$*+?(){}|]/\\&/g')/(kept|absent|made)\$"
+  re="^$(printf '%s' "$wt" | sed 's/[][\.^$*+?(){}|]/\\&/g')/(kept|empty|absent|made)\$"
   out=$("$SBX" profile --write "$wt" --deny-write "$wt/hooks" --deny-move-regex "$re" --write-prefix "$wt/hooks/exposed.")
   assert_contains "$out" $'  (subpath "'"$wt/hooks"$'")\n)\n(deny file-write-unlink (regex #"'"$re"$'"))\n(deny file-write-create (require-all (regex #"'"$re"$'") (vnode-type SYMLINK)))\n(allow file-write*\n' \
     "a moved-entry denial must follow the denies and precede the exact prefixes"
@@ -111,25 +111,32 @@ test_deny_move_keeps_an_entry_in_place() {
     pass "the profile denies moving an entry; confinement checks not run: sandbox-exec is not available on this machine"
     return 0
   fi
-  mkdir -p "$wt/kept/child" "$wt/spare" "$wt/other"
+  [ "$(python3 -I -c 'print("ok")' 2>/dev/null)" = ok ] || fail "the replacement check needs a working python3"
+  mkdir -p "$wt/kept/child" "$wt/empty" "$wt/spare" "$wt/other"
   ln -s "$wt/other" "$wt/link"
   out=$("$SBX" run --write "$wt" --deny-move-regex "$re" -- /bin/sh -c "
     mv '$wt/kept' '$wt/kept.aside' 2>/dev/null && echo move-allowed || echo move-denied
-    python3 -I -c 'import os, sys; os.rename(sys.argv[1], sys.argv[2])' '$wt/spare' '$wt/kept' 2>/dev/null && echo replace-allowed || echo replace-denied
+    python3 -I -c '
+import errno, os, sys
+try:
+    os.rename(sys.argv[1], sys.argv[2])
+    print(\"replace-allowed\")
+except OSError as e:
+    print(\"replace-\" + errno.errorcode.get(e.errno, str(e.errno)))' '$wt/spare' '$wt/empty' 2>/dev/null || echo replace-failed
     ln -s '$wt/other' '$wt/absent' 2>/dev/null && echo symlink-allowed || echo symlink-denied
     mv '$wt/link' '$wt/absent' 2>/dev/null && echo link-move-allowed || echo link-move-denied
     mkdir '$wt/made' 2>/dev/null && echo mkdir-allowed || echo mkdir-denied
     (echo in > '$wt/kept/file') 2>/dev/null && echo inside-allowed || echo inside-denied
     mv '$wt/kept/child' '$wt/child' 2>/dev/null && echo child-allowed || echo child-denied")
   assert_equals "move-denied
-replace-denied
+replace-EPERM
 symlink-denied
 link-move-denied
 mkdir-allowed
 inside-allowed
 child-allowed" "$out" \
     "a moved-entry denial must refuse moving the entry away, renaming over it, and a symlink there, while the entry may be created and what is inside it stays writable"
-  [ -d "$wt/kept" ] && [ ! -e "$wt/kept.aside" ] && [ ! -L "$wt/absent" ] || fail "every refused move must leave the entries as they were"
+  [ -d "$wt/kept" ] && [ ! -e "$wt/kept.aside" ] && [ -d "$wt/spare" ] && [ ! -L "$wt/absent" ] || fail "every refused move must leave the entries as they were"
   pass "a moved-entry denial keeps an entry in place against a move, a replacement, or a symlink, while it may still be created and written inside"
 }
 
