@@ -65,9 +65,10 @@
 # Privateer forks: after the main home, every forks/<name> that is a git checkout
 # with config/privateer is fast-forwarded from its own origin through the same
 # ff_target guards (a dirty, diverged, or non-default-branch fork is reported and
-# left untouched). A fork whose session socket exists (fm-privateer-lib.sh,
-# checked read-only, never attached to) is skipped with the stop-then-update
-# step. It is a git fast-forward only: the fork's own scripts, state/, data/,
+# left untouched). A fork whose session is running (its socket exists and its
+# tmux server answers has-session, per fm-privateer-lib.sh; never attached to,
+# sent keys, or captured) is skipped with the stop-then-update step; a stale
+# socket with no live server counts as stopped. It is a git fast-forward only: the fork's own scripts, state/, data/,
 # and config/ are never run, read beyond the config/privateer marker, or changed.
 #
 # Usage: fm-update.sh [--help]
@@ -247,14 +248,15 @@ fi
 
 # --- Privateer forks -------------------------------------------------------
 # A running session cannot update itself and must not be touched from outside,
-# so a fork with a live session socket is skipped and the captain stops it first.
+# so a fork with a live session is skipped and the captain stops it first.
 for fork in "$FM_HOME"/forks/*/; do
   [ -d "$fork" ] || continue
   fork=${fork%/}
   fork_name=${fork##*/}
   [ -e "$fork/.git" ] || continue
   fm_privateer_home "$fork/config" || continue
-  if [ -S "$(fm_privateer_socket_path "$fork")" ]; then
+  fork_socket=$(fm_privateer_socket_name "$fork")
+  if [ -S "$(fm_privateer_socket_path "$fork_socket")" ] && fm_privateer_session_running "$fork_socket"; then
     echo "fork $fork_name: skipped: Privateer session is running; stop it with FM_HOME=$fork $fork/bin/fm-privateer.sh stop, re-run the update, then start it again"
     continue
   fi

@@ -49,6 +49,7 @@ new_world() {
 #!/usr/bin/env bash
 set -u
 case "${1:-}" in
+  -L) [ "${3:-}" = has-session ] && [ -e "$FM_FAKE_DIR/live-$2" ] ;;
   list-windows) cat "$FM_FAKE_DIR/windows" ;;
   display-message)
     target=
@@ -559,7 +560,9 @@ test_primary_update_rebinds_local_watch() {
 # --- T13: Privateer forks under forks/ --------------------------------------
 # A fork is a clone of the origin with config/privateer (excluded locally, as a
 # real home's gitignored config/ is). Its session is faked by a unix socket at
-# the path fm-privateer-lib.sh names, under a per-test TMUX_TMPDIR.
+# the path fm-privateer-lib.sh names, under a per-test TMUX_TMPDIR, and a live
+# server by the fake tmux answering has-session on that socket; a socket left
+# without a live server is a stale one from a crashed session.
 add_fork() {  # <world> <name> [privateer]
   local w=$1 name=$2 marker=${3:-yes} d
   d="$w/home/forks/$name"
@@ -572,13 +575,13 @@ add_fork() {  # <world> <name> [privateer]
   fi
 }
 
-fake_session() {  # <world> <fork-dir>
-  local w=$1 sock
-  TMUX_TMPDIR=$(mktemp -d /tmp/fmu.XXXXXX)
-  export TMUX_TMPDIR
-  sock=$(bash -c '. "$1/bin/fm-privateer-lib.sh"; fm_privateer_socket_path "$2"' _ "$ROOT" "$2")
+fake_session() {  # <world> <fork-dir> [live|stale]
+  local w=$1 state=${3:-live} name sock
+  name=$(bash -c '. "$1/bin/fm-privateer-lib.sh"; fm_privateer_socket_name "$2"' _ "$ROOT" "$2")
+  sock=$(bash -c '. "$1/bin/fm-privateer-lib.sh"; fm_privateer_socket_path "$2"' _ "$ROOT" "$name")
   mkdir -p "${sock%/*}"
   python3 -I -c 'import socket,sys; s=socket.socket(socket.AF_UNIX); s.bind(sys.argv[1])' "$sock"
+  [ "$state" = stale ] || : > "$w/fake/live-$name"
 }
 
 test_forks() {
@@ -586,9 +589,13 @@ test_forks() {
   w=$(new_world t13)
   add_fork "$w" stopped
   add_fork "$w" running
+  add_fork "$w" stale
   add_fork "$w" plain no
   bump_origin "$w" instr
+  TMUX_TMPDIR=$(mktemp -d /tmp/fmu.XXXXXX)
+  export TMUX_TMPDIR
   fake_session "$w" "$w/home/forks/running"
+  fake_session "$w" "$w/home/forks/stale" stale
   head0=$(git -C "$w/home/forks/running" rev-parse HEAD)
   out=$(run_update "$w")
   assert_contains "$out" "fork stopped: updated" "stopped fork fast-forwards"
@@ -597,11 +604,14 @@ test_forks() {
   assert_contains "$out" "fork running: skipped: Privateer session is running" "running fork skipped"
   assert_contains "$out" "fm-privateer.sh stop" "skip names the stop step"
   [ "$(git -C "$w/home/forks/running" rev-parse HEAD)" = "$head0" ] || fail "running fork moved"
+  assert_contains "$out" "fork stale: updated" "stale socket without a server counts as stopped"
+  [ "$(git -C "$w/home/forks/stale" rev-parse HEAD)" = "$(git -C "$w/origin.git" rev-parse main)" ] \
+    || fail "stale-socket fork did not reach origin"
   assert_not_contains "$out" "fork plain" "non-Privateer directory ignored"
   [ "$(git -C "$w/home/forks/plain" rev-parse HEAD)" = "$head0" ] || fail "plain directory was updated"
   rm -rf "$TMUX_TMPDIR"
   unset TMUX_TMPDIR
-  pass "T13 stopped fork updates, running fork skipped, plain directory ignored"
+  pass "T13 stopped and stale-socket forks update, running fork skipped, plain directory ignored"
 
   w=$(new_world t13b)
   add_fork "$w" dirty
