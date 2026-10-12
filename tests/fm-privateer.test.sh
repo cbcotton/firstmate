@@ -19,9 +19,11 @@
 # command the first mate starts through tmux reaches nothing but the proxy and
 # cannot stop or rewrite it, one that a first mate running as opencode
 # detects its harness and owns the fleet lock while a plain shell in the same
-# session stays read-only, and one that such a command can move aside, replace,
-# link over, or plant no directory leading to a Git config or hooks while the
-# session's own pool worktrees are still added and removed. The live egress audit
+# session stays read-only, one that such a command can move aside, replace,
+# link over, or plant no directory leading to a Git config or hooks, and one
+# that it can point Git at no other config and hooks through a commondir or a
+# .git gitfile, while the session's own pool worktrees are still added and
+# removed. The live egress audit
 # (tests/fm-privateer-egress-live-e2e.test.sh) and session lock check
 # (tests/fm-privateer-session-lock-live-e2e.test.sh) run the real OpenCode.
 # docs/configuration.md ("Privateer quarantine") owns the contract.
@@ -625,12 +627,13 @@ test_start_refuses_without_the_flag() {
   root="$dir/root"
   make_checkout "$root"
   # A clone with a linked worktree and a submodule's git dir, whose Git
-  # metadata a home without the quarantine keeps exactly as it was.
+  # metadata, like the checkout's and the worktree's gitfile, a home without
+  # the quarantine keeps exactly as it was.
   proj="$home/projects/proj"
   fm_git_init_commit "$proj"
   git -C "$proj" worktree add -q -b side "$dir/side"
   mkdir -p "$proj/.git/modules/lib/sub"
-  before=$(cd "$proj/.git" && find . | LC_ALL=C sort)
+  before=$(cd "$proj/.git" && find . | LC_ALL=C sort; cd "$root/.git" && find . | LC_ALL=C sort; cat "$dir/side/.git")
   make_launcher_fakebin "$dir" >/dev/null
   make_stub_primary "$dir" >/dev/null
   out=$(run_launcher "$dir" "$home" "$root" start)
@@ -639,7 +642,8 @@ test_start_refuses_without_the_flag() {
   assert_contains "$out" "config/privateer is absent" "the refusal must name the flag"
   [ ! -e "$dir/tmux.log" ] || fail "start must not touch tmux without the flag"
   [ ! -e "$dir/profile.sb" ] || fail "start must render no sandbox without the flag"
-  assert_equals "$before" "$(cd "$proj/.git" && find . | LC_ALL=C sort)" "a home without the flag must keep its clones' Git metadata untouched"
+  assert_equals "$before" "$(cd "$proj/.git" && find . | LC_ALL=C sort; cd "$root/.git" && find . | LC_ALL=C sort; cat "$dir/side/.git")" \
+    "a home without the flag must keep the Git metadata of its checkout, its clones, and their worktrees untouched"
   pass "start refuses a home without config/privateer and leaves its Git metadata untouched"
 }
 
@@ -1701,17 +1705,21 @@ test_session_sandbox_refuses_git_redirects() {
   jq -n --arg e "http://127.0.0.1:$sport/v1" '{sailors: {tiller: {title: "Tiller", endpoint: $e, status: "live", models: ["coder"]}}, default: {harness: "opencode", sailor: "tiller", model: "coder"}}' \
     > "$home/config/crew-dispatch.json"
   # A command the first mate starts through tmux, as a worker's pane is: it
-  # tries to write a commondir into the git dir of the checkout, the clone, and
-  # each submodule, to rewrite the outside worktree's commondir in place and by
-  # renaming a new one over it, to rewrite the gitfile of each submodule and
-  # linked worktree checkout, and, innermost first, to move aside each
-  # directory leading to one; then it adds, commits in, and removes a worktree
-  # in the home's own pool for the checkout and for the clone.
+  # tries to write, link, or rename a commondir into the git dir of the
+  # checkout, the clone, and each submodule, to rewrite the outside worktree's
+  # commondir in place and by renaming a new one over it, to rewrite the
+  # gitfile of each submodule and linked worktree checkout, and, innermost
+  # first, to move aside each directory leading to one; then it adds, commits
+  # in, and removes a worktree in the home's own pool for the checkout and for
+  # the clone.
   cat > "$dir/window" <<SH
 #!/bin/sh
 planted=
 for g in '$root_git' '$root_git/modules/lib/sub' '$proj_git' '$proj_git/modules/lib/sub' '$wt_git/modules/lib/sub'; do
   ( echo '$home/state' > "\$g/commondir" ) 2>/dev/null && planted="\$planted commondir:\$g"
+  ln -s '$home/state/commondir.link' "\$g/commondir" 2>/dev/null && planted="\$planted symlink:\$g"
+  echo '$home/state' > '$home/state/commondir.new' && mv -f '$home/state/commondir.new' "\$g/commondir" 2>/dev/null &&
+    planted="\$planted rename:\$g"
 done
 ( echo '$home/state' > '$wt_git/commondir' ) 2>/dev/null && planted="\$planted rewrite:$wt_git/commondir"
 echo '$home/state' > '$home/state/commondir.new' && mv -f '$home/state/commondir.new' '$wt_git/commondir' 2>/dev/null &&
@@ -1752,7 +1760,7 @@ slot=0" "$(cat "$probe" 2>/dev/null)" \
     "$wt:$proj_git" "$wt/lib/sub:$wt_git/modules/lib/sub"; do
     expected=${c#*:}
     c=${c%%:*}
-    assert_equals "$expected" "$(cd "$(git -C "$c" rev-parse --git-common-dir 2>/dev/null)" 2>/dev/null && pwd -P)" "Git in $c must still read its config and hooks from its own common dir"
+    assert_equals "$expected" "$(cd "$(git -C "$c" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" 2>/dev/null && pwd -P)" "Git in $c must still read its config and hooks from its own common dir"
   done
   assert_not_contains "$(git -C "$home" worktree list --porcelain; git -C "$proj" worktree list --porcelain)" "pool/slot" "the pool worktrees must be gone after their removal"
   pass "in the real sandboxed session no commondir can be written into the git dir of the checkout, a clone, their submodules, or a linked worktree outside the pool, and no gitfile of a submodule or such a worktree can be rewritten or moved aside, while the session's own pool worktrees are still added and removed"
