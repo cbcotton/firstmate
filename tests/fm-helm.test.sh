@@ -382,7 +382,7 @@ EOF
 }
 
 test_active_project_is_the_default_project() {
-  local out status id
+  local out status id rows
   make_case active
   fm_git_init_commit "$HOME_DIR/projects/other" >/dev/null 2>&1 || mkdir -p "$HOME_DIR/projects/other"
   printf -- '- other [local-only branch=ot/] - a second project (added 2026-09-30)\n' >> "$HOME_DIR/data/projects.md"
@@ -422,6 +422,26 @@ test_active_project_is_the_default_project() {
   expect_code 1 "$status" "the slash-command form must refuse a registered project without a clone"$'\n'"$out"
   assert_contains "$out" "'ghost' is not a registered project with a clone" "the stdin refusal must name the uncloned project"
   assert_not_contains "$out" "the active project" "the stdin form must not fall back to the active one"
+
+  rows=$(backlog_rows)
+  out=$(run_helm ship otehr "add a flag")
+  status=$?
+  expect_code 1 "$status" "a typo of a registered project must be refused, not replaced by the active one"$'\n'"$out"
+  assert_contains "$out" "'otehr' is not a registered project with a clone" "the refusal must name the typo"
+  assert_contains "$out" "did you mean other?" "the refusal must name the close project"
+  assert_not_contains "$out" "the active project" "a typo must not fall back to the active one"
+  out=$(opencode_text 'otehr add a flag' 'otehr add a flag' 'otehr add a flag' | run_helm ship --stdin)
+  status=$?
+  expect_code 1 "$status" "the slash-command form must refuse a typo of a registered project"$'\n'"$out"
+  assert_contains "$out" "did you mean other?" "the stdin refusal must name the close project"
+  mkdir -p "$HOME_DIR/projects/scratch"
+  out=$(run_helm ship scratch "add a flag")
+  status=$?
+  expect_code 1 "$status" "an unregistered clone directory must be refused, not replaced by the active one"$'\n'"$out"
+  assert_contains "$out" "'scratch' is not a registered project with a clone" "the refusal must name the unregistered clone"
+  assert_not_contains "$out" "the active project" "an unregistered clone must not fall back to the active one"
+  assert_equals "$rows" "$(backlog_rows)" "a refused project word must file nothing"
+  rm -rf "$HOME_DIR/projects/scratch"
 
   out=$(run_helm project)
   assert_contains "$out" "* app" "the project view must mark the active project"

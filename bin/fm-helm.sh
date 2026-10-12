@@ -54,9 +54,11 @@
 # When config/active-project names a registered project with a clone (the
 # captain sets it outside the session with bin/fm-privateer.sh project), scout
 # and ship accept the ask without a project word and use that project, saying
-# so in the first output line; a first word that data/projects.md registers is
-# the project, and is refused as before when it has no clone. A value that is
-# malformed is not used.
+# so in the first output line. A first word that data/projects.md registers,
+# that is a directory under projects/, or that is within edit distance 2 of a
+# registered name is taken as the project, and is refused as before when it is
+# not a registered project with a clone, with the close name as a did-you-mean
+# line. A value that is malformed is not used.
 #
 # project prints every registered project that has a clone, the active one
 # marked `*`, and the active project; it only reads. The session cannot write
@@ -193,7 +195,7 @@ no_arguments() {  # <verb> <count>
 
 # check_project <project>: refuse unless <project> is registered with a clone.
 check_project() {
-  local known='' clone
+  local known='' clone close
   case "$1" in
     */* | .*) refuse "'$1' is a path; give the name of a project under projects/" ;;
   esac
@@ -203,7 +205,8 @@ check_project() {
       clone=${clone%/}
       known="$known${known:+, }${clone##*/}"
     done
-    refuse "'$1' is not a registered project with a clone under projects/; the projects here are: ${known:-none}; ask the captain which one"
+    close=$(close_project "$1") && close=$'\n'"did you mean $close?"
+    refuse "'$1' is not a registered project with a clone under projects/; the projects here are: ${known:-none}; ask the captain which one${close:-}"
   fi
 }
 
@@ -213,6 +216,39 @@ project_registered() {
     '' | */* | .*) return 1 ;;
   esac
   "$SCRIPT_DIR/fm-project-mode.sh" --registered "$1"
+}
+
+# close_project <word>: the first project data/projects.md registers within
+# edit distance 2 of <word>, other than <word> itself.
+close_project() {
+  [ -f "$DATA/projects.md" ] || return 1
+  awk -v w="$1" '
+    function dist(a, b,   i, j, la, lb, c, prev, cur) {
+      la = length(a); lb = length(b)
+      for (j = 0; j <= lb; j++) prev[j] = j
+      for (i = 1; i <= la; i++) {
+        cur[0] = i
+        for (j = 1; j <= lb; j++) {
+          c = prev[j - 1] + (substr(a, i, 1) != substr(b, j, 1))
+          if (prev[j] + 1 < c) c = prev[j] + 1
+          if (cur[j - 1] + 1 < c) c = cur[j - 1] + 1
+          cur[j] = c
+        }
+        for (j = 0; j <= lb; j++) prev[j] = cur[j]
+      }
+      return prev[lb]
+    }
+    /^- / && $2 != w && dist(w, $2) <= 2 { print $2; found = 1; exit }
+    END { exit !found }' "$DATA/projects.md"
+}
+
+# names_project <word>: 0 when <word> is a directory under projects/ or close
+# to a registered project, so it cannot be the start of an ask.
+names_project() {
+  case "$1" in
+    */* | .*) return 1 ;;
+  esac
+  [ -d "$PROJECTS/$1" ] || close_project "$1" >/dev/null
 }
 
 # again <kind> <project> <ask>: the same call with --rule left to fill in.
@@ -358,7 +394,7 @@ intake() {
     0* | *[!0-9]*) misuse "--rule takes a rule number from 1, or default, not '$RULE'" ;;
   esac
   [ "$#" -ge 1 ] || misuse "$kind needs a project and the ask"
-  if [ -n "${1:-}" ] && ! project_registered "$1" &&
+  if [ -n "${1:-}" ] && ! project_registered "$1" && ! names_project "$1" &&
     project=$(fm_privateer_active_project "$CONFIG" "$DATA" "$PROJECTS" "$SCRIPT_DIR"); then
     ask=$(trim "${ASK_FULL:-$*}")
     [ -n "$ask" ] || misuse "$kind needs the ask"
