@@ -990,7 +990,9 @@ test_stop_refuses_with_work_in_flight_and_stops_an_idle_session() {
 # types into it, and Enter submits the typed text, appends it to
 # <case-dir>/pane-submitted, and starts a turn that reads busy for the next
 # <case-dir>/pane-turn-reads captures (6 by default), or for good when
-# <case-dir>/pane-hold exists. Every call is still logged to tmux.log.
+# <case-dir>/pane-hold exists. With <case-dir>/pane-narrow the footer is the
+# one opencode 1.18.33 wraps across rows in a narrow pane. Every call is still
+# logged to tmux.log.
 make_stow_pane() {
   local dir=$1
   mv "$dir/fakebin/tmux" "$dir/fakebin/tmux-base"
@@ -1001,7 +1003,14 @@ d='$dir'
 all=("\$@")
 [ "\${1:-}" != -L ] || shift 2
 screen() {  # <composer row>
-  printf '  ▣ Privateer · tiller · 3.4s\n\n  ┃\n  ┃  %s\n  ┃\n  ┃  Privateer · tiller coder\n  ╹▀▀▀▀▀▀▀▀\n' "\$1"
+  printf '  ▣ Privateer · tiller · 3.4s\n\n  ┃\n  ┃  %s\n  ┃\n' "\$1"
+  if [ -e "\$d/pane-narrow" ]; then
+    printf '  ┃  Privatee ·Qwen3.8 27B TURBO Fable (mlx-serve) MLX Serve\n'
+    printf '  ┃  r                                             (local)\n  ┃\n'
+  else
+    printf '  ┃  Privateer · tiller coder\n'
+  fi
+  printf '  ╹▀▀▀▀▀▀▀▀\n'
 }
 case "\${1:-}" in
   capture-pane)
@@ -1077,6 +1086,33 @@ test_stop_stow_delivers_the_stow_then_stops() {
   assert_grep "send-keys -t privateer:firstmate -l /stow" "$dir/tmux.log" "the stow must be typed into the first mate's own pane"
   [ ! -e "$dir/tmux-running" ] || fail "stop --stow must end the session after the stow"
   pass "stop --stow types /stow into the first mate's pane, waits for that turn to finish, and only then stops the session, naming no socket or port"
+}
+
+test_stop_stow_reads_a_narrow_pane_footer_as_furniture() {
+  local dir out status
+  dir=$(stow_case stow-narrow)
+  : > "$dir/pane-narrow"
+  out=$(run_stow "$dir" 30)
+  status=$?
+  expect_code 0 "$status" "stop --stow must stow a narrow pane whose footer wraps across rows: $out"
+  [ "$(cat "$dir/pane-submitted" 2>/dev/null)" = /stow ] || fail "the narrow first mate must receive exactly /stow once, got: $(cat "$dir/pane-submitted" 2>/dev/null)"
+  [ ! -e "$dir/tmux-running" ] || fail "stop --stow must end the narrow session after the stow"
+  pass "stop --stow stows and stops a first mate whose narrow pane wraps its composer footer"
+}
+
+test_stop_stow_refuses_a_draft_above_a_narrow_footer() {
+  local dir out status
+  dir=$(stow_case stow-narrow-draft)
+  : > "$dir/pane-narrow"
+  printf 'half-written ask' > "$dir/pane-typed"
+  out=$(run_stow "$dir")
+  status=$?
+  expect_code 1 "$status" "stop --stow must refuse a draft in the first mate's input line"
+  assert_contains "$out" "the first mate's input line holds text or cannot be read, so /stow was not typed; the session is still running" "the refusal must name the held input line"
+  assert_no_grep "send-keys" "$dir/tmux.log" "a refused stop --stow must type nothing over the draft"
+  assert_no_grep "kill-server" "$dir/tmux.log" "a refused stop --stow must not touch the server"
+  [ -e "$dir/tmux-running" ] || fail "a refused stop --stow must leave the session running"
+  pass "stop --stow still refuses a draft above a wrapped footer and types nothing over it"
 }
 
 test_stop_stow_refuses_with_work_in_flight_before_any_delivery() {
@@ -1767,6 +1803,8 @@ test_session_zsh_here_document_runs
 test_start_refuses_while_running
 test_stop_refuses_with_work_in_flight_and_stops_an_idle_session
 test_stop_stow_delivers_the_stow_then_stops
+test_stop_stow_reads_a_narrow_pane_footer_as_furniture
+test_stop_stow_refuses_a_draft_above_a_narrow_footer
 test_stop_stow_refuses_with_work_in_flight_before_any_delivery
 test_stop_stow_timeout_leaves_the_session_running
 test_stop_stow_refuses_when_the_stow_never_starts
