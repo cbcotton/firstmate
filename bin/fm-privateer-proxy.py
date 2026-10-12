@@ -50,6 +50,7 @@ if len(sys.argv) != 4:
 PORT_FILE, LOG, ALLOW_FILE = sys.argv[1], sys.argv[2], sys.argv[3]
 ALLOW = frozenset()
 ALLOW_SIG = None
+FAIL_SIG = None
 LOCK = threading.Lock()
 RELOAD_LOCK = threading.Lock()
 
@@ -57,7 +58,7 @@ RELOAD_LOCK = threading.Lock()
 def refresh_allow():
     """Swap in ALLOW_FILE's set when the file changed; keep the last good set
     when it cannot be read."""
-    global ALLOW, ALLOW_SIG
+    global ALLOW, ALLOW_SIG, FAIL_SIG
     try:
         st = os.stat(ALLOW_FILE)
         sig = (st.st_ino, st.st_size, st.st_mtime_ns)
@@ -72,12 +73,13 @@ def refresh_allow():
             with open(ALLOW_FILE) as f:
                 new = frozenset(l.strip().lower() for l in f if l.strip())
         except (OSError, UnicodeDecodeError) as e:
-            ALLOW_SIG = sig
-            record("reload-failed", "-", str(e))
+            if sig != FAIL_SIG:
+                FAIL_SIG = sig
+                record("reload-failed", "-", str(e))
             return
         old = ALLOW
-        first = ALLOW_SIG is None
-        ALLOW, ALLOW_SIG = new, sig
+        first = ALLOW_SIG is None and FAIL_SIG is None
+        ALLOW, ALLOW_SIG, FAIL_SIG = new, sig, None
         if not first:
             record("reload", "-", "+%d -%d" % (len(new - old), len(old - new)))
 

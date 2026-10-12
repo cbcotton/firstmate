@@ -953,7 +953,7 @@ test_proxy_reloads_its_allowlist() {
   rm -f "$dir/allow"
   assert_not_contains "$(proxy_request "$port" 'CONNECT two.example.test:443 HTTP/1.1')" "403" "a missing file must keep the last good set"
   assert_contains "$(proxy_request "$port" 'CONNECT one.example.test:443 HTTP/1.1')" "HTTP/1.1 403" "a missing file must not open the proxy up"
-  printf 'two.example.test:443\n' > "$dir/allow"
+  printf 'one.example.test:443\n' > "$dir/allow"
   chmod 000 "$dir/allow"
   if [ -r "$dir/allow" ]; then
     chmod 644 "$dir/allow"
@@ -961,6 +961,8 @@ test_proxy_reloads_its_allowlist() {
     assert_not_contains "$(proxy_request "$port" 'CONNECT two.example.test:443 HTTP/1.1')" "403" "an unreadable file must keep the last good set"
     assert_contains "$(proxy_request "$port" 'CONNECT one.example.test:443 HTTP/1.1')" "HTTP/1.1 403" "an unreadable file must not open the proxy up"
     chmod 644 "$dir/allow"
+    assert_not_contains "$(proxy_request "$port" 'CONNECT one.example.test:443 HTTP/1.1')" "403" "a file readable again must be applied"
+    assert_contains "$(proxy_request "$port" 'CONNECT two.example.test:443 HTTP/1.1')" "HTTP/1.1 403" "a file readable again must replace the last good set"
   fi
   kill "$pid" 2>/dev/null
   wait "$pid" 2>/dev/null
