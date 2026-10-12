@@ -10,8 +10,9 @@
 #
 # Usage:
 #   fm-helm.sh helm
-#   fm-helm.sh scout [--rule <n>|default] <project> <ask...>
-#   fm-helm.sh ship [--rule <n>|default] <project> <ask...>
+#   fm-helm.sh scout [--rule <n>|default] [<project>] <ask...>
+#   fm-helm.sh ship [--rule <n>|default] [<project>] <ask...>
+#   fm-helm.sh project
 #   fm-helm.sh queue
 #   fm-helm.sh sailors
 #   fm-helm.sh steer <task-id> <text...>
@@ -49,6 +50,16 @@
 # judges, so while the file declares rules a call without --rule is refused
 # before anything is written, listing each rule's condition and the call to
 # repeat with --rule.
+#
+# When config/active-project names a registered project with a clone (the
+# captain sets it outside the session with bin/fm-privateer.sh project), scout
+# and ship accept the ask without a project word and use that project, saying
+# so in the first output line; a first word that is itself a registered project
+# with a clone still wins. A value that is malformed is not used.
+#
+# project prints every registered project that has a clone, the active one
+# marked `*`, and the active project; it only reads. The session cannot write
+# config/, so switching is the captain's command outside it.
 #
 # queue prints the backlog summary of bin/fm-tasks-axi.sh without its hints;
 # sailors runs bin/fm-sailor.sh status --all; steer runs bin/fm-send.sh
@@ -93,7 +104,7 @@ DISPATCH="$CONFIG/crew-dispatch.json"
 END_LINE=FM_HELM_END_OF_ARGUMENTS
 AGAIN_LINE=FM_HELM_AGAIN
 TOKENS_LINE=FM_HELM_TOKENS
-VERBS='helm, scout, ship, queue, sailors, steer, land, wake'
+VERBS='helm, scout, ship, project, queue, sailors, steer, land, wake'
 SCOUT_SPEC="Investigate exactly what the captain's intent above asks, on this project, and write the findings to the report this brief names; change no project code, and note anything beyond the ask in the report as follow-up."
 SHIP_SPEC="Build exactly what the captain's intent above asks, on this project, with tests where the project has them; note anything beyond the ask in the done line as follow-up rather than adding it."
 
@@ -106,7 +117,7 @@ refuse() {
 misuse() {
   {
     echo "refused: $*"
-    echo "the calls: bin/fm-helm.sh helm | scout|ship [--rule <n>|default] <project> <ask...> | queue | sailors | steer <task-id> <text...> | land <task-id> | wake"
+    echo "the calls: bin/fm-helm.sh helm | scout|ship [--rule <n>|default] [<project>] <ask...> | project | queue | sailors | steer <task-id> <text...> | land <task-id> | wake"
   } >&2
   exit 2
 }
@@ -154,6 +165,7 @@ read_stdin_args() {
   tokens=${tokens//[!\$]/}
   [ "${#again}" -eq "${#tokens}" ] || refuse "$mangled"
   ARGS=()
+  ASK_FULL=
   text=$(trim "$text")
   while :; do
     case "$text" in
@@ -167,6 +179,7 @@ read_stdin_args() {
     esac
   done
   [ -n "$text" ] || return 0
+  ASK_FULL=$text
   word=${text%%[[:space:]]*}
   ARGS+=("$word")
   text=$(trim "${text#"$word"}")
@@ -191,6 +204,14 @@ check_project() {
     done
     refuse "'$1' is not a registered project with a clone under projects/; the projects here are: ${known:-none}; ask the captain which one"
   fi
+}
+
+# project_ready <name>: 0 when <name> is a registered project with a clone.
+project_ready() {
+  case "$1" in
+    '' | */* | .*) return 1 ;;
+  esac
+  "$SCRIPT_DIR/fm-project-mode.sh" --registered "$1" && [ -d "$PROJECTS/$1" ]
 }
 
 # again <kind> <project> <ask>: the same call with --rule left to fill in.
@@ -336,11 +357,18 @@ intake() {
     0* | *[!0-9]*) misuse "--rule takes a rule number from 1, or default, not '$RULE'" ;;
   esac
   [ "$#" -ge 1 ] || misuse "$kind needs a project and the ask"
-  project=$1
-  shift
-  ask=$(trim "$*")
-  [ -n "$ask" ] || misuse "$kind needs a project and the ask"
-  check_project "$project"
+  if [ -n "${1:-}" ] && ! project_ready "$1" &&
+    project=$(fm_privateer_active_project "$CONFIG" "$DATA" "$PROJECTS" "$SCRIPT_DIR"); then
+    ask=$(trim "${ASK_FULL:-$*}")
+    [ -n "$ask" ] || misuse "$kind needs the ask"
+    say "project: $project, the active project, because the ask names no project"
+  else
+    project=$1
+    shift
+    ask=$(trim "$*")
+    [ -n "$ask" ] || misuse "$kind needs a project and the ask"
+    check_project "$project"
+  fi
   choose_candidates "$kind" "$project" "$ask"
   [ "$kind" = scout ] || ship_posture "$project"
   title=$(title_of "$ask")
@@ -386,6 +414,7 @@ fm_privateer_refuse_outside "$FM_HOME" "$CONFIG"
 [ "$#" -ge 1 ] || misuse "no verb given; the verbs are $VERBS"
 VERB=$1
 shift
+ASK_FULL=
 if [ "${1:-}" = --stdin ]; then
   [ "$#" -eq 1 ] || misuse "--stdin takes the arguments on standard input, and nothing else"
   read_stdin_args
@@ -397,10 +426,14 @@ case "$VERB" in
     no_arguments helm "$#"
     "$SCRIPT_DIR/fm-session-start.sh"
     status=$?
-    say "front door: /scout <project> <ask>, /ship <project> <ask>, /queue, /sailors, /steer <task-id> <text>, /land <task-id>, /wake, /stow"
+    say "front door: /scout [<project>] <ask>, /ship [<project>] <ask>, /project, /queue, /sailors, /steer <task-id> <text>, /land <task-id>, /wake, /stow"
     exit "$status"
     ;;
   scout | ship) intake "$VERB" "$@" ;;
+  project)
+    no_arguments project "$#"
+    fm_privateer_projects_view "$CONFIG" "$DATA" "$PROJECTS" "$SCRIPT_DIR"
+    ;;
   queue)
     no_arguments queue "$#"
     "$SCRIPT_DIR/fm-tasks-axi.sh" | awk '/^(bin|description): / { next } /^help\[/ { exit } { print }'

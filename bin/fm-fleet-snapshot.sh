@@ -79,7 +79,8 @@
 #     probe and the line); line is its raw text. answering is true, false, or
 #     null when the line is unrecognized. Empty when the home declares no
 #     sailors. privateer: {active,first_mate,active_project} - active is true
-#     while config/privateer exists; the other two are null when unset.
+#     while config/privateer exists; the other two are null when unset, and
+#     active_project is also null when config/active-project is malformed.
 #   main_inventory: {valid,reason,orphan_in_flight[],unstructured_current_count} -
 #     main-home current-inventory checks shared with secondmate_home_summary_json
 #     (orphan structured in-flight ids with no state/<id>.meta, and unstructured
@@ -2043,7 +2044,7 @@ privateer_json() {
     active=true
     first_mate=$(fm_privateer_first_mate "$CONFIG")
   fi
-  [ ! -f "$CONFIG/active-project" ] || active_project=$(sed -n '1{s/^[[:space:]]*//;s/[[:space:]]*$//;p;}' "$CONFIG/active-project" 2>/dev/null || true)
+  active_project=$(fm_privateer_active_project "$CONFIG" "$DATA" "$PROJECTS" "$SCRIPT_DIR" 2>/dev/null) || active_project=''
   jq -n --argjson active "$active" --arg fm "$first_mate" --arg ap "$active_project" \
     '{active:$active, first_mate:(if $fm == "" then null else $fm end), active_project:(if $ap == "" then null else $ap end)}'
 }

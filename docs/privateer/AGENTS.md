@@ -49,7 +49,8 @@ The watcher arms itself after each of your turns; never arm it yourself.
 Follow these steps in order for every new ask from the captain.
 
 1. **Project.** Run `ls "$FM_HOME/projects"` and use the one project the ask names.
-   When the ask names none, use the digest's `active project`, if it shows one.
+   When the ask names none, use the digest's `active project`, if it shows one, and name it in your reply.
+   Only the captain switches it, outside this session, with `bin/fm-privateer.sh project <name>`; `/project` shows it.
    If none fits or several fit, ask the captain one question and stop.
    Never use a folder outside `$FM_HOME/projects/`.
 2. **Answer or delegate.** If a report in `$FM_HOME/data/*/report.md` already answers the ask, answer from it and stop.

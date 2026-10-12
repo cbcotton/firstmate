@@ -1040,10 +1040,11 @@ if fm_privateer_home "$CONFIG"; then
   if [ -x "$SCRIPT_DIR/fm-helm.sh" ]; then
     printf 'front door: bin/fm-helm.sh helm\n'
   fi
-  if [ -f "$CONFIG/active-project" ]; then
-    active_project=$(sed -n '1{s/^[[:space:]]*//;s/[[:space:]]*$//;p;}' "$CONFIG/active-project" 2>/dev/null || true)
-    [ -z "$active_project" ] || printf 'active project: %s\n' "$active_project"
-  fi
+  active_project=$(fm_privateer_active_project "$CONFIG" "$DATA" "${FM_PROJECTS_OVERRIDE:-$FM_HOME/projects}" "$SCRIPT_DIR") && ap_rc=0 || ap_rc=$?
+  case "$ap_rc" in
+    0) printf 'active project: %s\n' "$active_project" ;;
+    1) printf 'active project: not used - %s; the captain sets it outside the session with bin/fm-privateer.sh project <name>\n' "$active_project" ;;
+  esac
 fi
 
 # --- 9. context digest -----------------------------------------------------
