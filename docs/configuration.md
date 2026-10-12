@@ -954,7 +954,7 @@ Version 1 ships local-only because the shared no-mistakes daemon's agent resolve
 
 ### How a Privateer session runs
 
-Start the first mate with `FM_HOME=<home> bin/fm-privateer.sh start`, attach a terminal with `attach`, and end it with `stop`, which refuses while any task record exists so a worker's copy is never orphaned.
+Start the first mate with `FM_HOME=<home> bin/fm-privateer.sh start`, attach a terminal with `attach`, change the egress allowlist with `reload`, and end it with `stop`, which refuses while any task record exists so a worker's copy is never orphaned.
 `stop --stow`, for a caller such as a Dock app, applies the same refusals, then types `/stow` into the first mate's own pane and waits until that turn has been seen to start and has finished before it stops anything; a stow that cannot be delivered, is never seen to start, or does not finish in time refuses and leaves the session running.
 The script's header owns the wait and its bound.
 The launcher starts a dedicated tmux server for the home and runs the OpenCode primary in the helm, described below, from an empty environment plus a fixed allowlist of home, path, user, shell, terminal (including `TERM`, `TERMINFO`, and `TERMINFO_DIRS`, which only locate terminal descriptions), locale, and temp variables, `FM_HOME`, OpenCode's directories, and OpenCode's inline configuration.
@@ -973,6 +973,10 @@ The rulebook is written for a local model, small and imperative, with exact comm
 Every connection leaves through the launcher's egress proxy, `bin/fm-privateer-proxy.py`, which `start` runs as its own process on a loopback port, outside the session and outside its sandbox.
 It allows exactly the endpoint of every sailor in the sailor map and the forge origin of the checkout and of every clone under `projects/`, each by host and port, refuses everything else, and logs every allowed and refused destination to `state/privateer/egress/log`.
 `start` refuses, and starts nothing, if the proxy cannot bind, and `stop` stops it after the tmux server.
+`start` writes the allowed destinations to a file in the egress directory, which the session cannot write, and the proxy re-reads that file when it changes.
+`bin/fm-privateer.sh reload` rewrites it from the current `config/crew-dispatch.json` and forge origins without restarting the session, so a new sailor is reachable at once and a removed one is refused from then on.
+It runs outside the session, refuses while the proxy is not running, prints what it added and removed, and the proxy logs each reload.
+A file the proxy cannot read leaves the last good list in force, never an open proxy.
 When the session has already ended, for example because the first mate's window closed, `stop` still stops the watcher and the proxy left behind and says so, so no proxy outlives its session.
 The first mate and every worker receive `HTTP_PROXY`, `HTTPS_PROXY`, and a `GIT_SSH_COMMAND` that tunnels Git over SSH through the proxy.
 
@@ -992,7 +996,7 @@ The home's own scripts act on it only from inside its session.
 `bin/fm-spawn.sh`, `bin/fm-tasks-axi.sh`, `bin/fm-brief.sh`, `bin/fm-send.sh`, `bin/fm-control.sh`, `bin/fm-captain-hold.sh`, `bin/fm-permission-grant.sh`, `bin/fm-merge-local.sh`, `bin/fm-teardown.sh`, and `bin/fm-helm.sh` each refuse from anywhere else before reading or writing anything, with exit status 2 and `this is a sealed Privateer home; attach with bin/fm-privateer.sh attach, and never drive its session from outside`.
 The refusal names no socket, port, or path, so a session outside the quarantine, such as the captain's own OpenCode opened in the home's directory, can neither file backlog rows, write briefs, steer, stop, or spawn workers, record holds or grants, land work, or clean up in the home, nor learn where the session is.
 A spawn inside the session is also refused while its egress proxy is not running, so a worker can never land in an unsandboxed tmux server.
-The captain's own commands stay usable outside the session: `bin/fm-privateer.sh` `check`, `start`, `stop`, and `attach`, the [named sailor](#crew-dispatch-profiles-configcrew-dispatchjson) commands of `bin/fm-sailor.sh`, and `bin/fm-update.sh`.
+The captain's own commands stay usable outside the session: `bin/fm-privateer.sh` `check`, `start`, `stop`, `reload`, and `attach`, the [named sailor](#crew-dispatch-profiles-configcrew-dispatchjson) commands of `bin/fm-sailor.sh`, and `bin/fm-update.sh`.
 `bin/fm-privateer-lib.sh` owns the inside-session test and the refusal.
 
 Version 1 has these remaining limits:
