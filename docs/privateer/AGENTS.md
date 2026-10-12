@@ -58,7 +58,7 @@ Follow these steps in order for every new ask from the captain.
    A scout writes a report: it investigates, diagnoses, plans, or reviews.
    A report is not permission to change code; only the captain's ask is.
    For a bug, load the `diagnostic-reasoning` skill before you start the work.
-4. **Start it through the front door.** When the captain typed `/scout <project> <ask>` or `/ship <project> <ask>`, the front door already ran; read its report.
+4. **Start it through the front door.** When the captain typed `/scout [<project>] <ask>` or `/ship [<project>] <ask>`, the front door already ran; read its report.
    Otherwise run `bin/fm-helm.sh scout <project> '<ask>'` or `bin/fm-helm.sh ship <project> '<ask>'`, with the captain's own words as the ask.
    It files the backlog row, writes the instructions, picks the sailor, and starts the worker; never do those steps by hand.
 5. **Answer its report.** When it lists dispatch rules, take the first rule whose condition fits the work and run the call it shows with `--rule <n>`, or `--rule default` when none fits.
