@@ -35,6 +35,12 @@ Backend-specific signals are documented in `../../../docs/tmux-backend.md` and `
 Regression coverage is `../../../tests/fm-tmux-submit-busy.test.sh`, `../../../tests/fm-composer-lib.test.sh`, and `../../../tests/fm-backend-herdr.test.sh`.
 The live Herdr guard is `FM_HERDR_SUBMIT_CONFIRM_LIVE=1 ../../../tests/fm-herdr-submit-confirm-live-e2e.test.sh`.
 
+## Narrow-pane composer
+
+A pane narrower than OpenCode 1.18.33's mode/model footer wraps that footer, and the fresh-session idle hint, across extra left-bar rows inside the composer instead of truncating them.
+The shared classifier in `../../../bin/fm-composer-lib.sh` reads both as furniture, so an empty composer in a narrow pane still reads `empty`; a refusal that names pending text there is a real draft or an unrecognized shape, not the width.
+[`runtime-backends.md`](../../../../../docs/verification/runtime-backends.md#2026-10-12-opencode-11833-narrow-pane-footer-through-tmux) records the evidence and its live refresh.
+
 ## Primary integration
 
 The primary integration was verified on 2026-07-08 with OpenCode 1.17.6.
