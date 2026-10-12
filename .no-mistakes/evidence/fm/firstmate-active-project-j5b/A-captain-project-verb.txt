@@ -1,0 +1,43 @@
+$ bin/fm-privateer.sh project
+  app
+  other
+  ui
+active project: none
+[exit 0]
+$ bin/fm-privateer.sh project app
+privateer: the active project is now app
+[exit 0]
+config/active-project: app
+0
+$ bin/fm-privateer.sh project
+* app
+  other
+  ui
+active project: app
+[exit 0]
+$ bin/fm-privateer.sh project nosuch
+fm-privateer: refused: 'nosuch' is not registered in data/projects.md
+[exit 1]
+$ bin/fm-privateer.sh project ghost
+fm-privateer: refused: 'ghost' has no clone under projects/
+[exit 1]
+$ bin/fm-privateer.sh project scratch
+fm-privateer: refused: 'scratch' is not registered in data/projects.md
+[exit 1]
+$ bin/fm-privateer.sh project ../app
+fm-privateer: refused: '../app' is not a project name; give the name of a project under projects/
+[exit 1]
+$ bin/fm-privateer.sh project --bogus
+fm-privateer: refused: '--bogus' is not a project name; give the name of a project under projects/
+[exit 1]
+$ bin/fm-privateer.sh project a b
+fm-privateer: refused: 'a b' is not a project name; give the name of a project under projects/
+[exit 1]
+config/active-project after refusals: app
+$ bin/fm-privateer.sh project --clear
+privateer: no active project
+[exit 0]
+ls: config/active-project: No such file or directory
+$ bin/fm-privateer.sh project app
+privateer: the active project is now app
+[exit 0]

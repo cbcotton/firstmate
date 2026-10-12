@@ -1,0 +1,22 @@
+TMUX=/private/tmp/fml.GW8mP3/tmux-501/fm-privateer-3be78337aad8,62965,0
+$ bin/fm-privateer.sh inside
+[exit 0]
+### /project view inside the session
+$ bin/fm-helm.sh project
+* app
+  other
+  ui
+active project: app
+[exit 0]
+### setting/clearing from inside is refused
+$ bin/fm-privateer.sh project other
+fm-privateer: refused: the session cannot write config/, so the active project is set by the captain outside it: run bin/fm-privateer.sh project <name> from a terminal outside the session
+[exit 1]
+$ bin/fm-privateer.sh project --clear
+fm-privateer: refused: the session cannot write config/, so the active project is set by the captain outside it: run bin/fm-privateer.sh project <name> from a terminal outside the session
+[exit 1]
+$ bin/fm-helm.sh project other
+refused: project takes no arguments
+the calls: bin/fm-helm.sh helm | scout|ship [--rule <n>|default] [<project>] <ask...> | project | queue | sailors | steer <task-id> <text...> | land <task-id> | wake
+[exit 2]
+config/active-project: app

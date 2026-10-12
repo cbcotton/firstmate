@@ -1,0 +1,17 @@
+### fleet snapshot .privateer (active-project=app)
+{"active":true,"first_mate":"tiller/coder","active_project":"app"}
+### fleet snapshot .privateer (malformed two-line value)
+{"active":true,"first_mate":"tiller/coder","active_project":null}
+### main home (config/privateer removed): the main home may never set it
+$ bin/fm-privateer.sh project 
+fm-privateer: refused: config/privateer is absent; the active project is set only in a Privateer home
+[exit 1]
+$ bin/fm-privateer.sh project app
+fm-privateer: refused: config/privateer is absent; the active project is set only in a Privateer home
+[exit 1]
+$ bin/fm-privateer.sh project --clear
+fm-privateer: refused: config/privateer is absent; the active project is set only in a Privateer home
+[exit 1]
+ls: config/active-project: No such file or directory
+$ bin/fm-session-start.sh | grep 'active project'  (main home, file hand-written)
+0

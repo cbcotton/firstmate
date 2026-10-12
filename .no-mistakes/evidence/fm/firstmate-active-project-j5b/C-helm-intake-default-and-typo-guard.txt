@@ -1,0 +1,116 @@
+active: app
+
+$ bin/fm-helm.sh ship add a flag
+project: app, the active project, because the ask names no project
+filed: add-a-flag-33 - add a flag
+instructions: data/add-a-flag-33/brief.md, with the ask as the captain's intent
+queued: no sailor can take add-a-flag-33 now, so it waits in the queue with its instructions written:
+  tiller/coder: sailor tiller is not answering at http://127.0.0.1:9/v1
+start it later with: bin/fm-spawn.sh add-a-flag-33 app --mode local-only --yolo off --branch-prefix pv/ --harness opencode --sailor <sailor> --model <model>
+for the first of these that answers: tiller/coder
+[exit 0; backlog rows 0 -> 1]
+
+$ bin/fm-helm.sh scout investigate why the login page is slow
+project: app, the active project, because the ask names no project
+filed: investigate-why-the-login-page-is-slow-be - investigate why the login page is slow
+instructions: data/investigate-why-the-login-page-is-slow-be/brief.md, with the ask as the captain's intent
+queued: no sailor can take investigate-why-the-login-page-is-slow-be now, so it waits in the queue with its instructions written:
+  tiller/coder: sailor tiller is not answering at http://127.0.0.1:9/v1
+start it later with: bin/fm-spawn.sh investigate-why-the-login-page-is-slow-be app --scout --harness opencode --sailor <sailor> --model <model>
+for the first of these that answers: tiller/coder
+[exit 0; backlog rows 1 -> 2]
+
+$ bin/fm-helm.sh ship other add a health check
+filed: add-a-health-check-8c - add a health check
+instructions: data/add-a-health-check-8c/brief.md, with the ask as the captain's intent
+queued: no sailor can take add-a-health-check-8c now, so it waits in the queue with its instructions written:
+  tiller/coder: sailor tiller is not answering at http://127.0.0.1:9/v1
+start it later with: bin/fm-spawn.sh add-a-health-check-8c other --mode local-only --yolo off --branch-prefix pv/ --harness opencode --sailor <sailor> --model <model>
+for the first of these that answers: tiller/coder
+[exit 0; backlog rows 2 -> 3]
+
+$ bin/fm-helm.sh ship otehr add a flag
+refused: 'otehr' is not a registered project with a clone under projects/; the projects here are: app, other, scratch, ui; ask the captain which one
+did you mean other?
+[exit 1; backlog rows 3 -> 3]
+
+$ bin/fm-helm.sh ship scratch fix it
+refused: 'scratch' is not a registered project with a clone under projects/; the projects here are: app, other, scratch, ui; ask the captain which one
+[exit 1; backlog rows 3 -> 3]
+
+$ bin/fm-helm.sh ship ghost do the thing
+refused: 'ghost' is not a registered project with a clone under projects/; the projects here are: app, other, scratch, ui; ask the captain which one
+[exit 1; backlog rows 3 -> 3]
+
+$ bin/fm-helm.sh ship fix the button colour
+project: app, the active project, because the ask names no project
+filed: fix-the-button-colour-6e - fix the button colour
+instructions: data/fix-the-button-colour-6e/brief.md, with the ask as the captain's intent
+queued: no sailor can take fix-the-button-colour-6e now, so it waits in the queue with its instructions written:
+  tiller/coder: sailor tiller is not answering at http://127.0.0.1:9/v1
+start it later with: bin/fm-spawn.sh fix-the-button-colour-6e app --mode local-only --yolo off --branch-prefix pv/ --harness opencode --sailor <sailor> --model <model>
+for the first of these that answers: tiller/coder
+[exit 0; backlog rows 3 -> 4]
+
+$ bin/fm-helm.sh ship ui fix the button colour
+filed: fix-the-button-colour-c6 - fix the button colour
+instructions: data/fix-the-button-colour-c6/brief.md, with the ask as the captain's intent
+queued: no sailor can take fix-the-button-colour-c6 now, so it waits in the queue with its instructions written:
+  tiller/coder: sailor tiller is not answering at http://127.0.0.1:9/v1
+start it later with: bin/fm-spawn.sh fix-the-button-colour-c6 ui --mode local-only --yolo off --branch-prefix pv/ --harness opencode --sailor <sailor> --model <model>
+for the first of these that answers: tiller/coder
+[exit 0; backlog rows 4 -> 5]
+
+$ bin/fm-helm.sh ship ap add a thing
+project: app, the active project, because the ask names no project
+filed: ap-add-a-thing-83 - ap add a thing
+instructions: data/ap-add-a-thing-83/brief.md, with the ask as the captain's intent
+queued: no sailor can take ap-add-a-thing-83 now, so it waits in the queue with its instructions written:
+  tiller/coder: sailor tiller is not answering at http://127.0.0.1:9/v1
+start it later with: bin/fm-spawn.sh ap-add-a-thing-83 app --mode local-only --yolo off --branch-prefix pv/ --harness opencode --sailor <sailor> --model <model>
+for the first of these that answers: tiller/coder
+[exit 0; backlog rows 5 -> 6]
+
+### --stdin form, as the /ship slash command passes it
+$ bin/fm-helm.sh ship --stdin  (words: tidy up the README wording)
+project: app, the active project, because the ask names no project
+filed: tidy-up-the-readme-wording-ee - tidy up the README wording
+instructions: data/tidy-up-the-readme-wording-ee/brief.md, with the ask as the captain's intent
+queued: no sailor can take tidy-up-the-readme-wording-ee now, so it waits in the queue with its instructions written:
+  tiller/coder: sailor tiller is not answering at http://127.0.0.1:9/v1
+start it later with: bin/fm-spawn.sh tidy-up-the-readme-wording-ee app --mode local-only --yolo off --branch-prefix pv/ --harness opencode --sailor <sailor> --model <model>
+[backlog rows 6 -> 7]
+
+### malformed active project is not used
+
+$ bin/fm-helm.sh ship add a flag
+refused: 'add' is not a registered project with a clone under projects/; the projects here are: app, other, scratch, ui; ask the captain which one
+[exit 1; backlog rows 7 -> 7]
+
+### no active project
+
+$ bin/fm-helm.sh ship add a flag
+refused: 'add' is not a registered project with a clone under projects/; the projects here are: app, other, scratch, ui; ask the captain which one
+[exit 1; backlog rows 7 -> 7]
+
+### filed briefs: task -> project
+add-a-flag-33: Build exactly what the captain's intent above asks, on this project, with tests where the project has them; note anything beyond the ask in the done line as follow-up rather than adding it.
+add-a-health-check-8c: Build exactly what the captain's intent above asks, on this project, with tests where the project has them; note anything beyond the ask in the done line as follow-up rather than adding it.
+ap-add-a-thing-83: Build exactly what the captain's intent above asks, on this project, with tests where the project has them; note anything beyond the ask in the done line as follow-up rather than adding it.
+fix-the-button-colour-6e: Build exactly what the captain's intent above asks, on this project, with tests where the project has them; note anything beyond the ask in the done line as follow-up rather than adding it.
+fix-the-button-colour-c6: Build exactly what the captain's intent above asks, on this project, with tests where the project has them; note anything beyond the ask in the done line as follow-up rather than adding it.
+investigate-why-the-login-page-is-slow-be: Investigate exactly what the captain's intent above asks, on this project, and write the findings to the report this brief names; change no project code, and note anything beyond the ask in the report as follow-up.
+tidy-up-the-readme-wording-ee: Build exactly what the captain's intent above asks, on this project, with tests where the project has them; note anything beyond the ask in the done line as follow-up rather than adding it.
+
+## In flight
+
+## Queued
+- [ ] add-a-flag-33 - add a flag (repo: app) (kind: ship) (since 2026-10-12)
+
+- [ ] investigate-why-the-login-page-is-slow-be - investigate why the login page is slow (repo: app) (kind: scout) (since 2026-10-12)
+- [ ] add-a-health-check-8c - add a health check (repo: other) (kind: ship) (since 2026-10-12)
+- [ ] fix-the-button-colour-6e - fix the button colour (repo: app) (kind: ship) (since 2026-10-12)
+- [ ] fix-the-button-colour-c6 - fix the button colour (repo: ui) (kind: ship) (since 2026-10-12)
+- [ ] ap-add-a-thing-83 - ap add a thing (repo: app) (kind: ship) (since 2026-10-12)
+- [ ] tidy-up-the-readme-wording-ee - tidy up the README wording (repo: app) (kind: ship) (since 2026-10-12)
+## Done

@@ -1,0 +1,61 @@
+--- config/active-project = app
+PRIVATEER
+front door: bin/fm-helm.sh helm
+active project: app
+[session-start exit 0]
+--- config/active-project = $'app\nother'
+PRIVATEER
+front door: bin/fm-helm.sh helm
+active project: not used - config/active-project must hold one project name on one line, not 2 lines; the captain sets it outside the session with bin/fm-privateer.sh project <name>
+[session-start exit 0]
+--- config/active-project = nosuch
+PRIVATEER
+front door: bin/fm-helm.sh helm
+active project: not used - config/active-project names 'nosuch', which data/projects.md does not register; the captain sets it outside the session with bin/fm-privateer.sh project <name>
+[session-start exit 0]
+--- config/active-project = ../app
+PRIVATEER
+front door: bin/fm-helm.sh helm
+active project: not used - config/active-project holds '../app', which is not a project name; the captain sets it outside the session with bin/fm-privateer.sh project <name>
+[session-start exit 0]
+--- config/active-project = ghost
+PRIVATEER
+front door: bin/fm-helm.sh helm
+active project: not used - config/active-project names 'ghost', which has no clone under projects/; the captain sets it outside the session with bin/fm-privateer.sh project <name>
+[session-start exit 0]
+--- config/active-project = scratch
+PRIVATEER
+front door: bin/fm-helm.sh helm
+active project: not used - config/active-project names 'scratch', which data/projects.md does not register; the captain sets it outside the session with bin/fm-privateer.sh project <name>
+[session-start exit 0]
+--- config/active-project = ''
+PRIVATEER
+front door: bin/fm-helm.sh helm
+active project: not used - config/active-project must hold one project name on one line, not 0 lines; the captain sets it outside the session with bin/fm-privateer.sh project <name>
+[session-start exit 0]
+--- config/active-project = \<absent\>
+PRIVATEER
+front door: bin/fm-helm.sh helm
+[session-start exit 0]
+--- config/active-project = \ \ other\ \ 
+PRIVATEER
+front door: bin/fm-helm.sh helm
+active project: other
+[session-start exit 0]
+--- config/active-project = app
+PRIVATEER
+front door: bin/fm-helm.sh helm
+active project: app
+[session-start exit 0]
+### full PRIVATEER section with app active
+PRIVATEER
+================================================================================
+first mate: tiller/coder
+delivery: local-only (a ready branch waits for the captain; nothing is pushed)
+sailors:
+  tiller live not-answering endpoint=http://127.0.0.1:9/v1 tasks=0/1
+front door: bin/fm-helm.sh helm
+active project: app
+
+================================================================================
+CONTEXT

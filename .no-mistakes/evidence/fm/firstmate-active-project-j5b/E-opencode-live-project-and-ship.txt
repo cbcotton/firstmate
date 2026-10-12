@@ -1,0 +1,75 @@
+model pid 44065
+serve url: http://127.0.0.1:4096
+===== captain types: /project
+[opencode run --command project  exit 0]
+--- what the model received for /project :
+* app
+  other
+  ui
+active project: app
+
+
+That is this home's project list, shown for the captain's /project, with the active project marked.
+Tell the captain in a plain line or two which project is active, or that none is.
+Only the captain switches it, outside this session, with: bin/fm-privateer.sh project <name>
+When the captain asks you to switch it, give that command and do not try to change it yourself.
+* app
+  other
+  ui
+active project: app
+
+
+That is this home's project list, shown for the captain's /project, with the active project marked.
+Tell the captain in a plain line or two which project is active, or that none is.
+Only the captain switches it, outside this session, with: bin/fm-privateer.sh project <name>
+When the captain asks you to switch it, give that command and do not try to change it yourself.
+
+===== captain types: /ship add a flag
+[opencode run --command ship add a flag exit 0]
+--- what the model received for /ship add a flag:
+project: app, the active project, because the ask names no project
+filed: add-a-flag-89 - add a flag
+instructions: data/add-a-flag-89/brief.md, with the ask as the captain's intent
+queued: no sailor can take add-a-flag-89 now, so it waits in the queue with its instructions written:
+  tiller/coder: sailor tiller is not answering at http://127.0.0.1:9/v1
+start it later with: bin/fm-spawn.sh add-a-flag-89 app --mode local-only --yolo off --branch-prefix pv/ --harness opencode --sailor <sailor> --model <model>
+for the first of these that answers: tiller/coder
+
+
+That is the front door's own report on the captain's /ship command, and every step it names is already done, so repeat none of them by hand.
+Tell the captain in one or two plain lines what started, what waits in the queue and why, or what was refused and what the captain needs to decide.
+When it asks for a dispatch rule, choose the rule by judgment and run the call it shows.
+project: app, the active project, because the ask names no project
+filed: add-a-flag-89 - add a flag
+instructions: data/add-a-flag-89/brief.md, with the ask as the captain's intent
+queued: no sailor can take add-a-flag-89 now, so it waits in the queue with its instructions written:
+  tiller/coder: sailor tiller is not answering at http://127.0.0.1:9/v1
+start it later with: bin/fm-spawn.sh add-a-flag-89 app --mode local-only --yolo off --branch-prefix pv/ --harness opencode --sailor <sailor> --model <model>
+for the first of these that answers: tiller/coder
+
+
+That is the front door's own report on the captain's /ship command, and every step it names is already done, so repeat none of them by hand.
+Tell the captain in one or two plain lines what started, what waits in the queue and why, or what was refused and what the captain needs to decide.
+When it asks for a dispatch rule, choose the rule by judgment and run the call it shows.
+backlog rows 7 -> 8
+- [ ] add-a-flag-89 - add a flag (repo: app) (kind: ship) (since 2026-10-12)
+
+===== captain types: /ship otehr add a flag
+[opencode run --command ship otehr add a flag exit 0]
+--- what the model received for /ship otehr add a flag:
+refused: 'otehr' is not a registered project with a clone under projects/; the projects here are: app, other, scratch, ui; ask the captain which one
+did you mean other?
+
+
+That is the front door's own report on the captain's /ship command, and every step it names is already done, so repeat none of them by hand.
+Tell the captain in one or two plain lines what started, what waits in the queue and why, or what was refused and what the captain needs to decide.
+When it asks for a dispatch rule, choose the rule by judgment and run the call it shows.
+refused: 'otehr' is not a registered project with a clone under projects/; the projects here are: app, other, scratch, ui; ask the captain which one
+did you mean other?
+
+
+That is the front door's own report on the captain's /ship command, and every step it names is already done, so repeat none of them by hand.
+Tell the captain in one or two plain lines what started, what waits in the queue and why, or what was refused and what the captain needs to decide.
+When it asks for a dispatch rule, choose the rule by judgment and run the call it shows.
+backlog rows 8 -> 8
+opencode 1.18.33
