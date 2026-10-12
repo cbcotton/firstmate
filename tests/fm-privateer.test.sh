@@ -982,6 +982,130 @@ test_stop_refuses_with_work_in_flight_and_stops_an_idle_session() {
   pass "stop refuses while task records exist and stops the idle session otherwise"
 }
 
+# make_stow_pane <case-dir>: puts an OpenCode first mate's pane behind the
+# launcher's fake tmux. capture-pane shows its screen: the idle composer, the
+# typed text while <case-dir>/pane-typed holds some, or the busy footer while a
+# turn runs; display-message gives the cursor on the composer row. send-keys
+# types into it, and Enter submits the typed text, appends it to
+# <case-dir>/pane-submitted, and starts a turn that reads busy for the next
+# <case-dir>/pane-turn-reads captures (6 by default), or for good when
+# <case-dir>/pane-hold exists. Every call is still logged to tmux.log.
+make_stow_pane() {
+  local dir=$1
+  mv "$dir/fakebin/tmux" "$dir/fakebin/tmux-base"
+  cat > "$dir/fakebin/tmux" <<SH
+#!/usr/bin/env bash
+set -u
+d='$dir'
+all=("\$@")
+[ "\${1:-}" != -L ] || shift 2
+screen() {  # <composer row>
+  printf '  ▣ Build · tiller · 3.4s\n\n  ┃\n  ┃  %s\n  ┃\n  ┃  Build · tiller coder\n  ╹▀▀▀▀▀▀▀▀\n' "\$1"
+}
+case "\${1:-}" in
+  capture-pane)
+    if [ -s "\$d/pane-typed" ]; then
+      screen "\$(cat "\$d/pane-typed")"
+    elif [ -e "\$d/pane-hold-on" ]; then
+      screen ''
+      printf '   ⬝⬝⬝■  esc interrupt\n'
+    elif [ "\$(cat "\$d/pane-turn" 2>/dev/null || echo 0)" -gt 0 ]; then
+      echo \$((\$(cat "\$d/pane-turn") - 1)) > "\$d/pane-turn"
+      screen ''
+      printf '   ⬝⬝⬝■  esc interrupt\n'
+    else
+      screen 'Ask anything… "Fix a TODO in the codebase"'
+    fi
+    ;;
+  display-message)
+    case "\$*" in *cursor_y*) echo 3 ;; esac
+    ;;
+  send-keys)
+    printf '%s\n' "\${all[*]}" >> "\$d/tmux.log"
+    if [ "\$4" = -l ]; then
+      printf '%s' "\$5" >> "\$d/pane-typed"
+    elif [ "\$4" = Enter ] && [ -s "\$d/pane-typed" ]; then
+      cat "\$d/pane-typed" >> "\$d/pane-submitted"
+      echo >> "\$d/pane-submitted"
+      rm "\$d/pane-typed"
+      cat "\$d/pane-turn-reads" 2>/dev/null > "\$d/pane-turn" || echo 6 > "\$d/pane-turn"
+      [ -s "\$d/pane-turn" ] || echo 6 > "\$d/pane-turn"
+      [ ! -e "\$d/pane-hold" ] || : > "\$d/pane-hold-on"
+    fi
+    ;;
+  *) exec "\$d/fakebin/tmux-base" "\${all[@]}" ;;
+esac
+SH
+  chmod +x "$dir/fakebin/tmux"
+}
+
+# stow_case <name>: a Privateer home whose session runs on the fake pane;
+# prints the case dir, with the home at <case-dir>/home's path in
+# <case-dir>/home-path.
+stow_case() {
+  local dir home
+  dir="$TMP_ROOT/$1"
+  home=$(make_home "$1")
+  make_checkout "$dir/root"
+  make_launcher_fakebin "$dir" >/dev/null
+  make_stub_primary "$dir" >/dev/null
+  make_stow_pane "$dir"
+  : > "$dir/tmux-running"
+  printf '%s\n' "$home" > "$dir/home-path"
+  printf '%s\n' "$dir"
+}
+
+run_stow() {  # <case-dir>: stop --stow with short waits
+  FM_PRIVATEER_STOW_WAIT=3 FM_PRIVATEER_STOW_POLL=0.1 \
+    run_launcher "$1" "$(cat "$1/home-path")" "$1/root" stop --stow
+}
+
+test_stop_stow_delivers_the_stow_then_stops() {
+  local dir out status
+  dir=$(stow_case stow-delivered)
+  out=$(run_stow "$dir")
+  status=$?
+  expect_code 0 "$status" "stop --stow must stow and stop an idle session: $out"
+  [ "$(cat "$dir/pane-submitted" 2>/dev/null)" = /stow ] || fail "the first mate must receive exactly /stow once, got: $(cat "$dir/pane-submitted" 2>/dev/null)"
+  assert_contains "$out" "privateer: the first mate stowed; stopped session privateer" "stop --stow must report the stow and the stop"
+  assert_not_contains "$out" "socket" "stop --stow must name no socket"
+  assert_not_contains "$out" "127.0.0.1" "stop --stow must name no port"
+  [ "$(cat "$dir/pane-turn")" = 0 ] || fail "the stop must wait until the stow turn has finished"
+  awk '/send-keys .*Enter/ { e = NR } /kill-server/ { k = NR } END { exit !(e && k && e < k) }' "$dir/tmux.log" ||
+    fail "the stow must be delivered before the server is stopped:"$'\n'"$(cat "$dir/tmux.log")"
+  assert_grep "send-keys -t privateer:firstmate -l /stow" "$dir/tmux.log" "the stow must be typed into the first mate's own pane"
+  [ ! -e "$dir/tmux-running" ] || fail "stop --stow must end the session after the stow"
+  pass "stop --stow types /stow into the first mate's pane, waits for that turn to finish, and only then stops the session, naming no socket or port"
+}
+
+test_stop_stow_refuses_with_work_in_flight_before_any_delivery() {
+  local dir out status
+  dir=$(stow_case stow-in-flight)
+  printf 'harness=opencode\nkind=ship\n' > "$(cat "$dir/home-path")/state/task-a1.meta"
+  out=$(run_stow "$dir")
+  status=$?
+  expect_code 1 "$status" "stop --stow must refuse with work in flight"
+  assert_contains "$out" "work is in flight (task-a1)" "the refusal must name the task in flight"
+  assert_no_grep "send-keys" "$dir/tmux.log" "a refused stop --stow must deliver nothing"
+  assert_no_grep "kill-server" "$dir/tmux.log" "a refused stop --stow must not touch the server"
+  [ -e "$dir/tmux-running" ] || fail "a refused stop --stow must leave the session running"
+  pass "stop --stow refuses while work is in flight before delivering anything"
+}
+
+test_stop_stow_timeout_leaves_the_session_running() {
+  local dir out status
+  dir=$(stow_case stow-timeout)
+  : > "$dir/pane-hold"
+  out=$(run_stow "$dir")
+  status=$?
+  expect_code 1 "$status" "a stow that does not finish must refuse"
+  assert_contains "$out" "the first mate's /stow did not finish within 3s; the session is still running" "the refusal must say the stow did not finish"
+  [ "$(cat "$dir/pane-submitted" 2>/dev/null)" = /stow ] || fail "the stow must have been delivered before the wait timed out"
+  assert_no_grep "kill-server" "$dir/tmux.log" "a timed-out stow must not stop the server"
+  [ -e "$dir/tmux-running" ] || fail "a timed-out stow must leave the session running"
+  pass "stop --stow refuses with exit 1 and leaves the session running when the stow turn does not finish in time"
+}
+
 test_stop_cleans_up_after_a_session_that_ended() {
   local dir home root out status port
   dir="$TMP_ROOT/stop-ended"
@@ -1626,6 +1750,9 @@ test_session_first_mate_owns_the_lock_and_a_plain_shell_does_not
 test_session_zsh_here_document_runs
 test_start_refuses_while_running
 test_stop_refuses_with_work_in_flight_and_stops_an_idle_session
+test_stop_stow_delivers_the_stow_then_stops
+test_stop_stow_refuses_with_work_in_flight_before_any_delivery
+test_stop_stow_timeout_leaves_the_session_running
 test_stop_cleans_up_after_a_session_that_ended
 test_attach_refuses_without_a_session
 test_spawn_refuses_a_claude_harness
