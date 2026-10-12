@@ -1007,6 +1007,7 @@ Version 1 has these remaining limits:
 - The per-task temp roots under `/tmp/fm-`, the user's own temporary directory (`$TMPDIR`), and the flat here-document files stock macOS Bash writes directly in `/var/tmp` as `sh-thd*` are namespaces shared by every home on the machine.
 - Clones under `projects/` are added, moved, and removed from outside the session, and a worktree the session creates in its own pool is meant for use only inside it.
 - `start` finds the linked worktrees and submodule git dirs that exist when it runs, so for one added from outside while the session runs, only its Git config and hooks, and the `worktrees` and `modules` entries of the checkout's or clone's git dir with the entries directly in that `modules` directory, are covered until the next start.
+- A `commondir` file written into the top-level git dir of the checkout or of a clone, or into a submodule's git dir, still points Git at the config and hooks of another directory; that is a plain write rather than a rename, and denying it is follow-up work.
 - OpenCode also loads plugins and configuration from its own directories under `state/privateer/opencode/`, which stay writable, so a worker can still add one there that the first mate loads at its next start.
 - A checkout nested below the home, rather than being the home, keeps its own `bin/` writable from inside the session.
 - The sandbox is not a boundary against same-user system services that start programs outside it, as `bin/fm-sandbox-exec.sh` states.

@@ -190,6 +190,10 @@
 #     Git config and hooks, and the worktrees and modules entries of the
 #     checkout's or clone's git dir with the entries directly in that modules
 #     directory, are covered until the next start;
+#   - a commondir file written into the top-level git dir of the checkout or
+#     of a clone, or into a submodule's git dir, still points Git at the
+#     config and hooks of another directory; that is a plain write rather
+#     than a rename, and denying it is follow-up work;
 #   - OpenCode also loads plugins and configuration from its own directories
 #     under state/privateer/opencode/, which stay writable, so a worker can
 #     still add one there that the first mate loads at its next start; and a
