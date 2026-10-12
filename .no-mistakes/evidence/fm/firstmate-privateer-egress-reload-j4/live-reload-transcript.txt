@@ -1,0 +1,80 @@
+
+### S0: reload with no session running (captain)
+fm-privateer: refused: the Privateer egress proxy is not running; start the session with fm-privateer.sh start
+[exit 1]
+
+### start the real Privateer session
+privateer: started session privateer on tmux socket fm-privateer-637a409cd92b (first mate tiller/coder, egress proxy 127.0.0.1:56126); attach with: FM_HOME='/private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-lab.hOyLeM' '/Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M4R2K3J6MVCGS3ZB6A7WPVMK/bin/fm-privateer.sh' attach
+[exit 0]
+socket=fm-privateer-637a409cd92b  proxy pid=57910  port=56126
+
+### allow file written by start (/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.hOyLeM/state/privateer/egress/allow)
+127.0.0.1:56108
+github.com:443
+-rw-------@ 1 cotton  staff  31 Oct 12 14:56 /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.hOyLeM/state/privateer/egress/allow
+
+### S1 before: egress from inside the sandbox (only A listed)
+sailor A (127.0.0.1:56108) -> 200
+sailor B (127.0.0.1:56109) -> 403
+
+### S2: reload with config unchanged
+privateer: the egress allowlist is unchanged
+privateer: reloaded the egress allowlist
+[exit 0]
+
+### S3: captain adds sailor B to crew-dispatch.json and runs reload
+privateer: added 127.0.0.1:56109
+privateer: reloaded the egress allowlist
+[exit 0]
+proxy pid after reload: 57910 (was 57910)
+still running: 57910 /opt/homebrew/Cellar/python@3.11/3.11.16/Frameworks/Python.framework/Versions/3.11/Resources/Python.app/Contents/MacOS/Python /Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M4R2K3J6MVCGS3ZB6A7WPVMK/bin/fm-privateer-proxy.py /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.hOyLeM/state/privateer/egress/port /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.hOyLeM/state/privateer/egress/log /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.hOyLeM/state/privateer/egress/allow
+
+### S3 after: egress from inside the sandbox
+sailor A (127.0.0.1:56108) -> 200
+sailor B (127.0.0.1:56109) -> 200
+
+### S4: captain removes sailor A (endpoint) from crew-dispatch.json and runs reload
+privateer: added 127.0.0.1:1
+privateer: removed 127.0.0.1:56108
+privateer: reloaded the egress allowlist
+[exit 0]
+
+### S4 after: egress from inside the sandbox
+sailor A (127.0.0.1:56108) -> 403
+sailor B (127.0.0.1:56109) -> 200
+
+### S5 adversarial: from inside the session try to rewrite the allowlist, move aside its directories, or run reload
+/tmp/fm-lab-work.SFD7fh/p4.sh: line 2: /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.hOyLeM/state/privateer/egress/allow: Operation not permitted
+append allow: refused
+/tmp/fm-lab-work.SFD7fh/p4.sh: line 3: /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.hOyLeM/state/privateer/egress/allow.evil: Operation not permitted
+create egress/allow.evil: refused
+mv /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.hOyLeM/state/privateer/egress: refused
+mv /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.hOyLeM/state/privateer: refused
+mv /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.hOyLeM/state: refused
+fm-privateer: refused: reload is the captain's command and runs outside the Privateer session
+in-session reload exit=1
+
+### S5 after: allow file and egress unchanged
+127.0.0.1:1
+127.0.0.1:56109
+github.com:443
+sailor A (127.0.0.1:56108) -> 403
+sailor B (127.0.0.1:56109) -> 200
+
+### proxy log (reload entries and A/B verdicts)
+{"time":"2026-10-12T12:56:40Z","verdict":"allowed","method":"GET","dest":"127.0.0.1:56108"}
+{"time":"2026-10-12T12:56:40Z","verdict":"refused","method":"GET","dest":"127.0.0.1:56109"}
+{"time":"2026-10-12T12:56:42Z","verdict":"reload","method":"-","dest":"+1 -0"}
+{"time":"2026-10-12T12:56:42Z","verdict":"allowed","method":"GET","dest":"127.0.0.1:56108"}
+{"time":"2026-10-12T12:56:42Z","verdict":"allowed","method":"GET","dest":"127.0.0.1:56109"}
+{"time":"2026-10-12T12:56:43Z","verdict":"reload","method":"-","dest":"+1 -1"}
+{"time":"2026-10-12T12:56:43Z","verdict":"refused","method":"GET","dest":"127.0.0.1:56108"}
+{"time":"2026-10-12T12:56:43Z","verdict":"allowed","method":"GET","dest":"127.0.0.1:56109"}
+{"time":"2026-10-12T12:56:45Z","verdict":"refused","method":"GET","dest":"127.0.0.1:56108"}
+{"time":"2026-10-12T12:56:45Z","verdict":"allowed","method":"GET","dest":"127.0.0.1:56109"}
+
+### S6: stop, then reload refuses
+privateer: stopped session privateer on tmux socket fm-privateer-637a409cd92b
+[exit 0]
+fm-privateer: refused: the Privateer egress proxy is not running; start the session with fm-privateer.sh start
+[exit 1]

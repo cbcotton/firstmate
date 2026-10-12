@@ -1,0 +1,34 @@
+## allow = one
+HTTP/1.1 502 Bad Gateway
+  <- CONNECT one.example.test:443
+HTTP/1.1 403 Forbidden
+  <- CONNECT two.example.test:443
+## file replaced by rename: allow = two
+HTTP/1.1 502 Bad Gateway
+  <- CONNECT two.example.test:443
+HTTP/1.1 403 Forbidden
+  <- CONNECT one.example.test:443
+## file deleted (missing)
+HTTP/1.1 502 Bad Gateway
+  <- CONNECT two.example.test:443
+HTTP/1.1 403 Forbidden
+  <- CONNECT one.example.test:443
+## file recreated as 'one' but chmod 000 (unreadable)
+HTTP/1.1 502 Bad Gateway
+  <- CONNECT two.example.test:443
+HTTP/1.1 403 Forbidden
+  <- CONNECT one.example.test:443
+## chmod 644 (readable again, same mtime)
+HTTP/1.1 502 Bad Gateway
+  <- CONNECT one.example.test:443
+HTTP/1.1 403 Forbidden
+  <- CONNECT two.example.test:443
+## empty file written
+HTTP/1.1 403 Forbidden
+  <- CONNECT one.example.test:443
+## proxy log reload lines
+{"time": "2026-10-12T12:56:58Z", "verdict": "reload", "method": "-", "dest": "+1 -1"}
+{"time": "2026-10-12T12:56:58Z", "verdict": "reload-failed", "method": "-", "dest": "[Errno 2] No such file or directory: '/tmp/fm-proxy-live.zsnhya/allow'"}
+{"time": "2026-10-12T12:56:58Z", "verdict": "reload-failed", "method": "-", "dest": "[Errno 13] Permission denied: '/tmp/fm-proxy-live.zsnhya/allow'"}
+{"time": "2026-10-12T12:56:58Z", "verdict": "reload", "method": "-", "dest": "+1 -1"}
+{"time": "2026-10-12T12:56:58Z", "verdict": "reload", "method": "-", "dest": "+0 -1"}
