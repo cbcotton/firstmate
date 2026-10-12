@@ -983,7 +983,7 @@ The first mate and every worker receive `HTTP_PROXY`, `HTTPS_PROXY`, and a `GIT_
 The sandbox holds the session's whole tmux server, so every pane and every command started in the session inherits it: the first mate, each worker and its pane shell, and anything the first mate asks tmux to run.
 Everything inside can write only to the home, the checkout's `.opencode/` scratch, the shared temporary namespaces named in the remaining limits below, and the server's own socket.
 Workers' copies live in the home's own Treehouse pool, `state/privateer/treehouse`, which the session names as `TREEHOUSE_ROOT`, so `treehouse` creates and hands out slots there and the shared pool under `~/.treehouse`, with every other home's slots, is out of reach.
-It can never write the home's egress directory, `config/`, or `bin/`, the helm or any directory entry between the home and it, or the Git config or hooks of the checkout, of any clone under `projects/`, or of any linked worktree or submodule of those.
+It can never write the home's egress directory, `config/`, or `bin/`, or the helm, or any directory entry between the home and the egress directory or the helm, or the Git config or hooks of the checkout, of any clone under `projects/`, or of any linked worktree or submodule of those.
 When the checkout is inside the home, it also cannot write any path in the checkout that an OpenCode first mate loads or the helm is rendered from: `AGENTS.md`, `CLAUDE.md`, `CONTEXT.md`, `opencode.json`, `opencode.jsonc`, `tui.json`, `tui.jsonc`, `.agents/`, `docs/`, the `.claude` entry and its `skills` link, the `.opencode` entry, and, under `.opencode/`, the `opencode.json`, `opencode.jsonc`, `tui.json`, and `tui.jsonc` files and the `agent`, `agents`, `command`, `commands`, `mode`, `modes`, `plugin`, `plugins`, `skill`, `skills`, `tool`, and `tools` directories.
 So no worker can rewrite the first mate's instructions, docs, config, skills, agents, commands, modes, plugins, or tools in its checkout; the rest of `.opencode/`, such as its `package.json` and `node_modules/`, stays OpenCode's scratch.
 It can neither rename, replace, or create any `.git` entry in the checkout or in a clone, nor redirect or relabel the git dir, `commondir`, or `gitdir` of a linked worktree that lives outside the home's pool.
@@ -1084,7 +1084,7 @@ The flag is not inherited, because a Privateer home spawns no secondmate.
 Change sailors and models with the [named sailor](#crew-dispatch-profiles-configcrew-dispatchjson) commands of `bin/fm-sailor.sh`, from the captain's own shell, because `config/` is unwritable inside the session.
 In a Privateer home each command refuses a change that `bin/fm-privateer.sh check` would report.
 `bin/fm-sailor.sh set-model <sailor> <model> --first-mate` also rewrites the first mate line of `config/privateer`.
-The first mate switches models, and the egress proxy allows a new or moved endpoint, only once the session is stopped and started again.
+The first mate switches models only once the session is stopped and started again; the egress proxy allows a new or moved endpoint after [`bin/fm-privateer.sh reload`](#how-a-privateer-session-runs).
 
 ## Worker account pin (config/claude-account, config/pi-account)
 
