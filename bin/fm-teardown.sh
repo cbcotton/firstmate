@@ -3274,7 +3274,7 @@ cleanup_firstmate_home_children() {
       else
         validate_child_worktree_for_removal "$child_wt" "$child_proj" >/dev/null || return 1
         rm -f "$child_wt/.claude/settings.local.json" "$child_wt/.opencode/plugins/fm-turn-end.js" \
-          "$child_wt/.opencode/plugins/fm-busy-state.js" \
+          "$child_wt/.opencode/plugins/fm-busy-state.js" "$child_wt/.opencode/plugins/fm-sailor-system-fold.js" \
           "$child_wt/.fm-grok-turnend" "$child_wt/.fm-kimi-turnend"
         if [ -n "$child_proj" ] && [ -d "$child_proj" ] && command -v treehouse >/dev/null 2>&1; then
           if teardown_treehouse_return "$child_wt" "$child_proj" "child worktree"; then
@@ -3581,7 +3581,7 @@ if [ "$BACKEND" = orca ] && [ "$KIND" != secondmate ]; then
       fi
     fi
     rm -f "$WT/.claude/settings.local.json" "$WT/.opencode/plugins/fm-turn-end.js" \
-      "$WT/.opencode/plugins/fm-busy-state.js" \
+      "$WT/.opencode/plugins/fm-busy-state.js" "$WT/.opencode/plugins/fm-sailor-system-fold.js" \
       "$WT/.fm-grok-turnend" "$WT/.fm-kimi-turnend"
   fi
   if [ -n "$T_ORCA" ]; then
