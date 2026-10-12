@@ -76,8 +76,9 @@
 #     project; data is the file's parsed JSON. Empty when the directory is absent.
 #   sailors[]: {name,status,answering,endpoint,tasks,capacity,line} - one row per
 #     live named sailor, parsed from bin/fm-sailor.sh status (which owns the
-#     probe and the line); line is its raw text. answering is true, false, or
-#     null when the line is unrecognized. Empty when the home declares no
+#     probe and the line); line is its raw text. answering is the result of
+#     the health probe behind the watcher's `check: sailor` wakes: true, false,
+#     or null when the line is unrecognized. Empty when the home declares no
 #     sailors. privateer: {active,first_mate,active_project} - active is true
 #     while config/privateer exists; the other two are null when unset, and
 #     active_project is also null when config/active-project is malformed.

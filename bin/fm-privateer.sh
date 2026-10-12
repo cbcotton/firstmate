@@ -15,6 +15,7 @@
 #   fm-privateer.sh attach
 #   fm-privateer.sh stop [--stow]
 #   fm-privateer.sh project [<name> | --clear]
+#   fm-privateer.sh reload
 #
 # The quarantine is on while config/privateer exists. Its content is optional:
 # one line `<sailor>/<model>` names the sailor and model the first mate itself
@@ -78,7 +79,16 @@
 # refused destination to state/privateer/egress/log, and allows exactly: every
 # sailor endpoint in config/crew-dispatch.json, and the origin of this checkout
 # and of every clone under projects/ (the forge: the URL's host and port, 443
-# for https, 80 for http, 22 for ssh).
+# for https, 80 for http, 22 for ssh). start writes that list, one
+# `<host>:<port>` per line, to state/privateer/egress/allow, which the session
+# sandbox cannot write, by temp-file-and-rename, and the proxy re-reads the file
+# when it changes.
+#
+# reload is the captain's command to rewrite that file from the current config
+# (config/crew-dispatch.json and the forge origins) without restarting the
+# session. It runs outside the session like start and stop, refuses inside it
+# and when no egress proxy runs, prints each destination it added or removed
+# (or that nothing changed), and the proxy logs the reload.
 #
 # start refuses without config/privateer, on any check violation, without a
 # first-mate line in config/privateer, without this checkout's Privateer
@@ -148,16 +158,22 @@
 # rewrite the first mate's instructions, docs, config, skills, agents,
 # commands, modes, plugins, or tools there; the Git config or hooks of this
 # checkout, of any clone under projects/, or of any linked worktree or
-# submodule of those
-# (git dirs under .git/worktrees/<name>/ and .git/modules/<path>/); the git
-# dir, commondir, or gitdir of a linked worktree that lives outside this
-# home's pool, so none can be redirected or relabeled as a pool worktree;
-# any .git entry inside a clone, or the checkout's own .git; or the projects
-# directory, any clone's directory, or any directory between this home and the
-# checkout's git dir, so none of those directory entries can be moved aside,
-# changed, and moved back; of the git dirs, only the top-level git dir of the
-# checkout and of each clone has its entry denied, and the directory entries
-# inside it are not all covered (see the remaining limits below).
+# submodule of those (git dirs under .git/worktrees/<name>/ and
+# .git/modules/<path>/, and, for a linked worktree outside this home's pool,
+# its own modules/<path>/); the git dir, commondir, or gitdir of a linked
+# worktree that lives outside the pool, so none can be redirected or relabeled
+# as a pool worktree; any .git entry inside a clone, or the checkout's own
+# .git; or the projects directory, any clone's directory, any directory between
+# this home and the checkout's git dir, or any directory entry that leads to
+# one of those Git configs or hooks: the top-level git dir of the checkout and
+# of each clone, its modules directory, every entry under that leading to a
+# submodule's git dir, each submodule git dir's own modules and worktrees
+# entries, and the git dir of a linked worktree outside the pool with the same
+# modules entries of its own; so none of those can be moved aside, changed,
+# and moved back, replaced, or linked over. The worktrees directory of the
+# checkout's and each clone's git dir is the one such entry that may still be
+# created, because the session's first pool worktree creates it, but nothing
+# inside may move it, remove it, or place a symlink there.
 # It may connect only to the egress proxy, the DNS resolver, and that socket,
 # so a client that ignores the proxy variables reaches nothing remote at all,
 # and may signal only processes inside the same sandbox, so it can neither
@@ -180,14 +196,15 @@
 #   - clones under projects/ are added, moved, and removed outside the
 #     session, and a worktree the session creates in its own pool is meant
 #     for use only inside it;
-#   - the directory entries denied are the projects directory, each clone's
-#     directory, the top-level git dir of the checkout and of each clone, and
-#     the directories between this home and the checkout's git dir; the
-#     worktrees and modules directories inside a git dir, a submodule's own
-#     git dir (modules/<path>), the intermediate directories under modules,
-#     and a symlink placed over any of them can still be moved aside and back
-#     from inside the session, so a linked worktree's or submodule's Git config
-#     or hooks can be planted that way; closing that class is follow-up work;
+#   - start finds the linked worktrees and submodule git dirs that exist when
+#     it runs, so for one added from outside while the session runs, only its
+#     Git config and hooks, and the worktrees and modules entries of the
+#     checkout's or clone's git dir with the entries directly in that modules
+#     directory, are covered until the next start;
+#   - a commondir file written into the top-level git dir of the checkout or
+#     of a clone, or into a submodule's git dir, still points Git at the
+#     config and hooks of another directory; that is a plain write rather
+#     than a rename, and denying it is follow-up work;
 #   - OpenCode also loads plugins and configuration from its own directories
 #     under state/privateer/opencode/, which stay writable, so a worker can
 #     still add one there that the first mate loads at its next start; and a
@@ -250,7 +267,7 @@ PROJECTS="${FM_PROJECTS_OVERRIDE:-$FM_HOME/projects}"
 . "$SCRIPT_DIR/fm-privateer-lib.sh"
 FLAG="$CONFIG/privateer"
 DISPATCH="$CONFIG/crew-dispatch.json"
-SESSION=privateer
+SESSION=$FM_PRIVATEER_SESSION
 OPENCODE_ROOT="$STATE/privateer/opencode"
 EGRESS="$STATE/privateer/egress"
 POOL="$STATE/privateer/treehouse"
@@ -260,7 +277,7 @@ STOW_IDLE_READS=3
 FORBIDDEN_NAME_RE='^(ANTHROPIC_[A-Za-z0-9_]*|CLAUDE_[A-Za-z0-9_]*|CLAUDECODE)$'
 
 usage() {
-  echo "usage: fm-privateer.sh check | inside | launch-env | start | attach | stop [--stow] | project [<name>|--clear]" >&2
+  echo "usage: fm-privateer.sh check | inside | launch-env | start | attach | stop [--stow] | reload | project [<name>|--clear]" >&2
   exit 2
 }
 
@@ -474,11 +491,11 @@ socket_name() {
 }
 
 tmux_socket_path() {  # <socket-name>
-  printf '%s/tmux-%s/%s\n' "${TMUX_TMPDIR:-/tmp}" "$(id -u)" "$1"
+  fm_privateer_socket_path "$1"
 }
 
 session_running() {  # <socket-name>
-  tmux -L "$1" has-session -t "$SESSION" 2>/dev/null
+  fm_privateer_session_running "$1"
 }
 
 # forge_origins: one `<host>:<port>\t<repo>` line per forge origin: the origin
@@ -548,35 +565,44 @@ egress_allowlist() {
   done
 }
 
+# proxy_running: the proxy this home last started is alive.
+proxy_running() {
+  local pid
+  pid=$(cat "$EGRESS/pid" 2>/dev/null) || return 1
+  case "$pid" in '' | *[!0-9]*) return 1 ;; esac
+  case "$(ps -p "$pid" -o command= 2>/dev/null)" in
+    *fm-privateer-proxy.py*) return 0 ;;
+  esac
+  return 1
+}
+
 # stop_egress_proxy: stop the proxy this home last started, if it still runs.
 stop_egress_proxy() {
-  local pid
-  pid=$(cat "$EGRESS/pid" 2>/dev/null) || pid=
-  case "$pid" in
-    '' | *[!0-9]*) ;;
-    *)
-      case "$(ps -p "$pid" -o command= 2>/dev/null)" in
-        *fm-privateer-proxy.py*) kill "$pid" 2>/dev/null || true ;;
-      esac
-      ;;
-  esac
-  rm -f "$EGRESS/port" "$EGRESS/pid"
+  if proxy_running; then kill "$(cat "$EGRESS/pid")" 2>/dev/null || true; fi
+  rm -f "$EGRESS/port" "$EGRESS/pid" "$EGRESS/allow"
+}
+
+# write_allow_file: the current allowlist into $EGRESS/allow, by temp-file-and-
+# rename so the proxy never reads a half-written file.
+write_allow_file() {
+  local tmp
+  tmp=$(mktemp "$EGRESS/allow.XXXXXX") || die "cannot write $EGRESS/allow"
+  if ! egress_allowlist > "$tmp" || ! mv -f "$tmp" "$EGRESS/allow"; then
+    rm -f "$tmp"
+    die "cannot write $EGRESS/allow"
+  fi
 }
 
 # start_egress_proxy: the proxy as its own process, outside the session and its
 # sandbox, started with cmd_start's env_args; prints its port once it has
 # bound, or fails.
 start_egress_proxy() {
-  local dest port pid
-  local -a allow
-  allow=()
-  while IFS= read -r dest; do
-    [ -z "$dest" ] || allow+=("$dest")
-  done < <(egress_allowlist)
+  local port pid
   mkdir -p "$EGRESS" || die "cannot create $EGRESS"
   stop_egress_proxy
+  write_allow_file
   /usr/bin/env -i "${env_args[@]}" nohup python3 "$SCRIPT_DIR/fm-privateer-proxy.py" "$EGRESS/port" "$EGRESS/log" \
-    "${allow[@]+"${allow[@]}"}" </dev/null >>"$EGRESS/proxy.err" 2>&1 &
+    "$EGRESS/allow" </dev/null >>"$EGRESS/proxy.err" 2>&1 &
   pid=$!
   printf '%s\n' "$pid" > "$EGRESS/pid"
   for _ in $(seq 100); do
@@ -605,6 +631,27 @@ deny_entries() {
     esac
     sandbox_args+=(--deny-write-regex "^$(regex_quote "$p")\$")
     p=${p%/*}
+  done
+}
+
+# deny_module_entries <modules-dir>: below a modules directory whose own entry
+# and entries are denied already, deny every entry inside each intermediate
+# directory, and the modules and worktrees directories and their entries of
+# each submodule git dir (a directory holding HEAD), recursing into its modules,
+# so none can be renamed, replaced, removed, or created. Uses cmd_start's
+# sandbox_args.
+deny_module_entries() {
+  local d
+  [ -d "$1" ] && [ ! -L "$1" ] || return 0
+  for d in "$1"/* "$1"/.[!.]* "$1"/..?*; do
+    [ -d "$d" ] && [ ! -L "$d" ] || continue
+    if [ -f "$d/HEAD" ]; then
+      sandbox_args+=(--deny-write-regex "^$(regex_quote "$d")/(modules|worktrees)(/[^/]+)?\$")
+      deny_module_entries "$d/modules"
+    else
+      sandbox_args+=(--deny-write-regex "^$(regex_quote "$d")/[^/]+\$")
+      deny_module_entries "$d"
+    fi
   done
 }
 
@@ -646,7 +693,7 @@ render_helm() {
 
 cmd_start() {
   local line sailor model check provider config socket socket_path primary port
-  local name value launch tmp_real home_real root_real egress_real root_git projects_real git_meta pool_real wt_git helm_real
+  local name value launch tmp_real home_real root_real egress_real root_git projects_real git_meta pool_real wt_git helm_real modules_dir
   local -a env_args session_env sandbox_args
   env_args=()
   session_env=()
@@ -726,31 +773,47 @@ cmd_start() {
   # may write it or move aside any directory that leads to it.
   sandbox_args+=(--deny-write "$helm_real")
   deny_entries "$helm_real"
+  # The proxy re-reads the egress allowlist by path, so no directory leading
+  # to it may be moved aside, rewritten, and moved back either.
+  deny_entries "$egress_real"
   # The directory entries leading to the top-level git dir of the checkout and
-  # of each clone are denied too, so none of them can be moved aside, written,
-  # and moved back; the worktrees and modules directories inside a git dir and
-  # a submodule's own git dir are not, a remaining limit the header names.
-  git_meta='($|/(worktrees/[^/]+/|modules/.+/)?(hooks(/|$)|config))'
+  # of each clone are denied too, and so is every entry inside it that leads to
+  # a Git config or hooks: its modules directory and everything leading to a
+  # submodule's git dir, which nothing inside creates, and its worktrees
+  # directory, which the session's first pool worktree may create but nothing
+  # inside may move, remove, or replace with a symlink; so none of them can be
+  # moved aside, written, and moved back.
+  git_meta='($|/(modules(/[^/]+)?$|(worktrees/[^/]+/|modules/.+/)?(hooks(/|$)|config)))'
   root_git=$(cd "$FM_ROOT" && cd "$(git rev-parse --git-common-dir 2>/dev/null)" 2>/dev/null && pwd -P) || root_git=
   if [ -n "$root_git" ]; then
-    sandbox_args+=(--deny-write-regex "^$(regex_quote "$root_git")$git_meta")
+    sandbox_args+=(--deny-write-regex "^$(regex_quote "$root_git")$git_meta"
+      --deny-move-regex "^$(regex_quote "$root_git")/worktrees\$")
     deny_entries "$root_git"
+    deny_module_entries "$root_git/modules"
   fi
   deny_entries "$root_real/.git"
   if projects_real=$(cd "$PROJECTS" 2>/dev/null && pwd -P); then
     sandbox_args+=(--deny-write-regex "^$(regex_quote "$projects_real")/[^/]+\$"
-      --deny-write-regex "^$(regex_quote "$projects_real")/[^/]+/(.+/)?\.git$git_meta")
+      --deny-write-regex "^$(regex_quote "$projects_real")/[^/]+/(.+/)?\.git$git_meta"
+      --deny-move-regex "^$(regex_quote "$projects_real")/[^/]+/(.+/)?\.git/worktrees\$")
     deny_entries "$projects_real"
+    for modules_dir in "$projects_real"/*/.git/modules; do
+      deny_module_entries "$modules_dir"
+    done
   fi
   # A linked worktree that lives outside this home's pool is used outside the
-  # session, so its git dir can be neither redirected nor swapped; the pool's
+  # session, so its git dir can be neither redirected nor swapped, and neither
+  # can the git dirs of its submodules or their config and hooks; the pool's
   # own worktrees are created inside the session and used only there.
   for wt_git in "$root_git"/worktrees/*/ "${projects_real:-/nonexistent}"/*/.git/worktrees/*/; do
     [ -d "$wt_git" ] || continue
     wt_git=${wt_git%/}
     case "$(cat "$wt_git/gitdir" 2>/dev/null)" in
       "$pool_real"/*) ;;
-      *) sandbox_args+=(--deny-write-regex "^$(regex_quote "$wt_git")(\$|/(commondir|gitdir)\$)") ;;
+      *)
+        sandbox_args+=(--deny-write-regex "^$(regex_quote "$wt_git")(\$|/(commondir|gitdir)\$|/modules(\$|/[^/]+\$|/.+/(hooks(/|\$)|config)))")
+        deny_module_entries "$wt_git/modules"
+        ;;
     esac
   done
   # A checkout inside the home is writable, so everything its first mate's
@@ -923,6 +986,21 @@ cmd_project() {  # [<name> | --clear]
   echo "privateer: the active project is now $name"
 }
 
+cmd_reload() {
+  local old new
+  active || refuse "config/privateer is absent; this launcher reloads only a Privateer home"
+  fm_privateer_inside_session "$FM_HOME" &&
+    refuse "reload is the captain's command and runs outside the Privateer session"
+  proxy_running || refuse "the Privateer egress proxy is not running; start the session with fm-privateer.sh start"
+  old=$(cat "$EGRESS/allow" 2>/dev/null) || old=
+  write_allow_file
+  new=$(cat "$EGRESS/allow")
+  comm -13 <(printf '%s\n' "$old" | LC_ALL=C sort -u) <(printf '%s\n' "$new" | LC_ALL=C sort -u) | sed '/^$/d; s/^/privateer: added /'
+  comm -23 <(printf '%s\n' "$old" | LC_ALL=C sort -u) <(printf '%s\n' "$new" | LC_ALL=C sort -u) | sed '/^$/d; s/^/privateer: removed /'
+  [ "$old" != "$new" ] || echo "privateer: the egress allowlist is unchanged"
+  echo "privateer: reloaded the egress allowlist"
+}
+
 [ "$#" -ge 1 ] || usage
 cmd=$1
 shift
@@ -958,6 +1036,10 @@ case "$cmd" in
   project)
     [ "$#" -le 1 ] || usage
     cmd_project "$@"
+    ;;
+  reload)
+    [ "$#" -eq 0 ] || usage
+    cmd_reload
     ;;
   -h | --help)
     sed -n '2,/^set -u/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'

@@ -15,11 +15,13 @@
 # runs each new session's command in the background and records every call,
 # and a fake sandbox-exec records the profile it was given and runs the
 # command, so the launch shape is pinned on every platform. Where sandbox-exec
-# and tmux really run, two cases start the real session: one proves that a
+# and tmux really run, cases start the real session: one proves that a
 # command the first mate starts through tmux reaches nothing but the proxy and
-# cannot stop or rewrite it, and one that a first mate running as opencode
+# cannot stop or rewrite it, one that a first mate running as opencode
 # detects its harness and owns the fleet lock while a plain shell in the same
-# session stays read-only. The live egress audit
+# session stays read-only, and one that such a command can move aside, replace,
+# link over, or plant no directory leading to a Git config or hooks while the
+# session's own pool worktrees are still added and removed. The live egress audit
 # (tests/fm-privateer-egress-live-e2e.test.sh) and session lock check
 # (tests/fm-privateer-session-lock-live-e2e.test.sh) run the real OpenCode.
 # docs/configuration.md ("Privateer quarantine") owns the contract.
@@ -669,12 +671,19 @@ JS
 # --- launcher ---------------------------------------------------------------
 
 test_start_refuses_without_the_flag() {
-  local dir home root out status
+  local dir home root proj before out status
   dir="$TMP_ROOT/start-no-flag"
   home=$(make_home start-no-flag)
   rm "$home/config/privateer"
   root="$dir/root"
   make_checkout "$root"
+  # A clone with a linked worktree and a submodule's git dir, whose Git
+  # metadata a home without the quarantine keeps exactly as it was.
+  proj="$home/projects/proj"
+  fm_git_init_commit "$proj"
+  git -C "$proj" worktree add -q -b side "$dir/side"
+  mkdir -p "$proj/.git/modules/lib/sub"
+  before=$(cd "$proj/.git" && find . | LC_ALL=C sort)
   make_launcher_fakebin "$dir" >/dev/null
   make_stub_primary "$dir" >/dev/null
   out=$(run_launcher "$dir" "$home" "$root" start)
@@ -682,7 +691,9 @@ test_start_refuses_without_the_flag() {
   expect_code 1 "$status" "start must refuse without config/privateer"
   assert_contains "$out" "config/privateer is absent" "the refusal must name the flag"
   [ ! -e "$dir/tmux.log" ] || fail "start must not touch tmux without the flag"
-  pass "start refuses a home without config/privateer"
+  [ ! -e "$dir/profile.sb" ] || fail "start must render no sandbox without the flag"
+  assert_equals "$before" "$(cd "$proj/.git" && find . | LC_ALL=C sort)" "a home without the flag must keep its clones' Git metadata untouched"
+  pass "start refuses a home without config/privateer and leaves its Git metadata untouched"
 }
 
 test_start_refuses_with_a_forbidden_file() {
@@ -784,13 +795,22 @@ test_start_passes_only_the_allowlist() {
   (regex #\"^$(rq "$helm_real")\$\")
   (regex #\"^$(rq "$home_real")/state/privateer\$\")
   (regex #\"^$(rq "$home_real")/state\$\")
-  (regex #\"^$(rq "$root_real")/\\.git(\$|/(worktrees/[^/]+/|modules/.+/)?(hooks(/|\$)|config))\")
+  (regex #\"^$(rq "$home_real")/state/privateer/egress\$\")
+  (regex #\"^$(rq "$home_real")/state/privateer\$\")
+  (regex #\"^$(rq "$home_real")/state\$\")
+  (regex #\"^$(rq "$root_real")/\\.git(\$|/(modules(/[^/]+)?\$|(worktrees/[^/]+/|modules/.+/)?(hooks(/|\$)|config)))\")
   (regex #\"^$(rq "$home_real")/projects/[^/]+\$\")
-  (regex #\"^$(rq "$home_real")/projects/[^/]+/(.+/)?\\.git(\$|/(worktrees/[^/]+/|modules/.+/)?(hooks(/|\$)|config))\")
+  (regex #\"^$(rq "$home_real")/projects/[^/]+/(.+/)?\\.git(\$|/(modules(/[^/]+)?\$|(worktrees/[^/]+/|modules/.+/)?(hooks(/|\$)|config)))\")
   (regex #\"^$(rq "$home_real")/projects\$\")
-  (regex #\"^$(rq "$root_real")/\\.git/worktrees/side(\$|/(commondir|gitdir)\$)\")
+  (regex #\"^$(rq "$root_real")/\\.git/worktrees/side(\$|/(commondir|gitdir)\$|/modules(\$|/[^/]+\$|/.+/(hooks(/|\$)|config)))\")
 )" "$(sed -n '/^(deny file-write\*$/,/^)$/p' "$profile")" \
-    "the sandbox must take back only the egress record, the home's config and scripts, the helm and the directories leading to it, and every Git config and hook, so every worker's OpenCode directories stay writable"
+    "the sandbox must take back only the egress record and the directories leading to it, the home's config and scripts, the helm and the directories leading to it, and every Git config and hook and the directories leading to them, so every worker's OpenCode directories stay writable"
+  assert_equals "(deny file-write-unlink (regex #\"^$(rq "$root_real")/\\.git/worktrees\$\"))
+(deny file-write-create (require-all (regex #\"^$(rq "$root_real")/\\.git/worktrees\$\") (vnode-type SYMLINK)))
+(deny file-write-unlink (regex #\"^$(rq "$home_real")/projects/[^/]+/(.+/)?\\.git/worktrees\$\"))
+(deny file-write-create (require-all (regex #\"^$(rq "$home_real")/projects/[^/]+/(.+/)?\\.git/worktrees\$\") (vnode-type SYMLINK)))" \
+    "$(grep -E '^\(deny file-write-(unlink|create) ' "$profile")" \
+    "the worktrees directory of the checkout's and every clone's git dir must be creatable for the pool but never moved, removed, or replaced with a symlink"
   assert_grep '(deny signal)' "$profile" "the sandbox must deny signals outside itself"
   assert_grep '(allow signal (target same-sandbox))' "$profile" "the sandbox must allow signals within itself"
   assert_grep "(subpath \"$root_real/.opencode\")" "$profile" "the sandbox must allow OpenCode's scratch in the checkout"
@@ -962,7 +982,8 @@ test_proxy_forwards_only_allowed_destinations() {
     sleep 0.1
   done
   [ -n "$sailor_port" ] || fail "the stand-in sailor did not start"
-  python3 "$ROOT/bin/fm-privateer-proxy.py" "$dir/port" "$dir/log" "127.0.0.1:$sailor_port" &
+  printf '127.0.0.1:%s\n' "$sailor_port" > "$dir/allow"
+  python3 "$ROOT/bin/fm-privateer-proxy.py" "$dir/port" "$dir/log" "$dir/allow" &
   pid=$!
   wait_for_file "$dir/port" || fail "the proxy did not record its port"
   port=$(cat "$dir/port")
@@ -985,6 +1006,80 @@ refused GET http://user@127.0.0.1:$sailor_port/v1
 refused GET https://127.0.0.1:$sailor_port/v1
 refused CONNECT api.anthropic.com:443" "$(jq -r '"\(.verdict) \(.method) \(.dest)"' "$dir/log")" "the proxy must log every allowed and refused destination"
   pass "the egress proxy forwards to an allowed sailor and refuses and logs every other destination, including an authority hidden behind ?, #, a backslash, or userinfo"
+}
+
+test_proxy_reloads_its_allowlist() {
+  local dir port pid
+  dir="$TMP_ROOT/reload-proxy"
+  mkdir -p "$dir"
+  printf 'one.example.test:443\n' > "$dir/allow"
+  python3 "$ROOT/bin/fm-privateer-proxy.py" "$dir/port" "$dir/log" "$dir/allow" &
+  pid=$!
+  wait_for_file "$dir/port" || fail "the proxy did not record its port"
+  port=$(cat "$dir/port")
+  assert_not_contains "$(proxy_request "$port" 'CONNECT one.example.test:443 HTTP/1.1')" "403" "a listed host must be allowed"
+  assert_contains "$(proxy_request "$port" 'CONNECT two.example.test:443 HTTP/1.1')" "HTTP/1.1 403" "an unlisted host must be refused"
+  printf 'two.example.test:443\n' > "$dir/allow.new"
+  mv "$dir/allow.new" "$dir/allow"
+  assert_not_contains "$(proxy_request "$port" 'CONNECT two.example.test:443 HTTP/1.1')" "403" "a newly listed host must be allowed without a restart"
+  assert_contains "$(proxy_request "$port" 'CONNECT one.example.test:443 HTTP/1.1')" "HTTP/1.1 403" "a removed host must be refused"
+  rm -f "$dir/allow"
+  assert_not_contains "$(proxy_request "$port" 'CONNECT two.example.test:443 HTTP/1.1')" "403" "a missing file must keep the last good set"
+  assert_contains "$(proxy_request "$port" 'CONNECT one.example.test:443 HTTP/1.1')" "HTTP/1.1 403" "a missing file must not open the proxy up"
+  printf 'one.example.test:443\n' > "$dir/allow"
+  chmod 000 "$dir/allow"
+  if [ -r "$dir/allow" ]; then
+    chmod 644 "$dir/allow"
+  else
+    assert_not_contains "$(proxy_request "$port" 'CONNECT two.example.test:443 HTTP/1.1')" "403" "an unreadable file must keep the last good set"
+    assert_contains "$(proxy_request "$port" 'CONNECT one.example.test:443 HTTP/1.1')" "HTTP/1.1 403" "an unreadable file must not open the proxy up"
+    chmod 644 "$dir/allow"
+    assert_not_contains "$(proxy_request "$port" 'CONNECT one.example.test:443 HTTP/1.1')" "403" "a file readable again must be applied"
+    assert_contains "$(proxy_request "$port" 'CONNECT two.example.test:443 HTTP/1.1')" "HTTP/1.1 403" "a file readable again must replace the last good set"
+  fi
+  kill "$pid" 2>/dev/null
+  wait "$pid" 2>/dev/null
+  assert_contains "$(jq -r 'select(.verdict | startswith("reload")) | "\(.verdict) \(.dest)"' "$dir/log")" "reload +1 -1" "the reload must be logged with what changed"
+  assert_contains "$(jq -r '.verdict' "$dir/log")" "reload-failed" "a reload that cannot read the file must be logged"
+  pass "the egress proxy applies a changed allowlist file without a restart, keeps the last good set when the file is missing or unreadable, and logs each reload"
+}
+
+test_reload_rewrites_the_allowlist() {
+  local dir home root out status port allow
+  dir="$TMP_ROOT/reload"
+  home=$(make_home reload)
+  root="$dir/root"
+  make_checkout "$root"
+  git -C "$root" remote add origin https://forge.example.test:3000/captain/firstmate.git
+  make_launcher_fakebin "$dir" >/dev/null
+  make_stub_primary "$dir" >/dev/null
+  out=$(run_launcher "$dir" "$home" "$root" reload)
+  status=$?
+  expect_code 1 "$status" "reload must refuse without a running proxy"
+  assert_contains "$out" "the Privateer egress proxy is not running" "the refusal must name the proxy"
+  out=$(run_launcher "$dir" "$home" "$root" start)
+  expect_code 0 $? "start must succeed: $out"
+  port=$(cat "$home/state/privateer/egress/port")
+  allow="$home/state/privateer/egress/allow"
+  assert_contains "$(cat "$allow")" "forge.example.test:3000" "start must write the allowlist file"
+  assert_contains "$(proxy_request "$port" 'CONNECT new.example.test:9999 HTTP/1.1')" "HTTP/1.1 403" "an unlisted host must be refused"
+  jq '.sailors.newcomer = {endpoint: "http://new.example.test:9999/v1"}' "$home/config/crew-dispatch.json" > "$dir/dispatch.new" && mv "$dir/dispatch.new" "$home/config/crew-dispatch.json"
+  out=$(run_launcher "$dir" "$home" "$root" reload)
+  status=$?
+  expect_code 0 "$status" "reload must succeed with a running proxy: $out"
+  assert_contains "$out" "privateer: added new.example.test:9999" "reload must print what it added"
+  assert_not_contains "$(proxy_request "$port" 'CONNECT new.example.test:9999 HTTP/1.1')" "403" "a newly listed sailor must be allowed without a restart"
+  jq 'del(.sailors.newcomer)' "$home/config/crew-dispatch.json" > "$dir/dispatch.new" && mv "$dir/dispatch.new" "$home/config/crew-dispatch.json"
+  out=$(run_launcher "$dir" "$home" "$root" reload)
+  assert_contains "$out" "privateer: removed new.example.test:9999" "reload must print what it removed"
+  assert_contains "$(proxy_request "$port" 'CONNECT new.example.test:9999 HTTP/1.1')" "HTTP/1.1 403" "a removed sailor must be refused again"
+  assert_contains "$(jq -r 'select(.verdict == "reload") | .verdict' "$home/state/privateer/egress/log")" "reload" "each reload must be logged"
+  out=$(env FM_HOME="$home" TMUX="/private/tmp/tmux-501/$(session_socket "$home"),1,0" "$PRIVATEER" reload 2>&1)
+  status=$?
+  expect_code 1 "$status" "reload must refuse from inside the session"
+  assert_contains "$out" "runs outside the Privateer session" "the refusal must say reload is the captain's"
+  run_launcher "$dir" "$home" "$root" stop >/dev/null
+  pass "reload rewrites the allowlist without a restart, prints what changed, and refuses without a proxy or from inside the session"
 }
 
 test_start_refuses_while_running() {
@@ -1342,7 +1437,7 @@ for t in '$proj/.git/hooks/post-checkout' '$proj/.git/config' '$wtgit/config.wor
   ( : >> "\$t" ) 2>/dev/null && planted="\$planted \$t"
 done
 ( mkdir -p '$helm/.opencode/skills/new' && : >> '$helm/.opencode/skills/new/SKILL.md' ) 2>/dev/null && planted="\$planted $helm/.opencode/skills/new"
-for t in '$helm' '$home/state/privateer' '$home/state'; do
+for t in '$helm' '$home/state/privateer/egress' '$home/state/privateer' '$home/state'; do
   mv "\$t" "\$t.aside" 2>/dev/null && planted="\$planted move:\$t"
 done
 for d in agent agents command commands mode modes plugin plugins skill skills tool tools; do
@@ -1548,6 +1643,115 @@ SH
 status=0" "$(cat "$state/heredoc" 2>/dev/null)" \
     "a zsh here-document in the real session must run: $(cat "$state/heredoc.err" 2>/dev/null)"
   pass "in the real sandboxed session a captain whose shell is zsh can run a slash-command here-document"
+}
+
+test_session_sandbox_pins_git_metadata() {
+  local dir home root root_git proj proj_git wt_git repo g out status spid sport socket probe
+  if ! "$ROOT/bin/fm-sandbox-exec.sh" available || ! command -v tmux >/dev/null 2>&1; then
+    pass "session Git metadata checks not run: sandbox-exec or tmux is not available on this machine"
+    return 0
+  fi
+  dir="$TMP_ROOT/session-git"
+  home=$(make_home session-git)
+  probe="$home/state/probe"
+  # The checkout sits in this test's temporary directory, which the session may
+  # write like the home, so only the Git metadata rules stand in its way.
+  root="$dir/root"
+  make_checkout "$root"
+  proj="$home/projects/proj"
+  fm_git_init_commit "$proj"
+  # A submodule named lib/sub, so an intermediate directory leads to its git
+  # dir, in the checkout and in a clone, and a linked worktree of the clone
+  # outside the pool with the submodule checked out, so it has a git dir under
+  # the worktree's own.
+  fm_git_init_commit "$dir/sub"
+  for repo in "$root" "$proj"; do
+    git -C "$repo" -c protocol.file.allow=always submodule add -q "$dir/sub" lib/sub >/dev/null 2>&1 ||
+      fail "the fixture submodule could not be added to $repo"
+    git -C "$repo" -c user.name=t -c user.email=t@example.invalid commit -qm sub
+  done
+  git -C "$proj" worktree add -q -b side "$dir/wt"
+  git -C "$dir/wt" -c protocol.file.allow=always submodule update --init -q >/dev/null 2>&1
+  root_git=$(cd "$root/.git" && pwd -P)
+  proj_git=$(cd "$proj/.git" && pwd -P)
+  wt_git="$proj_git/worktrees/wt"
+  for g in "$root_git/modules/lib/sub" "$proj_git/modules/lib/sub" "$wt_git/modules/lib/sub"; do
+    [ -f "$g/HEAD" ] || fail "the fixture has no submodule git dir at $g"
+  done
+  [ ! -e "$root_git/worktrees" ] || fail "the fixture checkout must start with no linked worktree"
+  mkdir -p "$dir/sailor/v1" "$home/state/prepared/hooks"
+  printf '{"data":[{"id":"coder"}]}\n' > "$dir/sailor/v1/models"
+  read -r spid sport < <(serve_dir "$dir/sailor" "$dir/sailor.log")
+  [ -n "$sport" ] || fail "the stand-in sailor did not start"
+  jq -n --arg e "http://127.0.0.1:$sport/v1" '{sailors: {tiller: {title: "Tiller", endpoint: $e, status: "live", models: ["coder"]}}, default: {harness: "opencode", sailor: "tiller", model: "coder"}}' \
+    > "$home/config/crew-dispatch.json"
+  # A command the first mate starts through tmux, as a worker's pane is: it
+  # tries to create, link, or move a directory of its own into a place one
+  # would be adopted, to write a submodule's config under the linked worktree,
+  # and, innermost first so no attempt hides another, to move aside each
+  # directory that leads to a Git config or hooks; then it renames a directory
+  # of the home, and adds, commits in, and removes a worktree in the home's own
+  # pool for the checkout and for the clone.
+  cat > "$dir/window" <<SH
+#!/bin/sh
+planted=
+for t in '$root_git/modules' '$root_git/modules/lib' '$proj_git/modules' '$proj_git/modules/lib' '$wt_git/modules/lib'; do
+  mkdir "\$t/new" 2>/dev/null && planted="\$planted mkdir:\$t/new"
+  ln -s '$home/state/prepared' "\$t/link" 2>/dev/null && planted="\$planted symlink:\$t/link"
+  mkdir -p '$home/state/prepared/moved' && mv '$home/state/prepared/moved' "\$t/moved" 2>/dev/null && planted="\$planted movein:\$t/moved"
+done
+for t in '$proj_git/modules/lib/sub/modules' '$proj_git/modules/lib/sub/worktrees'; do
+  mkdir "\$t" 2>/dev/null && planted="\$planted mkdir:\$t"
+done
+ln -s '$home/state/prepared' '$root_git/worktrees' 2>/dev/null && planted="\$planted symlink:$root_git/worktrees"
+for t in '$wt_git/modules/lib/sub/config' '$wt_git/modules/lib/sub/hooks/post-checkout'; do
+  ( : >> "\$t" ) 2>/dev/null && planted="\$planted write:\$t"
+done
+for t in '$root_git/modules/lib/sub' '$root_git/modules/lib' '$root_git/modules' \
+  '$proj_git/modules/lib/sub' '$proj_git/modules/lib' '$proj_git/modules' \
+  '$wt_git/modules/lib/sub' '$wt_git/modules/lib' '$wt_git/modules' '$wt_git' '$proj_git/worktrees'; do
+  mv "\$t" "\$t.aside" 2>/dev/null && planted="\$planted move:\$t"
+done
+echo "planted=\${planted:-none}" > '$probe.tmp'
+mkdir '$home/state/control' && mv '$home/state/control' '$home/state/control.moved'
+echo "control=\$?" >> '$probe.tmp'
+git -C '$root' worktree add -q -b pv-root-slot "\$TREEHOUSE_ROOT/pool/root-slot" >/dev/null 2>&1 &&
+  git -C '$root' worktree remove "\$TREEHOUSE_ROOT/pool/root-slot" >/dev/null 2>&1
+echo "rootslot=\$?" >> '$probe.tmp'
+mv '$root_git/worktrees' '$root_git/worktrees.aside' 2>/dev/null && echo "rootworktrees=moved" >> '$probe.tmp' ||
+  echo "rootworktrees=kept" >> '$probe.tmp'
+git -C '$proj' worktree add -q -b pv-slot "\$TREEHOUSE_ROOT/pool/slot" >/dev/null 2>&1 &&
+  echo work > "\$TREEHOUSE_ROOT/pool/slot/work.txt" &&
+  git -C "\$TREEHOUSE_ROOT/pool/slot" add work.txt &&
+  git -C "\$TREEHOUSE_ROOT/pool/slot" -c user.name=probe -c user.email=probe@example.test commit -q -m work >/dev/null 2>&1 &&
+  git -C '$proj' worktree remove "\$TREEHOUSE_ROOT/pool/slot" >/dev/null 2>&1
+echo "slot=\$?" >> '$probe.tmp'
+mv '$probe.tmp' '$probe'
+SH
+  cat > "$dir/primary" <<SH
+#!/bin/sh
+tmux new-window -d '$dir/window'
+exec sleep 60
+SH
+  chmod +x "$dir/window" "$dir/primary"
+  out=$(FM_TEST_SEAM=1 FM_PRIVATEER_PRIMARY="$dir/primary" FM_HOME="$home" FM_ROOT_OVERRIDE="$root" "$PRIVATEER" start 2>&1)
+  status=$?
+  socket=$(printf '%s\n' "$out" | sed -n 's/.*on tmux socket \([^ ]*\).*/\1/p' | head -1)
+  wait_for_file "$probe"
+  FM_HOME="$home" FM_ROOT_OVERRIDE="$root" "$PRIVATEER" stop >/dev/null 2>&1 || { [ -z "$socket" ] || tmux -L "$socket" kill-server 2>/dev/null; }
+  kill "$spid" 2>/dev/null
+  expect_code 0 "$status" "the real session must start: $out"
+  assert_equals "planted=none
+control=0
+rootslot=0
+rootworktrees=kept
+slot=0" "$(cat "$probe" 2>/dev/null)" \
+    "a command started through tmux must move aside, replace, link over, or plant none of the directories that lead to the Git config or hooks of the checkout, a clone, their submodules, or a linked worktree outside the pool, nor write that worktree's submodule config, while it still renames a directory of the home and adds, commits in, and removes worktrees in the home's own pool"
+  for g in "$root_git/modules/lib/sub" "$proj_git/modules/lib/sub" "$wt_git/modules/lib/sub"; do
+    [ -f "$g/HEAD" ] || fail "the submodule git dir at $g must still be in place after the session"
+  done
+  assert_not_contains "$(git -C "$proj" worktree list --porcelain)" "pool/slot" "the clone's pool worktree must be gone after its removal"
+  pass "in the real sandboxed session no directory leading to a Git config or hooks of the checkout, a clone, their submodules, or a linked worktree outside the pool can be moved aside, replaced, linked over, or planted, while the session's own pool worktrees are still added and removed"
 }
 
 # --- spawn ------------------------------------------------------------------
@@ -1853,6 +2057,9 @@ test_proxy_forwards_only_allowed_destinations
 test_session_sandbox_holds_every_command
 test_session_first_mate_owns_the_lock_and_a_plain_shell_does_not
 test_session_zsh_here_document_runs
+test_session_sandbox_pins_git_metadata
+test_proxy_reloads_its_allowlist
+test_reload_rewrites_the_allowlist
 test_start_refuses_while_running
 test_stop_refuses_with_work_in_flight_and_stops_an_idle_session
 test_stop_stow_delivers_the_stow_then_stops
