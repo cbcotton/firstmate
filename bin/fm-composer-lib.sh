@@ -66,7 +66,8 @@
 #                the idle placeholders) - none of which is ever typed input.
 #   left-bar   - opencode: rows prefixed by a heavy left bar `┃` with no
 #                closing border, holding the idle hint, blank rows, and a
-#                mode/model footer line.
+#                mode/model footer line, both of which a narrow pane wraps
+#                onto further left-bar rows.
 #   separated  - pi: content rows between two solid horizontal `─` rules, no
 #                glyph and no side border. Provable only with a live agent
 #                identity reporting an idle/done pi (herdr `agent
@@ -474,7 +475,8 @@ FM_COMPOSER_IDLE_RE_DEFAULT='^Type a message\.\.\.$|^Ask anything(\.\.\.|…)|^P
 # Opencode draws a mode/model footer line INSIDE its left-bar composer
 # ("Build · GPT-5.5 Fast OpenAI · high"; "Privateer · <model> <sailor>" under
 # `opencode --agent privateer`). It is composer furniture, not typed text, and
-# only the run's LAST row is ever matched against it.
+# only the first row of the run's LAST non-blank block is ever matched against
+# it (_fm_composer_leftbar_footer_row owns how a narrow pane's wrap is read).
 FM_COMPOSER_LEFTBAR_FOOTER_RE_DEFAULT='^(Build|Plan|Privateer)[[:space:]]+·[[:space:]]+'
 # Claude draws its permission-mode hint on its own row directly below the
 # composer (` ⏵⏵ bypass permissions on (shift+tab to cycle)`, ` ⏵⏵ accept edits
@@ -1289,23 +1291,88 @@ _fm_composer_classify_bare_wrap() {  # <screen> <styled> <glyph-row> <cursor-row
   if [ "$styled" = 1 ]; then printf 'pending'; else printf 'unknown'; fi
 }
 
-# _fm_composer_classify_leftbar: opencode's left-bar composer. Blank rows and
-# the idle hint read empty; the run's LAST row may be the mode/model footer
-# (composer furniture, never typed text). Real content is pending when styling
-# can prove it real, unknown otherwise.
-_fm_composer_classify_leftbar() {  # <screen> <styled> <first-row> <last-row>
-  local screen=$1 styled=$2 first=$3 last=$4
-  local row raw content pending_seen=0 footer_re leading_blank=1 placeholder_position=0
+# _fm_composer_leftbar_content: the classification content of left-bar row <n>,
+# with its bar stripped.
+_fm_composer_leftbar_content() {  # <screen> <styled> <n>
+  local content
+  content=$(_fm_composer_row_content "$(_fm_composer_screen_row "$3" "$1")" "$2")
+  case "$content" in '┃'*) content=${content#┃} ;; esac
+  fm_composer_normalize_trim_var content
+  printf '%s' "$content"
+}
+
+# _fm_composer_leftbar_footer_matches: 0 when <row> opens opencode's footer,
+# also read with the spaces around its first `·` restored and, given the row
+# beneath it, with a label that wrapped onto that row's first word rejoined.
+_fm_composer_leftbar_footer_matches() {  # <row> [next-row]
+  local row=$1 next=${2:-} footer_re label rest
   footer_re=${FM_COMPOSER_LEFTBAR_FOOTER_RE:-$FM_COMPOSER_LEFTBAR_FOOTER_RE_DEFAULT}
+  fm_composer_idle_matches "$row" "$footer_re" sensitive && return 0
+  case "$row" in *'·'*) ;; *) return 1 ;; esac
+  label=${row%%·*}
+  rest=${row#*·}
+  fm_composer_normalize_trim_var label
+  fm_composer_normalize_trim_var rest
+  fm_composer_idle_matches "$label · $rest" "$footer_re" sensitive && return 0
+  [ -n "$next" ] || return 1
+  fm_composer_idle_matches "$label${next%%[[:space:]]*} · $rest" "$footer_re" sensitive
+}
+
+# _fm_composer_leftbar_footer_row: the first row of opencode's footer in the
+# left-bar run <first>..<last>, or -1. The footer is always the run's last
+# non-blank block, below the cursor's input row. A wide pane draws it on one
+# row; a narrow pane wraps it (verified live, opencode 1.18.33): the spaces
+# around its `·` go, its agent label breaks across rows (`Privatee ·Qwen…` over
+# `r  (local)`), and its cells continue on further rows. Such a block counts
+# only whole, under a blank gap row with input rows above that gap.
+_fm_composer_leftbar_footer_row() {  # <screen> <styled> <first-row> <last-row> [cursor-row]
+  local screen=$1 styled=$2 first=$3 last=$4 cy=${5:--1} row=$4 top content
+  content=$(_fm_composer_leftbar_content "$screen" "$styled" "$row")
+  while [ -z "$content" ] && [ "$row" -gt "$first" ]; do
+    row=$((row - 1))
+    content=$(_fm_composer_leftbar_content "$screen" "$styled" "$row")
+  done
+  if [ -z "$content" ] || [ "$row" -le "$cy" ]; then
+    printf '%s' -1; return 0
+  fi
+  if _fm_composer_leftbar_footer_matches "$content"; then
+    printf '%s' "$row"; return 0
+  fi
+  top=$row
+  while [ "$top" -gt "$first" ] \
+     && [ -n "$(_fm_composer_leftbar_content "$screen" "$styled" "$((top - 1))")" ]; do
+    top=$((top - 1))
+  done
+  if [ "$top" -lt "$row" ] && [ "$((top - 1))" -gt "$first" ] && [ "$top" -gt "$cy" ] \
+     && _fm_composer_leftbar_footer_matches \
+          "$(_fm_composer_leftbar_content "$screen" "$styled" "$top")" \
+          "$(_fm_composer_leftbar_content "$screen" "$styled" "$((top + 1))")"; then
+    printf '%s' "$top"; return 0
+  fi
+  printf '%s' -1
+}
+
+# _fm_composer_classify_leftbar: opencode's left-bar composer. Blank rows and
+# the idle hint read empty, and the footer (composer furniture, never typed
+# text) is left out. A narrow pane wraps the idle hint too; with the cursor
+# parked on its first row, as opencode parks it in an empty composer, the rows
+# it continues onto are the hint. Real content is pending when styling can
+# prove it real, unknown otherwise.
+_fm_composer_classify_leftbar() {  # <screen> <styled> <first-row> <last-row> [cursor-row]
+  local screen=$1 styled=$2 first=$3 last=$4 cy=${5:-}
+  local row raw content pending_seen=0 leading_blank=1 placeholder_position=0 footer hint=0
+  footer=$(_fm_composer_leftbar_footer_row "$screen" "$styled" "$first" "$last" "$cy")
+  [ "$footer" -ge 0 ] || footer=$((last + 1))
   row=$first
-  while [ "$row" -le "$last" ]; do
+  while [ "$row" -lt "$footer" ]; do
     raw=$(_fm_composer_screen_row "$row" "$screen")
     content=$(_fm_composer_row_content "$raw" "$styled")
     case "$content" in
       '┃'*) content=${content#┃} ;;
     esac
     fm_composer_normalize_trim_var content
-    if [ -z "$content" ]; then row=$((row + 1)); continue; fi
+    if [ -z "$content" ]; then hint=0; row=$((row + 1)); continue; fi
+    if [ "$hint" = 1 ]; then row=$((row + 1)); continue; fi
     if [ "$leading_blank" = 1 ] && [ "$row" -gt "$first" ]; then
       placeholder_position=1
     else
@@ -1314,10 +1381,7 @@ _fm_composer_classify_leftbar() {  # <screen> <styled> <first-row> <last-row>
     leading_blank=0
     if [ "$placeholder_position" = 1 ] \
        && fm_composer_idle_matches "$content" "${FM_COMPOSER_IDLE_RE:-$FM_COMPOSER_IDLE_RE_DEFAULT}" insensitive; then
-      row=$((row + 1)); continue
-    fi
-    if [ "$row" -eq "$last" ] \
-       && fm_composer_idle_matches "$content" "$footer_re" sensitive; then
+      [ "$row" != "$cy" ] || hint=1
       row=$((row + 1)); continue
     fi
     pending_seen=1
@@ -1538,9 +1602,8 @@ _fm_composer_select_cursorless() {
 }
 
 fm_composer_extract_selected_content() {  # <caps> <screen>
-  local caps=$1 screen=$2 styled=0 kv plain row raw content glyph joined='' footer_re prompt_row=-1
+  local caps=$1 screen=$2 styled=0 kv plain row raw content glyph joined='' footer=-1 prompt_row=-1
   local leading_blank=1 placeholder_position=0 prompt_is_shell=0
-  footer_re=${FM_COMPOSER_LEFTBAR_FOOTER_RE:-$FM_COMPOSER_LEFTBAR_FOOTER_RE_DEFAULT}
   while IFS= read -r kv; do
     [ "$kv" = styled=1 ] && styled=1
   done <<EOF
@@ -1549,6 +1612,10 @@ EOF
   plain=$(printf '%s\n' "$screen" | fm_composer_strip_ansi)
   _fm_composer_scan_screen "$plain" '' 1
   _fm_composer_select_cursorless "$plain" || return 1
+  if [ "$FM_COMPOSER_SELECTED_KIND" = leftbar ]; then
+    footer=$(_fm_composer_leftbar_footer_row "$screen" "$styled" \
+      "$FM_COMPOSER_SELECTED_FIRST" "$FM_COMPOSER_SELECTED_LAST")
+  fi
   row=$FM_COMPOSER_SELECTED_FIRST
   while [ "$row" -le "$FM_COMPOSER_SELECTED_LAST" ]; do
     raw=$(_fm_composer_screen_row "$row" "$screen")
@@ -1601,9 +1668,7 @@ EOF
               || { [ "$FM_COMPOSER_SELECTED_KIND" = box ] && [ "$prompt_is_shell" = 1 ]; }; } \
             && [ "$placeholder_position" = 1 ] \
             && fm_composer_idle_matches "$content" "${FM_COMPOSER_IDLE_RE:-$FM_COMPOSER_IDLE_RE_DEFAULT}" insensitive; } \
-       || { [ "$FM_COMPOSER_SELECTED_KIND" = leftbar ] \
-            && [ "$row" -eq "$FM_COMPOSER_SELECTED_LAST" ] \
-            && fm_composer_idle_matches "$content" "$footer_re" sensitive; }; then
+       || { [ "$footer" -ge 0 ] && [ "$row" -ge "$footer" ]; }; then
       row=$((row + 1))
       continue
     fi
@@ -1645,7 +1710,7 @@ EOF
        && [ "$cy" -ge "$FM_COMPOSER_SCAN_LEFTBAR_START" ] \
        && [ "$cy" -le "$FM_COMPOSER_SCAN_LEFTBAR_END" ]; then
       _fm_composer_classify_leftbar "$screen" "$styled" \
-        "$FM_COMPOSER_SCAN_LEFTBAR_START" "$FM_COMPOSER_SCAN_LEFTBAR_END"
+        "$FM_COMPOSER_SCAN_LEFTBAR_START" "$FM_COMPOSER_SCAN_LEFTBAR_END" "$cy"
       return 0
     fi
     if [ "$FM_COMPOSER_SCAN_BARE_ROW" -ge 0 ] && [ "$cy" -eq "$FM_COMPOSER_SCAN_BARE_ROW" ]; then

@@ -705,6 +705,83 @@ test_matrix_opencode_leftbar_signals() {
   pass "matrix: opencode's left-bar composer reads empty everywhere and scans the full active run"
 }
 
+# oc_screen <composer-row...>: an OpenCode 1.18.33 session view whose left-bar
+# composer holds the given rows, styled as the live capture draws them; row 3
+# is the input row, under the pad row and above the footer's gap row.
+oc_screen() {
+  local row
+  printf '  ▣ Privateer · Qwen3.8 27B TURBO Fable (mlx-serve) · 13.4s\n\n'
+  for row in "$@"; do
+    printf '  %s[38;2;92;156;245m┃%s\n' "$ESC" "$row"
+  done
+  printf '  %s[38;2;92;156;245m╹%s[38;2;30;30;30m▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀\n' "$ESC" "$ESC"
+}
+
+test_matrix_opencode_wrapped_footer() {
+  # A narrow pane wraps OpenCode's in-composer footer instead of truncating it:
+  # the spaces around `·` go, the agent label breaks across rows, and the model
+  # and provider cells continue on further left-bar rows. Rows captured live
+  # from opencode 1.18.33 (`--agent privateer`, then the Build agent) as the
+  # pane narrowed; every one read `pending` on a visibly empty composer, the
+  # verdict that refused fm-privateer.sh stop --stow.
+  local a m t screen hint
+  a="${ESC}[38;2;92;156;245m" m="${ESC}[38;2;128;128;128m" t="${ESC}[38;2;238;238;238m"
+  # 74 columns: squeezed onto one row, with a blank row under it.
+  screen=$(oc_screen '' '' '' "  ${a}Privateer ${m}·${t}Qwen3.8 27B TURBO Fable (mlx-serve) ${m}MLX Serve (local)" '')
+  assert_screen "opencode squeezed footer on tmux" empty "$CAPS_TMUX" "$screen" 3
+  assert_screen "opencode squeezed footer on herdr" empty "$CAPS_STYLED" "$screen"
+  # 72 columns: the provider cell continues on a second row.
+  screen=$(oc_screen '' '' '' "  ${a}Privateer ${m}·${t}Qwen3.8 27B TURBO Fable (mlx-serve) ${m}MLX Serve (" \
+    "                                                 ${m}local)")
+  assert_screen "opencode wrapped footer on tmux" empty "$CAPS_TMUX" "$screen" 3
+  assert_screen "opencode wrapped footer on herdr" empty "$CAPS_STYLED" "$screen"
+  assert_screen "opencode wrapped footer on zellij" empty "$CAPS_STYLED_NOID" "$screen"
+  assert_screen "opencode wrapped footer on cmux/orca" empty "$CAPS_PLAIN" "$screen"
+  # 70 columns: no space left on either side of the dot.
+  screen=$(oc_screen '' '' '' "  ${a}Privateer${m}·${t}Qwen3.8 27B TURBO Fable (mlx-serve) ${m}MLX Serve (" \
+    "                                                ${m}local)")
+  assert_screen "opencode spaceless wrapped footer on tmux" empty "$CAPS_TMUX" "$screen" 3
+  # 66 and 60 columns: the agent label itself breaks across rows.
+  screen=$(oc_screen '' '' '' "  ${a}Privatee ${m}·${t}Qwen3.8 27B TURBO Fable (mlx-serve) ${m}MLX Serve" \
+    "  ${a}r                                             ${m}(local)" '')
+  assert_screen "opencode broken-label footer on tmux" empty "$CAPS_TMUX" "$screen" 3
+  assert_screen "opencode broken-label footer on herdr" empty "$CAPS_STYLED" "$screen"
+  screen=$(oc_screen '' '' '' "  ${a}Private ${m}·${t}Qwen3.8 27B TURBO Fable (mlx-serve) ${m}MLX" \
+    "  ${a}er                                           ${m}Serve" \
+    "                                               ${m} (loc" \
+    "                                               ${m}al)" '')
+  assert_screen "opencode four-row footer on tmux" empty "$CAPS_TMUX" "$screen" 3
+  screen=$(oc_screen '' '' '' "  ${a}Buil${m}·${t}Qwen3.8 27B TURBO Fable (mlx-serve) ${m}M" \
+    "  ${a}d                                        ${m}L")
+  assert_screen "opencode broken Build footer on tmux" empty "$CAPS_TMUX" "$screen" 3
+  # Typed text above the same wrapped footer still reads pending.
+  screen=$(oc_screen '' "  ${t}fix · tests" '' "  ${a}Privatee ${m}·${t}Qwen3.8 27B TURBO Fable (mlx-serve) ${m}MLX Serve" \
+    "  ${a}r                                             ${m}(local)" '')
+  assert_screen "opencode draft above a wrapped footer on tmux" pending "$CAPS_TMUX" "$screen" 3
+  assert_screen "opencode draft above a wrapped footer on herdr" pending "$CAPS_STYLED" "$screen"
+  assert_screen "opencode draft above a wrapped footer on cmux/orca" unknown "$CAPS_PLAIN" "$screen"
+  # The footer is only ever the run's last block: a draft shaped like a wrapped
+  # footer above an agent label no rule knows stays a draft.
+  screen=$(oc_screen '' "  ${t}Buil·draft that looks like a footer" "  ${t}d and continues" '' \
+    "  ${a}Docs ${m}·${t}GPT-5.5 ${m}OpenAI")
+  assert_screen "opencode footer-shaped draft on tmux" pending "$CAPS_TMUX" "$screen" 3
+  assert_screen "opencode footer-shaped draft on herdr" pending "$CAPS_STYLED" "$screen"
+  # A wrapped footer always sits below the cursor's input row, so a cursor on
+  # the would-be footer's first row is a draft, not furniture.
+  screen=$(oc_screen '' '' "  ${t}Buil·draft" "  ${t}d and continues")
+  assert_screen "opencode footer-shaped draft under the cursor on tmux" pending "$CAPS_TMUX" "$screen" 4
+  # The fresh-session idle hint wraps the same way; OpenCode parks the cursor
+  # on its first row, which is the proof that the row under it is the hint.
+  hint="  ${m}Ask anything… \"What is the tech stack of this"
+  screen=$(oc_screen '' "$hint" "  ${m}project?\"" '' "  ${a}Build${m}·${t}Qwen3.8 27B TURBO Fable (mlx-serve) ${m}MLX" \
+    "                                            ${m}Serve (" "                                            ${m}local)")
+  assert_screen "opencode wrapped idle hint on tmux" empty "$CAPS_TMUX" "$screen" 3
+  assert_screen "opencode text continuing a hint-shaped row on tmux" pending "$CAPS_TMUX" "$screen" 4
+  # Without a cursor a continued hint row is indistinguishable from typed text.
+  assert_screen "opencode wrapped idle hint on herdr" pending "$CAPS_STYLED" "$screen"
+  pass "matrix: opencode's wrapped footer and idle hint read empty, and drafts beside them still refuse"
+}
+
 test_matrix_grok_titled_bottom_border() {
   # Grok 1.0.5 widened its titled BOTTOM border three columns past the top and
   # content rows. This is the idle capture from issue #3436; Herdr has no
@@ -981,6 +1058,7 @@ test_matrix_codex_idle_starfield_furniture
 test_matrix_pi_separated_needs_identity
 test_matrix_pi_dollar_status_footer_is_empty
 test_matrix_opencode_leftbar_signals
+test_matrix_opencode_wrapped_footer
 test_matrix_grok_titled_bottom_border
 test_matrix_kimi_bordered_shell_glyph_box
 test_matrix_claude_inside_zellij_ansi_dump

@@ -799,6 +799,53 @@ tests/fm-composer-codex-idle-live-e2e.test.sh
 The verification machine runs its fleet on Herdr and has no tmux installed, so on 2026-09-15 that guard reported `skip: live: tmux absent` there, and the Herdr capture above is this entry's live evidence.
 The guard also notes whether the starfield and the placeholder were actually drawn during its read, because codex need not animate them under every model or mode; a refresh on a tmux host should record that note beside the verdict rather than assume the starfield was exercised.
 
+### 2026-10-12 opencode 1.18.33 narrow-pane footer through tmux
+
+Verified on 2026-10-12 on macOS arm64 (Darwin 25.6.0) against opencode 1.18.33 on tmux 3.7c, in scratch panes on an isolated tmux server, with the Build agent and with a `privateer` agent launched as `opencode --agent privateer` from `docs/privateer/agents/privateer.md`.
+OpenCode draws its mode/model footer (`Privateer · <model> <provider>`) inside its left-bar composer, and a pane narrower than that footer wraps it rather than truncating it.
+The spaces around the `·` go first, then the agent label breaks across rows (`Privatee ·Qwen…` over `r  (local)`) and the model and provider cells continue on further left-bar rows, sometimes above a blank left-bar row.
+The fresh-session idle hint (`Ask anything… "…"`) wraps the same way, with the cursor parked on its first row.
+The classifier matched only the run's last row against the footer pattern, so a narrowed empty composer read `pending`, the verdict behind the `bin/fm-privateer.sh stop --stow` refusal; this fix covers that narrow-pane footer wrap.
+
+Follow-up, cause not established: the same morning `bin/fm-control.sh <task> relaunch` refused an OpenCode worker for visibly pending composer text on a 169-column pane that showed an OpenCode model-server error block, and one C-c cleared it.
+That pane was too wide for the footer to wrap, so this fix does not claim to explain or resolve that refusal.
+
+Each scratch pane was resized with `tmux resize-window` and read with the shipped tmux adapter through a `-L` wrapper, then given a typed probe that was never submitted:
+
+```sh
+bash -c '. bin/fm-tmux-lib.sh; tmux() { command tmux -L <socket> "$@"; }; fm_tmux_composer_state <target>'
+```
+
+Observed verdicts for the empty Privateer session view before the fix, at 120, 90, 80, 75, 74, 72, 70, 66, and 60 columns:
+
+```text
+empty empty empty empty pending pending pending pending pending
+```
+
+On the 72-column capture, restoring the dot's spaces alone or removing the continuation row alone still read `pending`; only both together read `empty`, so the fix reads the squeezed spacing, the broken label, and the continuation rows as one footer block.
+After the fix the Privateer and Build session views read `empty` when empty and `pending` with typed text at every width from 120 down to 36 columns, and the fresh-session view did the same down to 44 columns.
+Before the fix a Claude Code 2.1.296 pane already read `empty` at 120, 60, and 44 columns, because Claude draws its furniture below its composer's closing rule and truncates it.
+
+`test_matrix_opencode_wrapped_footer` in `tests/fm-composer-lib.test.sh` carries the captured rows and pins the counterweights: typed text above a wrapped footer still reads `pending`, a footer-shaped draft above an unrecognized agent label stays a draft, and a cursorless read of the wrapped idle hint refuses.
+`tests/fm-privateer.test.sh` drives `stop --stow` through its fake pane with the wrapped footer, and proves it stows an empty composer and refuses a draft without typing over it.
+
+The live refresh is the composer-matrix guard, which narrows its proven-idle OpenCode pane until the footer leaves its one-row form:
+
+```sh
+FM_COMPOSER_MATRIX_LIVE=1 tests/fm-composer-matrix-live-e2e.test.sh
+```
+
+Observed OpenCode output after the fix:
+
+```text
+ok - opencode (1.18.33): real idle composer classifies empty
+ok - opencode (1.18.33): the same idle pane read cursorless is not pending (verdict: unknown)
+ok - opencode (1.18.33): idle composer with its footer wrapped at 60 columns classifies empty
+ok - opencode (1.18.33): typed text above the wrapped footer still classifies pending
+```
+
+The same guard run against the pre-fix classifier failed with `not ok - opencode (1.18.33): idle composer with its footer wrapped at 60 columns read pending, expected empty`.
+
 ## Steering-inbox doorbell
 
 The steering channel's one behavioral assumption - a real worker agent follows the constant self-describing doorbell line (list the inbox, read and act on its records in numeric order, then `mv` each into `handled/`) - was verified on 2026-08-23 against every installed verified harness, on tmux 3.6a, macOS arm64, on an isolated private socket, driving the REAL `bin/fm-send.sh` end to end (durable record plus doorbell, with one mid-wait re-ring playing the watcher's role).

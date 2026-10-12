@@ -19,7 +19,9 @@
 #     non-tmux backend performs and the one a vendor's own footer rows can
 #     break: a harness that renders a statusLine or mode hint below its
 #     composer must never make an idle composer read `pending`, because that
-#     verdict is what skips a steer's doorbell fleet-wide.
+#     verdict is what skips a steer's doorbell fleet-wide;
+#   - OpenCode's footer wrapped by a narrow pane: the same idle pane, narrowed,
+#     must still read `empty`, and `pending` once a probe is typed.
 #
 # Run explicitly with FM_COMPOSER_MATRIX_LIVE=1. No prompt is ever submitted
 # to any harness, so no model tokens are spent. An absent harness is reported
@@ -116,8 +118,60 @@ check_harness_idle_empty() {  # <name> <launch-cmd...>
     CHECKED=$((CHECKED + 1))
     pass "$name ($version): real idle composer classifies empty"
     check_harness_idle_cursorless "$name" "$version" "$SESSION:$win"
+    [ "$name" != opencode ] || check_opencode_narrow_footer "$version" "$SESSION:$win"
   fi
   tmux -L "$SOCKET" kill-window -t "$SESSION:$win" 2>/dev/null || true
+}
+
+# OpenCode draws its mode/model footer INSIDE its left-bar composer and, in a
+# narrow pane, wraps it across rows rather than truncating it (opencode
+# 1.18.33), which once read `pending` on an empty composer and refused
+# fm-privateer.sh stop --stow. Narrow the proven-idle pane until no footer row
+# keeps its one-row `<Agent> · ` form, then require empty, and pending once a
+# probe that is never submitted is typed.
+check_opencode_narrow_footer() {  # <version> <target>
+  local version=$1 target=$2 width='' w verdict='' i=0
+  for w in 60 48 36; do
+    tmux -L "$SOCKET" resize-window -t "$target" -x "$w" -y 50 2>/dev/null || true
+    sleep 1
+    if ! tmux -L "$SOCKET" capture-pane -p -t "$target" 2>/dev/null \
+      | grep -qE '^[[:space:]]*┃[[:space:]]+[[:alpha:]]+ · '; then
+      width=$w
+      break
+    fi
+  done
+  if [ -z "$width" ]; then
+    note "opencode ($version): its footer kept the one-row form down to 36 columns, so the wrapped-footer case was not exercised"
+    return 0
+  fi
+  while [ "$i" -lt 5 ]; do
+    verdict=$(fm_tmux_composer_state "$target")
+    [ "$verdict" = empty ] && break
+    i=$((i + 1))
+    sleep 1
+  done
+  if [ "$verdict" != empty ]; then
+    printf '# opencode pane tail at %s columns:\n' "$width" >&2
+    tmux -L "$SOCKET" capture-pane -p -t "$target" 2>/dev/null \
+      | grep '[^[:space:]]' | tail -8 | sed 's/^/#   /' >&2
+    FAILED=1
+    printf 'not ok - opencode (%s): idle composer with its footer wrapped at %s columns read %s, expected empty\n' \
+      "$version" "$width" "${verdict:-unreadable}" >&2
+    return 0
+  fi
+  CHECKED=$((CHECKED + 1))
+  pass "opencode ($version): idle composer with its footer wrapped at $width columns classifies empty"
+  tmux -L "$SOCKET" send-keys -t "$target" -l 'audit probe never submitted' 2>/dev/null || true
+  sleep 1
+  verdict=$(fm_tmux_composer_state "$target")
+  if [ "$verdict" = pending ]; then
+    CHECKED=$((CHECKED + 1))
+    pass "opencode ($version): typed text above the wrapped footer still classifies pending"
+  else
+    FAILED=1
+    printf 'not ok - opencode (%s): typed text above its footer wrapped at %s columns read %s, expected pending\n' \
+      "$version" "$width" "${verdict:-unreadable}" >&2
+  fi
 }
 
 # The same proven-idle pane read the way every cursorless backend reads it
