@@ -137,8 +137,10 @@
 # which launch-env names as TREEHOUSE_ROOT, so treehouse creates and hands out
 # slots there; the shared pool under ~/.treehouse, and every other home's
 # slots, are out of reach. Nothing inside may write this home's egress
-# directory, config/, or bin/; the helm, or any directory entry between this
-# home and it; when this checkout is inside this home, any path in it an
+# directory, config/, or bin/; the grant ledger state/permission-grants.jsonl,
+# which the captain writes from outside (bin/fm-permission-grant.sh); the
+# helm, or any directory entry between this home and it; when this checkout
+# is inside this home, any path in it an
 # OpenCode first mate loads or the helm is rendered from: its AGENTS.md, CLAUDE.md,
 # CONTEXT.md, opencode.json(c), tui.json(c), .agents/, docs/, the .claude
 # entry and its skills link, the .opencode entry, and, under .opencode/, the
@@ -170,8 +172,7 @@
 #     sandbox covers the first mate and every worker alike, in place of a
 #     per-task sailor sandbox;
 #   - a worker can therefore still write what the first mate's own fm-spawn
-#     and fm-permission-grant write from inside it: the task records
-#     state/<id>.meta and the grant ledger state/permission-grants.jsonl;
+#     writes from inside it: the task records state/<id>.meta;
 #   - the per-task temp roots under /tmp/fm-*, the user's own temporary
 #     directory ($TMPDIR), and the flat here-document files stock macOS
 #     Bash writes directly in /var/tmp as sh-thd* are namespaces shared by
@@ -710,6 +711,9 @@ cmd_start() {
   # sandbox: this home's config and scripts, or any Git config or hook of this
   # checkout, of a clone under projects/, or of a worker's worktree.
   sandbox_args+=(--deny-write "$home_real/config" --deny-write "$home_real/bin")
+  # The grant ledger widens a worker's permissions at its next launch, so only
+  # the captain's own shell outside the session writes it.
+  sandbox_args+=(--deny-write "$home_real/state/permission-grants.jsonl")
   # The helm is the first mate's whole instruction surface, so nothing inside
   # may write it or move aside any directory that leads to it.
   sandbox_args+=(--deny-write "$helm_real")
