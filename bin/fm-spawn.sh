@@ -103,6 +103,9 @@
 #   omitted because the sailor's server sets reasoning depth, and the record
 #   gets sailor=<name>. A relaunch that keeps OpenCode and the recorded model
 #   keeps the recorded sailor; a relaunch onto another harness drops it.
+#   Every sailor launch, a Privateer worker's included, also gets the worktree
+#   plugin .opencode/plugins/fm-sailor-system-fold.js, which folds OpenCode's
+#   system prompt into one system message; other OpenCode launches remove it.
 #   With config/sailor-sandbox present, every sailor launch runs OpenCode inside
 #   bin/fm-sandbox-exec.sh: writes only to the task's copy (never its Git hooks
 #   or config), its Git metadata, its task temp, OpenCode's own data, and the
@@ -4826,6 +4829,46 @@ export const FmBusyState = async () => {
 };
 EOF
     exclude_path '.opencode/plugins/fm-busy-state.js'
+    # A sailor's chat template may accept only one leading system message, so
+    # sailor launches fold OpenCode's system entries into one (docs/configuration.md
+    # "Named sailors"); any other launch drops a copy a reused worktree kept.
+    if [ -n "$SAILOR" ]; then
+      cat >"$WT/.opencode/plugins/fm-sailor-system-fold.js" <<'EOF'
+// Firstmate sailor system-prompt fold; written by fm-spawn for sailor launches.
+// OpenCode sends one system message per entry of output.system, and any plugin
+// adding system text makes a second one, which a strict local chat template
+// rejects. Plugins run in sequence on the same array, so this hook folds what
+// earlier plugins added and wraps the array's own mutators so whatever later
+// plugins or OpenCode itself add is folded too, keeping every text in order.
+const fold = (system) => {
+  if (system.length <= 1) return;
+  const text = system.filter((entry) => entry).join("\n");
+  Array.prototype.splice.call(system, 0, system.length);
+  if (text) Array.prototype.push.call(system, text);
+};
+export const FmSailorSystemFold = async () => ({
+  "experimental.chat.system.transform": async (_input, output) => {
+    const system = output && output.system;
+    if (!Array.isArray(system)) return;
+    fold(system);
+    for (const name of ["push", "unshift", "splice"]) {
+      Object.defineProperty(system, name, {
+        configurable: true,
+        writable: true,
+        value: (...args) => {
+          const result = Array.prototype[name].apply(system, args);
+          fold(system);
+          return result;
+        },
+      });
+    }
+  },
+});
+EOF
+      exclude_path '.opencode/plugins/fm-sailor-system-fold.js'
+    else
+      rm -f "$WT/.opencode/plugins/fm-sailor-system-fold.js"
+    fi
     ;;
   pi | pi-signed)
     # Written OUTSIDE the worktree: pi's project-trust gate fires on any extension

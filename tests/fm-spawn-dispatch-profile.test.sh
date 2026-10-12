@@ -837,6 +837,83 @@ test_opencode_sailor_launch_points_at_the_sailor() {
   pass "an opencode sailor launch carries the sailor as its provider and records sailor=<name>"
 }
 
+# fold_system <plugin> <spec-json>: run OpenCode's system-prompt preparation
+# around the generated fold plugin in a plain Node host and print the system
+# messages it would send. The spec holds the `initial` entries and the texts
+# other plugins push `before` and `after` the fold, one plugin per text; the
+# hooks share one array in sequence and the post-hook step is OpenCode
+# 1.18.33's LLMRequestPrep.prepare (docs/verification/local-sailors.md).
+fold_system() {
+  PLUGIN_PATH="$1" node --input-type=module - "$2" 2>&1 <<'EOF'
+import { pathToFileURL } from "node:url";
+const mod = await import(pathToFileURL(process.env.PLUGIN_PATH).href);
+const hooks = await mod.FmSailorSystemFold({});
+const spec = JSON.parse(process.argv[2]);
+const other = (text) => async (_input, output) => { output.system.push(text); };
+const chain = [
+  ...(spec.before || []).map(other),
+  hooks["experimental.chat.system.transform"],
+  ...(spec.after || []).map(other),
+];
+const system = [...spec.initial];
+const first = system[0];
+for (const hook of chain) await hook({ sessionID: "ses" }, { system });
+if (system.length > 2 && system[0] === first) {
+  const rest = system.slice(1);
+  system.length = 0;
+  system.push(first, rest.join("\n"));
+}
+console.log(JSON.stringify(system));
+EOF
+}
+
+test_sailor_launch_folds_the_opencode_system_prompt() {
+  local rec id out status plugin
+  id=profile-sailor-fold-s4
+  rec=$(make_spawn_case profile-sailor-fold opencode "$id")
+  read_case_record "$rec"
+  enable_sailors "$HOME_DIR" "$FAKEBIN_DIR" live
+
+  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR" --harness opencode --model qwen-coder --sailor tiller)
+  status=$?
+  expect_code 0 "$status" "an opencode spawn on a live sailor should succeed"$'\n'"$out"
+  plugin="$WT_DIR/.opencode/plugins/fm-sailor-system-fold.js"
+  assert_present "$plugin" "a sailor launch did not write the system-fold plugin"
+  assert_equals "" "$(git -C "$WT_DIR" status --porcelain -- .opencode)" "the system-fold plugin must stay out of git's view"
+
+  assert_equals '["a"]' "$(fold_system "$plugin" '{"initial":["a"]}')" "one system entry must be left unchanged"
+  assert_equals '["a\nb"]' "$(fold_system "$plugin" '{"initial":["a","b"]}')" "two system entries must fold into one, in order"
+  assert_equals '["a\nb\nc"]' "$(fold_system "$plugin" '{"initial":["a","b","c"]}')" "three system entries must fold into one, in order"
+  assert_equals '["a\nx\ny"]' "$(fold_system "$plugin" '{"initial":["a"],"before":["x","y"]}')" \
+    "entries other plugins added before the fold must fold into one"
+  assert_equals '["a\nx\ny"]' "$(fold_system "$plugin" '{"initial":["a"],"after":["x","y"]}')" \
+    "entries other plugins add after the fold must still fold into one"
+  assert_equals '["a\nx\ny\nz"]' "$(fold_system "$plugin" '{"initial":["a"],"before":["x"],"after":["y","z"]}')" \
+    "entries added on both sides of the fold must fold into one, in order"
+  pass "a sailor launch folds OpenCode's system prompt into one message whatever the plugin order"
+}
+
+test_non_sailor_opencode_launch_drops_the_system_fold() {
+  local rec id out status excl
+  id=profile-oc-nofold-s5
+  rec=$(make_spawn_case profile-oc-nofold opencode "$id")
+  read_case_record "$rec"
+  # A reused worktree may still hold the plugin, out of git's view, from an
+  # earlier sailor task.
+  mkdir -p "$WT_DIR/.opencode/plugins"
+  : > "$WT_DIR/.opencode/plugins/fm-sailor-system-fold.js"
+  excl=$(git -C "$WT_DIR" rev-parse --path-format=absolute --git-path info/exclude)
+  mkdir -p "$(dirname "$excl")"
+  printf '%s\n' '.opencode/plugins/fm-sailor-system-fold.js' >> "$excl"
+
+  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR" --model anthropic/claude-sonnet-4-5)
+  status=$?
+  expect_code 0 "$status" "a non-sailor opencode spawn should succeed"$'\n'"$out"
+  assert_present "$WT_DIR/.opencode/plugins/fm-busy-state.js" "an opencode launch must still get its busy-state plugin"
+  [ ! -e "$WT_DIR/.opencode/plugins/fm-sailor-system-fold.js" ] || fail "a non-sailor opencode launch must not carry the system-fold plugin"
+  pass "a non-sailor OpenCode launch carries no system-fold plugin"
+}
+
 test_placeholder_sailor_refuses_before_endpoint_or_metadata() {
   local rec id out status
   id=profile-sailor-placeholder-s2
@@ -2066,6 +2143,8 @@ test_opencode_without_effort_keeps_launch_config_unchanged
 test_opencode_emits_variant_for_openai_family_effort
 test_opencode_omits_variant_when_model_family_lacks_effort
 test_opencode_sailor_launch_points_at_the_sailor
+test_sailor_launch_folds_the_opencode_system_prompt
+test_non_sailor_opencode_launch_drops_the_system_fold
 test_placeholder_sailor_refuses_before_endpoint_or_metadata
 test_sailor_requires_opencode_and_a_model
 test_opencode_restricted_profile_reaches_the_launch_and_brief

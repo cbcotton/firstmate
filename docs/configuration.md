@@ -1350,6 +1350,10 @@ A sailor is a named machine serving local models through an OpenAI-compatible en
   `bin/fm-sailor.sh provider-json` emits them under that model, so every worker launch and the Privateer first mate get the same settings from the same place, whatever the home's global OpenCode configuration says; an entry without `model_settings` launches exactly as before.
   Settings change only at the next launch, so a Privateer first mate needs a restart.
 - A profile with `sailor` must use the `opencode` harness and name a `model` from that sailor's list; `fm-spawn.sh --sailor` then points the worker's OpenCode at that endpoint.
+- Every sailor launch, a Privateer worker's included, folds OpenCode's system prompt into one system message, keeping every part in order.
+  OpenCode sends a second system message whenever a plugin adds system text, such as the global AXI plugins under `~/.config/opencode/plugins/`, and a local chat template that allows one leading system message, as Qwen-family templates do, rejects the request.
+  The fold is a worktree plugin that `fm-spawn.sh` writes beside the busy-state plugin; it folds what earlier plugins added and what later ones add, because OpenCode runs plugins in an order it does not document.
+  A launch without a sailor drops it, and in a Privateer worker, which loads no global plugins, it changes nothing.
 - A `placeholder` sailor is never dispatched, even when something answers at its address; only the captain changes its status to `live`.
 - A `live` sailor is eligible only while `bin/fm-sailor.sh check <sailor> <model>` passes: its endpoint must answer within a few seconds and list the model, and this home must hold fewer than `max_concurrent` tasks on it.
   The capacity count is per home, so homes that share one machine each count only their own tasks.
