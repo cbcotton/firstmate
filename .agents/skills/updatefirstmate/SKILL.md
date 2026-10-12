@@ -52,7 +52,7 @@ This touches only the firstmate repo and its own worktrees, never anything under
    A mate reaches neither set only because its home was skipped, because it has no live endpoint recorded here, or because its endpoint was positively classified as dead or missing.
    A skipped genuine divergence still requires attention through its durable reconciliation record; the other two cases need no update action from you.
    The script also fast-forwards every `forks/*` Privateer home whose session is not running, with the same guards, as a git fast-forward only.
-   A `fork <name>: skipped: Privateer session is running` line means that home was left as-is; tell the captain to stop it with `bin/fm-privateer.sh stop`, re-run the update, then start it again, and never touch its session yourself.
+   A `fork <name>: skipped: Privateer session is running` line means that home was left as-is; tell the captain to stop it with the `fm-privateer.sh stop` command that line prints, re-run the update, then start it again, and never touch its session yourself.
 
 2. **Re-read AGENTS.md if your own instructions changed.**
    When the updater printed `reread-firstmate: yes`, the tracked instruction surface (`AGENTS.md`, `bin/`, or `.agents/skills/`) just advanced under you.

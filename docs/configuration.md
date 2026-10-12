@@ -98,7 +98,6 @@ Each effective `FM_HOME` contains private operational directories.
 `projects/` holds local project clones.
 Firstmate reads these clones, but changes them only through the narrow guarded and concrete captain-approved exceptions in `AGENTS.md`.
 `forks/` holds other homes cloned inside this checkout, such as a [Privateer home](#setting-up-a-home), and is gitignored so they never make this checkout dirty.
-`/updatefirstmate` fast-forwards each `forks/*` Privateer home whose session is not running and reports a running one as skipped.
 Untracked files and directories whose names begin with `scratchpad` are also gitignored, so temporary scratch does not make porcelain-based secondmate sync guards treat a home as dirty.
 
 ### Format and lifecycle references

@@ -68,8 +68,9 @@
 # left untouched). A fork whose session is running (its socket exists and its
 # tmux server answers has-session, per fm-privateer-lib.sh; never attached to,
 # sent keys, or captured) is skipped with the stop-then-update step; a stale
-# socket with no live server counts as stopped. It is a git fast-forward only: the fork's own scripts, state/, data/,
-# and config/ are never run, read beyond the config/privateer marker, or changed.
+# socket with no live server counts as stopped. It is a git fast-forward only:
+# the fork's own scripts, state/, data/, and config/ are never run, read beyond
+# the config/privateer marker, or changed.
 #
 # Usage: fm-update.sh [--help]
 set -eu
