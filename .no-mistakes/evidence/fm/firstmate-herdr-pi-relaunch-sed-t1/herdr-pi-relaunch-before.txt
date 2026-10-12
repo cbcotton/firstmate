@@ -1,0 +1,5 @@
+### BASE 4badf1af (unfixed), macOS BSD sed
+sed: 1: "/private/var/folders/3c ...": invalid command code v
+not ok - Herdr Pi relaunch should complete (pi registration)
+error: pi executable not found on PATH; install it or select a different verified harness: expected exit 0, got 1
+exit=1
