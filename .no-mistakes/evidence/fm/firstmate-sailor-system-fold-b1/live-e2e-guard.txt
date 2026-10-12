@@ -1,0 +1,2 @@
+ok - opencode 1.18.33 in a sailor launch sends one system message that keeps every plugin's text in order
+# all fm-sailor-system-fold-live-e2e tests passed

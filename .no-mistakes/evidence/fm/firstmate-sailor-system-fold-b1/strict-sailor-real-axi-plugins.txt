@@ -1,0 +1,48 @@
+== global plugins (copies of captain's real AXI plugins):
+axi-chrome-devtools-axi.js
+axi-gh-axi.js
+axi-lavish-axi.js
+
+== Scenario 1 (control, no fold plugin, real AXI plugins): reproduce the Bonsai fault
+   opencode exit=1
+   requests seen by strict sailor:
+     {"roles": ["system", "system", "user", "user"], "system_count": 2, "rejected": true, "system_headers": ["## AXI ambient context: chrome-devtools-axi", "## AXI ambient context: lavish-axi", "## AXI ambient context: gh-axi"]}
+     {"roles": ["system", "system", "user"], "system_count": 2, "rejected": true, "system_headers": ["## AXI ambient context: chrome-devtools-axi", "## AXI ambient context: lavish-axi", "## AXI ambient context: gh-axi"]}
+   opencode output (tail):
+     [0m
+     > build · scripted
+     [0m
+     [91m[1mError: [0mSystem message must be at the beginning.
+
+== Scenario 2: real fm-spawn sailor launch (--harness opencode --sailor tiller)
+   spawn exit=0
+   plugin: fm-busy-state.js
+   plugin: fm-sailor-system-fold.js
+   git status --porcelain .opencode: []
+== Scenario 3: OpenCode in the sailor worktree with the real AXI plugins
+   opencode exit=0
+   requests seen by strict sailor:
+     {"roles": ["system", "user", "user"], "system_count": 1, "rejected": false, "system_headers": ["## AXI ambient context: chrome-devtools-axi", "## AXI ambient context: lavish-axi", "## AXI ambient context: gh-axi"]}
+     {"roles": ["system", "user"], "system_count": 1, "rejected": false, "system_headers": ["## AXI ambient context: chrome-devtools-axi", "## AXI ambient context: lavish-axi", "## AXI ambient context: gh-axi"]}
+   opencode output (tail):
+     [0m
+     > build · scripted
+     [0m
+     ok-from-strict-sailor
+
+== Scenario 4 (adversarial): a project plugin loaded AFTER the fold unshifts a system entry
+   opencode exit=0
+   requests seen by strict sailor:
+     {"roles": ["system", "user", "user"], "system_count": 1, "rejected": false, "system_headers": ["## LATE unshift", "## AXI ambient context: chrome-devtools-axi", "## AXI ambient context: lavish-axi", "## AXI ambient context: gh-axi", "## LATE push"]}
+     {"roles": ["system", "user"], "system_count": 1, "rejected": false, "system_headers": ["## LATE unshift", "## AXI ambient context: chrome-devtools-axi", "## AXI ambient context: lavish-axi", "## AXI ambient context: gh-axi", "## LATE push"]}
+   opencode output (tail):
+     [0m
+     > build · scripted
+     [0m
+     ok-from-strict-sailor
+
+== Scenario 5: relaunch the same worktree as a non-sailor OpenCode launch
+   spawn exit=0 notice: fold-scn-s2 ships mode=local-only while the standing posture for project is no-mistakes - less rigor than the captain's standing posture; proceed only on a current explicit captain instruction or an intake judgment you can state
+spawned fold-scn-s2 harness=opencode kind=ship mode=local-only yolo=off window=firstmate:fm-fold-scn-s2 worktree=/private/tmp/fmfold-run.JYcht2/wt
+   plugin: fm-busy-state.js
+   fold plugin removed: yes
