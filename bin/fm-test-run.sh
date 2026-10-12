@@ -367,7 +367,7 @@ family_for_basename() {
     fm-herdr-pi-stale-registration-live-e2e.test.sh|\
     fm-worker-account-live-e2e.test.sh|\
     fm-opencode-primary-live-e2e.test.sh|fm-opencode-restricted-live-e2e.test.sh|\
-    fm-sailor-sandbox-live-e2e.test.sh|fm-privateer-egress-live-e2e.test.sh|\
+    fm-sailor-sandbox-live-e2e.test.sh|fm-sailor-system-fold-live-e2e.test.sh|fm-privateer-egress-live-e2e.test.sh|\
     fm-privateer-session-lock-live-e2e.test.sh|fm-privateer-sessionstart-live-e2e.test.sh|\
     fm-privateer-seal-live-e2e.test.sh|fm-helm-live-e2e.test.sh|\
     fm-pi-branch-live-e2e.test.sh|\

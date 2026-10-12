@@ -110,6 +110,26 @@ After the wait every step ran in about 6 seconds.
 
 Not yet verified live: a no-mistakes pipeline run started from inside the sandbox, which relies on the no-mistakes socket and gate repository allowances.
 
+## A sailor launch sends one system message
+
+Verified 2026-10-12 on macOS 26.6 with OpenCode 1.18.33 by `tests/fm-sailor-system-fold-live-e2e.test.sh`.
+The test runs `bin/fm-spawn.sh --sailor` for real in a throwaway home, then runs `opencode run` headless in the spawned copy against a loopback server that records every request and answers `ok`.
+A global plugin under the run's own `XDG_CONFIG_HOME` adds system text through `experimental.chat.system.transform`, as the AXI plugins do.
+
+| Run | Requests | System messages per request |
+| --- | --- | --- |
+| Control: a plain Git directory without the fold plugin | Title and main | 2 |
+| The spawned sailor copy | Title and main | 1, ending with the plugin's text |
+
+The same day, the captain's own global configuration (the gh-axi, chrome-devtools-axi and lavish-axi plugins) gave `system, system, user` without the fold and `system, user` with it, and the folded text matched the two unfolded messages joined with a newline.
+A sailor session with the fold then answered on the real `bonsai-1`.
+
+Facts the fold depends on, read from OpenCode 1.18.33's `LLMRequestPrep.prepare`:
+
+- OpenCode starts the hook with one entry, its own prompt, and runs every plugin's hook in turn on that same array.
+- After the hook, it joins every entry after the first into one when there are more than two and the first is unchanged, then sends one system message per entry.
+- OpenCode loaded the global plugins before the copy's own plugins in every run, but does not document that order, so the fold also folds whatever later hooks add.
+
 ## A Privateer session reaches nothing but its sailor
 
 Verified 2026-09-28 on macOS 26.6 with OpenCode 1.18.32 and tmux 3.7c by `FM_PRIVATEER_EGRESS_LIVE=1 tests/fm-privateer-egress-live-e2e.test.sh`, the egress audit that `../configuration.md` ("Privateer quarantine") names.
