@@ -208,9 +208,7 @@
 #     than a rename, and denying it is follow-up work;
 #   - OpenCode also loads plugins and configuration from its own directories
 #     under state/privateer/opencode/, which stay writable, so a worker can
-#     still add one there that the first mate loads at its next start; and a
-#     checkout nested below this home, rather than being it, keeps its own
-#     bin/ writable;
+#     still add one there that the first mate loads at its next start;
 #   - as bin/fm-sandbox-exec.sh states, the sandbox is not a boundary against
 #     same-user system services that start programs outside it.
 #
