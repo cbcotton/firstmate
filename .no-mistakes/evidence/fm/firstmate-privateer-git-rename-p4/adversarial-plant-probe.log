@@ -1,0 +1,18 @@
+start-status=0
+PROBE: mv: rename /private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-privateer.4fIjuu/probe/home/projects/proj/.git/modules/lib/sub to /private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-privateer.4fIjuu/probe/home/projects/proj/.git/modules/lib/sub.aside: Operation not permitted
+PROBE: plant-sub=refused
+PROBE: mv: rename /private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-privateer.4fIjuu/probe/home/projects/proj/.git/modules/lib to /private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-privateer.4fIjuu/probe/home/projects/proj/.git/modules/lib.aside: Operation not permitted
+PROBE: move-lib=refused
+PROBE: rename-onto modules EPERM
+PROBE: rename-onto worktrees done
+PROBE: rename-onto modules/lib/other ENOENT
+PROBE: ln: /private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-privateer.4fIjuu/probe/home/projects/proj2/.git/modules: Operation not permitted
+PROBE: link-modules=refused
+PROBE: link-worktrees=done
+PROBE: pool-worktree=ok
+PROBE: rename-over-worktrees EPERM
+PROBE: rmdir: /private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-privateer.4fIjuu/probe/home/projects/proj2/.git/worktrees: Operation not permitted
+PROBE: rmdir-worktrees=refused
+PROBE: hook-present-after=no
+PROBE: proj2-modules-type=absent
+# all fm-privateer tests passed
