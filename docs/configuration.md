@@ -897,7 +897,7 @@ An allow is refused, at every scope, for what the captain approves only one acti
 `bin/fm-permission-grant.sh` owns the record, the scope bindings, and the refusal list; `list` shows the grants in force and `active --task <id>` prints what a launch would fold in.
 In a [Privateer home](#privateer-quarantine-configprivateer) only the captain records a grant or revocation, from their own shell outside the session, because the session sandbox denies the ledger to the first mate and every worker alike.
 Inside the session `grant` and `revoke` refuse with exit status 2 and name the same call as the command for the captain to run, and the first mate relaunches the worker once the captain says it is recorded; `list` and `active` run on both sides.
-The words file that command reads lives in the home, so a worker can rewrite it before the captain runs the command: the recorded words are first-mate-supplied and not tamper-proof, while the permission, pattern, scope, and task are unaffected because the captain sees them in the command.
+The words file that command reads is not tamper-proof; the Privateer remaining limits below say why.
 
 ## Sailor sandbox (config/sailor-sandbox)
 
