@@ -1334,9 +1334,9 @@ test_session_sandbox_holds_every_command() {
   mkdir -p "$home/nest"
   git -C "$dir/rootmain" worktree add -q -b pv-root "$root"
   # Paths in that checkout an OpenCode first mate loads or the helm is rendered from.
-  mkdir -p "$root/.agents/skills/probe" "$root/docs" "$root/.opencode/plugins" "$root/.opencode/skills/probe" "$root/.claude"
+  mkdir -p "$root/.agents/skills/probe" "$root/docs" "$root/.opencode/plugins" "$root/.opencode/skills/probe" "$root/.claude" "$root/bin"
   for f in AGENTS.md CLAUDE.md .agents/skills/probe/SKILL.md docs/probe.md opencode.json .opencode/opencode.json \
-    .opencode/plugins/probe.js .opencode/skills/probe/SKILL.md; do
+    .opencode/plugins/probe.js .opencode/skills/probe/SKILL.md bin/fm-permission-grant.sh; do
     printf 'original\n' > "$root/$f"
   done
   ln -s ../.agents/skills "$root/.claude/skills"
@@ -1392,7 +1392,7 @@ echo "write=\$?" >> '$probe.window.tmp'
 echo "scratch=\$?" >> '$probe.window.tmp'
 planted=
 for t in '$proj/.git/hooks/post-checkout' '$proj/.git/config' '$wtgit/config.worktree' '$wtgit/hooks/post-checkout' \
-  '$wtgit/commondir' '$wtgit/gitdir' '$home/config/probe' '$home/bin/probe' '$shared/.git' '$shared/README' "\$HOME/.treehouse/probe" \
+  '$wtgit/commondir' '$wtgit/gitdir' '$home/config/probe' '$home/bin/probe' '$root/bin/fm-permission-grant.sh' '$root/bin/probe' '$shared/.git' '$shared/README' "\$HOME/.treehouse/probe" \
   '$root/AGENTS.md' '$root/.agents/skills/probe/SKILL.md' '$root/.agents/skills/new.md' '$root/docs/probe.md' \
   '$root/CLAUDE.md' '$root/CONTEXT.md' '$root/opencode.json' '$root/opencode.jsonc' '$root/tui.json' '$root/tui.jsonc' \
   '$root/.opencode/opencode.json' '$root/.opencode/opencode.jsonc' '$root/.opencode/tui.json' '$root/.opencode/tui.jsonc' \
@@ -1416,7 +1416,7 @@ done
 for d in agent agents command commands mode modes plugin plugins skill skills tool tools; do
   ( mkdir -p '$root/.opencode/'"\$d" && : >> '$root/.opencode/'"\$d/new.md" ) 2>/dev/null && planted="\$planted $root/.opencode/\$d"
 done
-for t in '$root/AGENTS.md' '$root/CLAUDE.md' '$root/.agents' '$root/docs' '$root/opencode.json' '$root/.opencode/opencode.json' \
+for t in '$root/bin' '$root/AGENTS.md' '$root/CLAUDE.md' '$root/.agents' '$root/docs' '$root/opencode.json' '$root/.opencode/opencode.json' \
   '$root/.opencode/plugins' '$root/.opencode/skills' '$root/.opencode' '$root/.claude/skills' '$root/.claude'; do
   mv "\$t" "\$t.aside" 2>/dev/null && planted="\$planted move:\$t"
 done

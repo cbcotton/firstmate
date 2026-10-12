@@ -808,9 +808,10 @@ cmd_start() {
         ;;
     esac
   done
-  # A checkout inside the home is writable, so everything its first mate's
-  # OpenCode loads from it is taken back: instructions, docs, config, skills,
-  # agents, commands, modes, plugins, and tools, with the .opencode and .claude
+  # A checkout inside the home is writable, so its scripts, which the captain
+  # runs outside the session, and everything its first mate's OpenCode loads
+  # from it are taken back: instructions, docs, config, skills, agents,
+  # commands, modes, plugins, and tools, with the .opencode and .claude
   # entries above them and the .claude/skills link itself, which --deny-write
   # would resolve; the rest of .opencode stays OpenCode's scratch.
   case "$root_real" in
@@ -819,6 +820,7 @@ cmd_start() {
         .opencode/{opencode,tui}.{json,jsonc} .opencode/{agent,command,mode,plugin,skill,tool}{,s}; do
         sandbox_args+=(--deny-write "$root_real/$name")
       done
+      sandbox_args+=(--deny-write "$root_real/bin")
       sandbox_args+=(--deny-write-regex "^$(regex_quote "$root_real/.opencode")\$"
         --deny-write-regex "^$(regex_quote "$root_real/.claude")(/skills)?\$")
       ;;
