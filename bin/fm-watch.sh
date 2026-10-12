@@ -159,6 +159,10 @@
 #                          budget and is parked until a probe reads it live
 #                          again (FM_SECONDMATE_LIVENESS_MAX_ATTEMPTS and
 #                          FM_SECONDMATE_LIVENESS_WINDOW_SECS)
+#   check: sailor <name> down|up
+#                          a live named sailor stopped answering its health
+#                          probe, or answers again; one wake per change, never
+#                          one per poll while it stays down (sailor_health_tick)
 # For normal supervision, resume the session-start primary-harness protocol
 # after each printed reason. Direct duplicate invocations of this script still
 # no-op through the watcher singleton lock. A live holder whose beacon is stale
@@ -379,6 +383,11 @@ SECONDMATE_LIVENESS_MAX_ATTEMPTS=${FM_SECONDMATE_LIVENESS_MAX_ATTEMPTS:-}
 case "$SECONDMATE_LIVENESS_MAX_ATTEMPTS" in ''|*[!0-9]*|0) SECONDMATE_LIVENESS_MAX_ATTEMPTS=3 ;; esac
 SECONDMATE_LIVENESS_WINDOW_SECS=${FM_SECONDMATE_LIVENESS_WINDOW_SECS:-}
 case "$SECONDMATE_LIVENESS_WINDOW_SECS" in ''|*[!0-9]*|0) SECONDMATE_LIVENESS_WINDOW_SECS=3600 ;; esac
+# Named-sailor health (sailor_health_tick below) runs on the heartbeat's base
+# interval, not its idle backoff, so a sailor's return is seen within one
+# interval; a state marker's mtime keeps that cadence across watcher restarts.
+SAILOR_HEALTH_SECS=${FM_SAILOR_HEALTH_SECS:-}
+case "$SAILOR_HEALTH_SECS" in ''|*[!0-9]*|0) SAILOR_HEALTH_SECS=$HEARTBEAT ;; esac
 # A crew that declared a pause is idling on a known external wait, so its stale
 # pane is absorbed rather than wedge-escalated.
 # A captain-held or paused crew whose agent has confidently exited uses the same
@@ -1121,6 +1130,60 @@ secondmate_liveness_tick() {
       failed=1
     fi
   done
+  [ -z "$first_reason" ] || wake "$first_reason"
+  [ "$failed" -eq 0 ]
+}
+
+# Named-sailor health watch. On SAILOR_HEALTH_SECS, bin/fm-sailor.sh health
+# (which owns the probe and its per-request bound, and probes every sailor at
+# once) reads each live sailor as up or down, and only a change wakes: one
+# `check: sailor <name> down` or `check: sailor <name> up` row per changed
+# sailor, plus a sailor.state ledger event when config/fleet-ledger exists.
+# state/.sailor-health keeps each live sailor's last state, so a sailor that
+# stays down wakes nothing more; one not yet recorded counts as up, so a
+# sailor first seen down still wakes once. Rows are queued before the record
+# is saved, so a failed save repeats a notification rather than losing one,
+# and the tick wakes once for the whole sweep. A home without
+# config/crew-dispatch.json pays one file test, and one that declares no live
+# sailor stays silent.
+sailor_health_tick() {
+  local tick_marker="$STATE/.sailor-health-tick" record="$STATE/.sailor-health"
+  [ -f "$CONFIG/crew-dispatch.json" ] || return 0
+  [ "$(age_of "$tick_marker")" -ge "$SAILOR_HEALTH_SECS" ] || return 0
+  touch "$tick_marker" || return 1
+  local out now name state prev key reason next='' first_reason='' failed=0
+  if ! out=$(FM_HOME="$FM_HOME" FM_STATE_OVERRIDE="$STATE" FM_CONFIG_OVERRIDE="$CONFIG" \
+    "$SCRIPT_DIR/fm-sailor.sh" health 2>/dev/null); then
+    triage_log "sailor health unavailable (fm-sailor.sh health failed)"
+    return 0
+  fi
+  now=$(( $(date +%s) ))
+  while read -r name state _; do
+    case "$state" in up|down) ;; *) continue ;; esac
+    prev=$(awk -v n="$name" '$1 == n { print $2; exit }' "$record" 2>/dev/null)
+    [ -n "$prev" ] || prev=up
+    if [ "$state" != "$prev" ]; then
+      reason="check: sailor $name $state"
+      key="sailor-$name-$state-$now"
+      if fm_wake_append check "$key" "$reason"; then
+        [ -n "$first_reason" ] || first_reason=$reason
+        [ ! -e "$CONFIG/fleet-ledger" ] || FM_HOME=$FM_HOME FM_STATE_OVERRIDE=$STATE FM_CONFIG_OVERRIDE=$CONFIG \
+          "$SCRIPT_DIR/fm-fleet-ledger.sh" sailor_state "$name" "$state" || true
+      else
+        echo "watcher: sailor $name health: check wake row could not be queued: $reason" >&2
+        triage_log "sailor $name health error: check wake row could not be queued" || true
+        state=$prev
+        failed=1
+      fi
+    fi
+    next="$next$name $state"$'\n'
+  done <<<"$out"
+  if [ -z "$next" ]; then
+    rm -f "$record"
+  elif ! { printf '%s' "$next" > "$record.tmp" && mv -f "$record.tmp" "$record"; }; then
+    echo "watcher: sailor health record could not be saved: $record" >&2
+    failed=1
+  fi
   [ -z "$first_reason" ] || wake "$first_reason"
   [ "$failed" -eq 0 ]
 }
@@ -3250,6 +3313,13 @@ EOF
       fi
     fi
   done < <(recorded_windows)
+
+  # Named-sailor health rides the heartbeat's base cadence and wakes only on a
+  # change of a sailor's state.
+  sailor_health_tick || {
+    echo "watcher: sailor health check failed" >&2
+    exit 1
+  }
 
   # Heartbeat: the watcher runs a cheap fleet-scan at a regular cadence no matter
   # what. Time-based via .last-heartbeat mtime; interval doubles per consecutive

@@ -1,6 +1,6 @@
 # Fleet activity ledger
 
-The fleet activity ledger is an opt-in, append-only file that outside tools can read to follow what a firstmate home is doing: which tasks were dispatched, what their workers reported, how their validation is going, when a PR became ready for review, what the captain decided, when their work merged, and when they were cleaned up.
+The fleet activity ledger is an opt-in, append-only file that outside tools can read to follow what a firstmate home is doing: which tasks were dispatched, what their workers reported, how their validation is going, when a PR became ready for review, what the captain decided, when their work merged, when they were cleaned up, and when a local model server stopped or resumed answering.
 It is the stable, documented hook for firstmate status; this page is its contract.
 
 ## Turning it on and off
@@ -21,7 +21,7 @@ Every record carries these members:
 | `v`     | Record format version, currently `1`                      |
 | `ts`    | Unix time in seconds when the record was written          |
 | `event` | One of the event names below                              |
-| `task`  | The firstmate task id the record is about                 |
+| `task`  | The firstmate task id the record is about, or `null` on a `sailor.state` record |
 
 Readers must ignore members and events they do not recognize, so later versions can add them without breaking existing readers.
 
@@ -36,6 +36,7 @@ Readers must ignore members and events they do not recognize, so later versions 
 | `task.decided`     | `answer`                                       | The captain's answer to a task held for them is recorded. |
 | `task.merged`      | `via` (`"pr"` or `"local"`), plus `pr` when `via` is `"pr"` | The task's PR merge is recorded, or its local-only branch landed. |
 | `task.cleaned_up`  | none                                           | The task's worker and local copy were removed. |
+| `sailor.state`     | `name`, `state`                                | The supervision monitor sees a live named sailor stop answering or answer again. |
 
 `task.dispatched` members: `kind` is `ship`, `scout`, or `secondmate`; `project` is the project directory name, or `null` for a remote second mate; `harness` names the agent tool; `model` is the requested model, or `null` for the tool's default; `sailor` names the local machine the worker runs on ([named sailors](configuration.md#crew-dispatch-profiles-configcrew-dispatchjson)), or `null` for a worker on a hosted model.
 
@@ -54,6 +55,9 @@ A worker's ready line ends with `risk=<low|medium|high> touches=<phrase>`, where
 
 `task.decided` members: `answer` is the captain's decision as recorded on the held task, verbatim, and can span several lines.
 It is written when firstmate records a new answer for the task, whether the answer closes it or releases its hold; repeating the same answer writes none.
+
+`sailor.state` members: `name` is the sailor's name in the home's [sailor map](configuration.md#crew-dispatch-profiles-configcrew-dispatchjson); `state` is `down` when it stopped answering its health probe, or `up` when it answers again.
+It is written once per change, never again while the sailor stays in that state, and a sailor first seen answering writes none.
 
 `task.status` members: `state` is the status line's leading word, such as `working`, `needs-decision`, `blocked`, `paused`, `done`, `failed`, or `resolved`, or `null` when the line has none.
 `key` is the line's `[key=...]` decision key, or `null`.
@@ -80,7 +84,7 @@ Example:
   - lines from workers whose instructions predate this, or that append without running the instruction's full command;
   - lines a remote second mate reports, which reach this home through firstmate's relay;
   - lines written while the immediate record fails, for example when the ledger file cannot be written.
-  Recording any event other than `task.dispatched` or `task.status` first records that task's pending status lines.
+  Recording any `task.*` event other than `task.dispatched` or `task.status` first records that task's pending status lines.
 - Captured status lines are delivered at least once unless a write fails or a crash loses unflushed records: an interrupted capture can repeat records, so a reader that must not double-count should tolerate duplicates.
 - A status record can appear just before its task's `task.dispatched` record when the worker writes a status line in the moment between its launch and that record.
 - When a home turns the ledger on, status lines already in a live task's log are recorded on that task's next capture (which may be a worker status command, PR registration, merge, cleanup, or monitor poll); tasks dispatched or cleaned up while the flag was absent have no record of that.
