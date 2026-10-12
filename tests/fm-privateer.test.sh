@@ -982,7 +982,8 @@ test_stop_refuses_with_work_in_flight_and_stops_an_idle_session() {
   pass "stop refuses while task records exist and stops the idle session otherwise"
 }
 
-# make_stow_pane <case-dir>: puts an OpenCode first mate's pane behind the
+# make_stow_pane <case-dir>: puts an OpenCode first mate's pane (`opencode
+# --agent privateer`, so a `Privateer · …` footer) behind the
 # launcher's fake tmux. capture-pane shows its screen: the idle composer, the
 # typed text while <case-dir>/pane-typed holds some, or the busy footer while a
 # turn runs; display-message gives the cursor on the composer row. send-keys
@@ -1000,7 +1001,7 @@ d='$dir'
 all=("\$@")
 [ "\${1:-}" != -L ] || shift 2
 screen() {  # <composer row>
-  printf '  ▣ Build · tiller · 3.4s\n\n  ┃\n  ┃  %s\n  ┃\n  ┃  Build · tiller coder\n  ╹▀▀▀▀▀▀▀▀\n' "\$1"
+  printf '  ▣ Privateer · tiller · 3.4s\n\n  ┃\n  ┃  %s\n  ┃\n  ┃  Privateer · tiller coder\n  ╹▀▀▀▀▀▀▀▀\n' "\$1"
 }
 case "\${1:-}" in
   capture-pane)
