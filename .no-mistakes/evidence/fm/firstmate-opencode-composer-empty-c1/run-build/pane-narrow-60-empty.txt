@@ -1,0 +1,50 @@
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                            ▄
+           █▀▀█ █▀▀█ █▀▀█ █▀▀▄ █▀▀▀ █▀▀█ █▀▀█ █▀▀█
+           █  █ █  █ █▀▀▀ █  █ █    █  █ █  █ █▀▀▀
+           ▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀
+
+
+  ┃
+  ┃  Ask anything… "Fix broken tests"
+  ┃
+  ┃  Build·Qwen3.8 27B TURBO Fable (mlx-serve) MLX
+  ┃                                            Serve (
+  ┃                                            local)
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                               tab agents  ctrl+p commands
+
+
+
+  ● Tip Use /redo to restore previously undone messages
+        and file changes
+
+
+
+
+
+
+
+
+
+
+
+
+  ~/.no-mistakes/worktrees/e74e4e411ceb/           1.18.33
+  01M4QVW7EJ1ZVK4C5YCP7PJ8WN
+

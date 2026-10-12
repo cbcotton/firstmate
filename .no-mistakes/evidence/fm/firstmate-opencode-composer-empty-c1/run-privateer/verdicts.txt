@@ -1,0 +1,7 @@
+wide-200-empty                     width=200  fixed=empty    base=empty
+narrow-74-empty                    width=74   fixed=empty    base=pending
+narrow-60-empty                    width=60   fixed=empty    base=pending
+narrow-48-empty                    width=48   fixed=empty    base=pending
+narrow-48-typed                    width=48   fixed=pending  base=pending
+wide-200-typed                     width=200  fixed=pending  base=pending
+narrow-48-cleared                  width=48   fixed=empty    base=pending

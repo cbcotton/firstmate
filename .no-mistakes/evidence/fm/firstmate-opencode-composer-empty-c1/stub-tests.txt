@@ -1,0 +1,8 @@
+ok - stop --stow stows and stops a first mate whose narrow pane wraps its composer footer
+ok - stop --stow still refuses a draft above a wrapped footer and types nothing over it
+not ok - the refusal must say the stow did not finish (missing: 'the first mate's /stow did not finish within 3s; the session is still running')
+ok - matrix: herdr half-block rules bound a bare composer's wrap region
+ok - matrix: omp's status row bounds the bare composer's wrap region
+ok - matrix: opencode's wrapped footer and idle hint read empty, and drafts beside them still refuse
+ok - fm_composer_classify_screen: the bare composer's wrap region stays identified; structure breaks it
+ok - fm_composer_classify_screen: cursorless bare wrap regions participate in verdicts
