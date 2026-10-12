@@ -83,8 +83,9 @@
 # created, because its presence changes how every spawn is dispatched. Inside a
 # Privateer session config/ is unwritable, so run them from the captain's own
 # shell. A change reaches each worker at its next spawn; running workers keep
-# what they launched with, and a Privateer session keeps its first mate's model
-# and its egress allowlist until it is stopped and started again.
+# what they launched with. A Privateer session keeps its first mate's model
+# until it is stopped and started again, and its egress allowlist until the
+# captain runs bin/fm-privateer.sh reload.
 #
 # add registers a new sailor, a `placeholder` unless --live. It refuses a name
 # already in the map. --from-mlx-serve <server-id> reads that server's entry in
