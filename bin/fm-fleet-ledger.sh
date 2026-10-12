@@ -21,6 +21,8 @@
 #   bin/fm-merge-outcome-lib.sh  merged ... pr (a recorded PR merge)
 #   bin/fm-merge-local.sh        merged ... local (a local-only landing)
 #   bin/fm-teardown.sh           cleaned_up
+#   bin/fm-watch.sh              sailor_state (each change it sees in a sailor's
+#                                health)
 #
 # Usage:
 #   fm-fleet-ledger.sh dispatched <task> <kind> <project> <harness> <model> [<sailor>]
@@ -32,6 +34,7 @@
 #   fm-fleet-ledger.sh appended <config> <state>/<task>.status
 #   fm-fleet-ledger.sh validation <task> <run> <step> <outcome> [<step> <outcome>]...
 #   fm-fleet-ledger.sh decided <task> <answer>
+#   fm-fleet-ledger.sh sailor_state <sailor> up|down
 #
 # capture appends one task.status record for every complete (newline-ended)
 # line added to a state/<task>.status log since that task's byte offset in
@@ -61,6 +64,7 @@
 # no pair changed it returns after one file read, without the lock or the libs,
 # so a caller may pass the whole run on every read. dispatched and cleaned_up
 # delete that record with the offset.
+# sailor_state records no task, so its task member is null.
 # Every write holds state/.fleet-ledger.lock.
 #
 # Environment: FM_HOME, FM_STATE_OVERRIDE, and FM_CONFIG_OVERRIDE resolve the
@@ -82,7 +86,7 @@ LOCK="$STATE/.fleet-ledger.lock"
 TEXT_MAX_CHARS=2000
 
 usage() {
-  echo "usage: fm-fleet-ledger.sh dispatched <task> <kind> <project> <harness> <model> [<sailor>] | pr_ready <task> <url> | merged <task> pr <url> | merged <task> local | cleaned_up <task> | capture | appended <config> <state>/<task>.status | validation <task> <run> <step> <outcome> [<step> <outcome>]... | decided <task> <answer>" >&2
+  echo "usage: fm-fleet-ledger.sh dispatched <task> <kind> <project> <harness> <model> [<sailor>] | pr_ready <task> <url> | merged <task> pr <url> | merged <task> local | cleaned_up <task> | capture | appended <config> <state>/<task>.status | validation <task> <run> <step> <outcome> [<step> <outcome>]... | decided <task> <answer> | sailor_state <sailor> up|down" >&2
   exit 2
 }
 
@@ -106,6 +110,11 @@ case "$cmd" in
     { [ "$#" -eq 3 ] && task_ok "$2" && [ -n "$3" ]; } || usage
     ;;
   cleaned_up) { [ "$#" -eq 2 ] && task_ok "$2"; } || usage ;;
+  sailor_state)
+    [ "$#" -eq 3 ] || usage
+    [[ "$2" =~ ^[a-z][a-z0-9]*(-[a-z0-9]+)*$ ]] || usage
+    case "$3" in up|down) ;; *) usage ;; esac
+    ;;
   capture) [ "$#" -eq 1 ] || usage ;;
   appended)
     [ "$#" -eq 3 ] && [ -n "$2" ] || usage
@@ -213,12 +222,13 @@ load_libs() {
   LIBS_LOADED=1
 }
 
-# append <event> <task> <jq-object-of-extra-members> [jq --arg pairs...]
+# append <event> <task> <jq-object-of-extra-members> [jq --arg pairs...]; an
+# empty <task> records null.
 append() {
   local event=$1 task=$2 extra=$3 line
   shift 3
   line=$(jq -cn --arg event "$event" --arg task "$task" "$@" \
-    "def n: if . == \"\" then null else . end; {v: 1, ts: (now | floor), event: \$event, task: \$task} + ($extra)") \
+    "def n: if . == \"\" then null else . end; {v: 1, ts: (now | floor), event: \$event, task: (\$task | n)} + ($extra)") \
     || return 1
   printf '%s\n' "$line" >> "$LEDGER"
 }
@@ -321,6 +331,9 @@ case "$cmd" in
     capture_task "$2" || rc=1
     append task.cleaned_up "$2" '{}' || rc=1
     [ "$rc" -ne 0 ] || rm -f -- "$(offset_path "$2")" "$(validation_path "$2")"
+    ;;
+  sailor_state)
+    append sailor.state "" '{name: $name, state: $state}' --arg name "$2" --arg state "$3" || rc=1
     ;;
 esac
 [ "$rc" -eq 0 ] || echo "fm-fleet-ledger: could not record $cmd${2:+ for $2}; the ledger may be missing records" >&2

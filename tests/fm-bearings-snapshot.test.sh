@@ -1132,6 +1132,24 @@ test_report_pointers_surface() {
   pass "current report pointers surface"
 }
 
+test_down_sailor_surfaces_and_no_sailors_adds_nothing() {
+  local home fakebin json toon
+  home=$(make_home sailors); write_fixture "$home"
+  fakebin=$(make_fakebin "$home")
+  json=$(run "$home" "$fakebin" --json)
+  printf '%s' "$json" | jq -e 'has("sailors") | not' >/dev/null \
+    || fail "a home without sailors must not carry a sailors field: $json"
+  # The fixture's curl never answers, so the live sailor reads not answering.
+  printf '%s\n' '{"sailors":{"tiller":{"endpoint":"http://127.0.0.1:9/v1","status":"live","models":["qwen-coder"],"max_concurrent":2},"stoker":{"endpoint":"http://127.0.0.1:9/v1","status":"placeholder","models":["qwen-coder"]}}}' \
+    > "$home/config/crew-dispatch.json"
+  json=$(run "$home" "$fakebin" --json)
+  assert_equals '[{"name":"tiller","answering":false,"tasks":0,"capacity":2}]' \
+    "$(printf '%s' "$json" | jq -c '.sailors')" "a live sailor that does not answer must surface as down, and a placeholder not at all"
+  toon=$(run "$home" "$fakebin")
+  assert_contains "$toon" "sailors[1]{name,answering,tasks,capacity}" "the TOON form must carry the same sailors table"
+  pass "a down sailor surfaces in the bearings projection, and a home without sailors adds nothing"
+}
+
 test_queued_item_prose_never_hides_it() {
   local home fakebin json
   home=$(make_home superseded); write_fixture "$home"
@@ -3401,6 +3419,7 @@ test_main_captain_readiness_matches_secondmate_projection
 test_completed_scout_report_not_pending
 test_open_decision_surfaces_end_to_end
 test_report_pointers_surface
+test_down_sailor_surfaces_and_no_sailors_adds_nothing
 test_queued_item_prose_never_hides_it
 test_include_prs_is_the_only_fetch_path
 test_include_prs_maps_custom_branch_prefix_to_task

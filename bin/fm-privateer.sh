@@ -14,6 +14,7 @@
 #   fm-privateer.sh start
 #   fm-privateer.sh attach
 #   fm-privateer.sh stop [--stow]
+#   fm-privateer.sh reload
 #
 # The quarantine is on while config/privateer exists. Its content is optional:
 # one line `<sailor>/<model>` names the sailor and model the first mate itself
@@ -77,7 +78,16 @@
 # refused destination to state/privateer/egress/log, and allows exactly: every
 # sailor endpoint in config/crew-dispatch.json, and the origin of this checkout
 # and of every clone under projects/ (the forge: the URL's host and port, 443
-# for https, 80 for http, 22 for ssh).
+# for https, 80 for http, 22 for ssh). start writes that list, one
+# `<host>:<port>` per line, to state/privateer/egress/allow, which the session
+# sandbox cannot write, by temp-file-and-rename, and the proxy re-reads the file
+# when it changes.
+#
+# reload is the captain's command to rewrite that file from the current config
+# (config/crew-dispatch.json and the forge origins) without restarting the
+# session. It runs outside the session like start and stop, refuses inside it
+# and when no egress proxy runs, prints each destination it added or removed
+# (or that nothing changed), and the proxy logs the reload.
 #
 # start refuses without config/privateer, on any check violation, without a
 # first-mate line in config/privateer, without this checkout's Privateer
@@ -252,7 +262,7 @@ PROJECTS="${FM_PROJECTS_OVERRIDE:-$FM_HOME/projects}"
 . "$SCRIPT_DIR/fm-privateer-lib.sh"
 FLAG="$CONFIG/privateer"
 DISPATCH="$CONFIG/crew-dispatch.json"
-SESSION=privateer
+SESSION=$FM_PRIVATEER_SESSION
 OPENCODE_ROOT="$STATE/privateer/opencode"
 EGRESS="$STATE/privateer/egress"
 POOL="$STATE/privateer/treehouse"
@@ -262,7 +272,7 @@ STOW_IDLE_READS=3
 FORBIDDEN_NAME_RE='^(ANTHROPIC_[A-Za-z0-9_]*|CLAUDE_[A-Za-z0-9_]*|CLAUDECODE)$'
 
 usage() {
-  echo "usage: fm-privateer.sh check | inside | launch-env | start | attach | stop [--stow]" >&2
+  echo "usage: fm-privateer.sh check | inside | launch-env | start | attach | stop [--stow] | reload" >&2
   exit 2
 }
 
@@ -476,11 +486,11 @@ socket_name() {
 }
 
 tmux_socket_path() {  # <socket-name>
-  printf '%s/tmux-%s/%s\n' "${TMUX_TMPDIR:-/tmp}" "$(id -u)" "$1"
+  fm_privateer_socket_path "$1"
 }
 
 session_running() {  # <socket-name>
-  tmux -L "$1" has-session -t "$SESSION" 2>/dev/null
+  fm_privateer_session_running "$1"
 }
 
 # forge_origins: one `<host>:<port>\t<repo>` line per forge origin: the origin
@@ -550,35 +560,44 @@ egress_allowlist() {
   done
 }
 
+# proxy_running: the proxy this home last started is alive.
+proxy_running() {
+  local pid
+  pid=$(cat "$EGRESS/pid" 2>/dev/null) || return 1
+  case "$pid" in '' | *[!0-9]*) return 1 ;; esac
+  case "$(ps -p "$pid" -o command= 2>/dev/null)" in
+    *fm-privateer-proxy.py*) return 0 ;;
+  esac
+  return 1
+}
+
 # stop_egress_proxy: stop the proxy this home last started, if it still runs.
 stop_egress_proxy() {
-  local pid
-  pid=$(cat "$EGRESS/pid" 2>/dev/null) || pid=
-  case "$pid" in
-    '' | *[!0-9]*) ;;
-    *)
-      case "$(ps -p "$pid" -o command= 2>/dev/null)" in
-        *fm-privateer-proxy.py*) kill "$pid" 2>/dev/null || true ;;
-      esac
-      ;;
-  esac
-  rm -f "$EGRESS/port" "$EGRESS/pid"
+  if proxy_running; then kill "$(cat "$EGRESS/pid")" 2>/dev/null || true; fi
+  rm -f "$EGRESS/port" "$EGRESS/pid" "$EGRESS/allow"
+}
+
+# write_allow_file: the current allowlist into $EGRESS/allow, by temp-file-and-
+# rename so the proxy never reads a half-written file.
+write_allow_file() {
+  local tmp
+  tmp=$(mktemp "$EGRESS/allow.XXXXXX") || die "cannot write $EGRESS/allow"
+  if ! egress_allowlist > "$tmp" || ! mv -f "$tmp" "$EGRESS/allow"; then
+    rm -f "$tmp"
+    die "cannot write $EGRESS/allow"
+  fi
 }
 
 # start_egress_proxy: the proxy as its own process, outside the session and its
 # sandbox, started with cmd_start's env_args; prints its port once it has
 # bound, or fails.
 start_egress_proxy() {
-  local dest port pid
-  local -a allow
-  allow=()
-  while IFS= read -r dest; do
-    [ -z "$dest" ] || allow+=("$dest")
-  done < <(egress_allowlist)
+  local port pid
   mkdir -p "$EGRESS" || die "cannot create $EGRESS"
   stop_egress_proxy
+  write_allow_file
   /usr/bin/env -i "${env_args[@]}" nohup python3 "$SCRIPT_DIR/fm-privateer-proxy.py" "$EGRESS/port" "$EGRESS/log" \
-    "${allow[@]+"${allow[@]}"}" </dev/null >>"$EGRESS/proxy.err" 2>&1 &
+    "$EGRESS/allow" </dev/null >>"$EGRESS/proxy.err" 2>&1 &
   pid=$!
   printf '%s\n' "$pid" > "$EGRESS/pid"
   for _ in $(seq 100); do
@@ -759,6 +778,9 @@ cmd_start() {
   # may write it or move aside any directory that leads to it.
   sandbox_args+=(--deny-write "$helm_real")
   deny_entries "$helm_real"
+  # The proxy re-reads the egress allowlist by path, so no directory leading
+  # to it may be moved aside, rewritten, and moved back either.
+  deny_entries "$egress_real"
   # The directory entries leading to the top-level git dir of the checkout and
   # of each clone are denied too, and so is every entry inside it that leads to
   # a Git config or hooks: its modules directory and everything leading to a
@@ -944,6 +966,21 @@ cmd_stop() {  # [--stow]
   fi
 }
 
+cmd_reload() {
+  local old new
+  active || refuse "config/privateer is absent; this launcher reloads only a Privateer home"
+  fm_privateer_inside_session "$FM_HOME" &&
+    refuse "reload is the captain's command and runs outside the Privateer session"
+  proxy_running || refuse "the Privateer egress proxy is not running; start the session with fm-privateer.sh start"
+  old=$(cat "$EGRESS/allow" 2>/dev/null) || old=
+  write_allow_file
+  new=$(cat "$EGRESS/allow")
+  comm -13 <(printf '%s\n' "$old" | LC_ALL=C sort -u) <(printf '%s\n' "$new" | LC_ALL=C sort -u) | sed '/^$/d; s/^/privateer: added /'
+  comm -23 <(printf '%s\n' "$old" | LC_ALL=C sort -u) <(printf '%s\n' "$new" | LC_ALL=C sort -u) | sed '/^$/d; s/^/privateer: removed /'
+  [ "$old" != "$new" ] || echo "privateer: the egress allowlist is unchanged"
+  echo "privateer: reloaded the egress allowlist"
+}
+
 [ "$#" -ge 1 ] || usage
 cmd=$1
 shift
@@ -975,6 +1012,10 @@ case "$cmd" in
       *) usage ;;
     esac
     cmd_stop "$@"
+    ;;
+  reload)
+    [ "$#" -eq 0 ] || usage
+    cmd_reload
     ;;
   -h | --help)
     sed -n '2,/^set -u/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'
