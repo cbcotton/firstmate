@@ -156,19 +156,19 @@
 # that lives outside the pool, so none can be redirected or relabeled as a
 # pool worktree; any .git entry inside a clone, the checkout's own .git, or
 # the .git gitfile, which Git reads to find a git dir, of every submodule
-# checkout and of every linked worktree outside the pool, with each directory
-# entry between this home and it; or the projects directory, any clone's
-# directory, any directory between this home and the checkout's git dir, or
-# any directory entry that leads to one of those Git configs or hooks: the
-# top-level git dir of the checkout and of each clone, its modules directory,
-# every entry under that leading to a submodule's git dir, each submodule git
-# dir's own modules and worktrees entries, and the git dir of a linked
-# worktree outside the pool with the same modules entries of its own; so none
-# of those can be moved aside, changed, and moved back, replaced, or linked
-# over. The worktrees directory of the checkout's and each clone's git dir is
-# the one such entry that may still be created, because the session's first
-# pool worktree creates it, but nothing inside may move it, remove it, or
-# place a symlink there.
+# checkout and every linked worktree outside the pool that lies in this home,
+# with each directory entry between this home and it; or the projects
+# directory, any clone's directory, any directory between this home and the
+# checkout's git dir, or any directory entry that leads to one of those Git
+# configs or hooks: the top-level git dir of the checkout and of each clone,
+# its modules directory, every entry under that leading to a submodule's git
+# dir, each submodule git dir's own modules and worktrees entries, and the git
+# dir of a linked worktree outside the pool with the same modules entries of
+# its own; so none of those can be moved aside, changed, and moved back,
+# replaced, or linked over. The worktrees directory of the checkout's and each
+# clone's git dir is the one such entry that may still be created, because the
+# session's first pool worktree creates it, but nothing inside may move it,
+# remove it, or place a symlink there.
 # It may connect only to the egress proxy, the DNS resolver, and that socket,
 # so a client that ignores the proxy variables reaches nothing remote at all,
 # and may signal only processes inside the same sandbox, so it can neither
@@ -187,7 +187,8 @@
 #   - the per-task temp roots under /tmp/fm-*, the user's own temporary
 #     directory ($TMPDIR), and the flat here-document files stock macOS
 #     Bash writes directly in /var/tmp as sh-thd* are namespaces shared by
-#     every home on this machine;
+#     every home on this machine, so a checkout kept in one of them, such as
+#     a linked worktree, keeps its .git gitfile writable;
 #   - clones under projects/ are added, moved, and removed outside the
 #     session, and a worktree the session creates in its own pool is meant
 #     for use only inside it;
