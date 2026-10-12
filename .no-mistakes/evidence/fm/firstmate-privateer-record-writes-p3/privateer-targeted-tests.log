@@ -1,0 +1,6 @@
+ok - start runs the egress proxy with the sailor and forge allowed, and the first mate with only the allowlist and isolated OpenCode directories in a tmux server whose sandbox reaches only that proxy
+ok - in the real sandboxed session, a command started through tmux reaches nothing but the proxy, plants nothing that runs outside, forges no grant while the captain's own shell still records one, and cannot rewrite the first mate's instructions, skills, docs, or plugins in the checkout or the helm, a worker still commits in its own copy and in a new slot of the home's own pool, and the first mate cannot stop or rewrite the proxy
+ok - every gated script refuses a sealed Privateer home from outside its session, names no socket, and changes nothing
+ok - the gate seals only a home whose config holds the flag, and only its own session is inside
+ok - in a Privateer home only the captain's own shell records a grant or revocation, the refusal inside names that exact command, and list and active run on both sides
+# subset done

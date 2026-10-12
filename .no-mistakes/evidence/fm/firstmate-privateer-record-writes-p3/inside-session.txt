@@ -1,0 +1,31 @@
+--- inside the real sandboxed Privateer session (worker window): TMUX=/private/tmp/tmux-501/fm-privateer-9981315f2a16,67952,0
+$ fm-permission-grant.sh grant --scope standing --permission bash --pattern "*" --action allow --words-file w.txt --channel chat
+error: fm-permission-grant.sh refused: in a Privateer home only the captain records a grant or revocation, from their own shell outside this session; ask the captain to run it there, then relaunch the worker once the captain says it is recorded: FM_HOME=/private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-privateer.BkzU6R/real-session/home /Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M4R2T3DNQKVCWZZTJ1Z5JC9K/bin/fm-permission-grant.sh grant --scope standing --permission bash --pattern '*' --action allow --words-file /private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-privateer.BkzU6R/real-session/home/data/w.txt --channel chat
+exit=2
+$ fm-permission-grant.sh revoke gx --words-file w.txt --channel chat
+error: fm-permission-grant.sh refused: in a Privateer home only the captain records a grant or revocation, from their own shell outside this session; ask the captain to run it there, then relaunch the worker once the captain says it is recorded: FM_HOME=/private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-privateer.BkzU6R/real-session/home /Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M4R2T3DNQKVCWZZTJ1Z5JC9K/bin/fm-permission-grant.sh revoke gx --words-file /private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-privateer.BkzU6R/real-session/home/data/w.txt --channel chat
+exit=2
+$ fm-permission-grant.sh list
+g1791810514-67375-2202 standing deny bash "curl *" via chat: deny it any network tool 
+exit=0
+$ fm-permission-grant.sh active --task pv-probe
+[{"bash":{"curl *":"deny"}}]
+exit=0
+$ echo forged >> state/permission-grants.jsonl
+/private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-privateer.BkzU6R/real-session/window: line 73: /private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-privateer.BkzU6R/real-session/home/state/permission-grants.jsonl: Operation not permitted
+exit=1
+
+--- captain's own shell, outside the session: runs the exact grant command the refusal printed
+$ FM_HOME=/private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-privateer.BkzU6R/real-session/home /Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M4R2T3DNQKVCWZZTJ1Z5JC9K/bin/fm-permission-grant.sh grant --scope standing --permission bash --pattern '*' --action allow --words-file /private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-privateer.BkzU6R/real-session/home/data/w.txt --channel chat
+refused: a blanket shell allow is never granted; the captain approves that one action in the moment and firstmate performs it
+exit=1
+$ fm-permission-grant.sh list
+g1791810514-67375-2202 standing deny bash "curl *" via chat: deny it any network tool 
+g1791810517-68701-32535 standing deny bash "wget *" via chat: deny it any network tool 
+exit=0
+$ fm-permission-grant.sh active --task pv-probe
+[{"bash":{"curl *":"deny"}},{"bash":{"wget *":"deny"}}]
+exit=0
+--- ledger after the session
+{"v":1,"op":"grant","id":"g1791810514-67375-2202","ts":1791810514,"scope":"standing","task":null,"task_dispatched_at":null,"session":null,"permission":"bash","pattern":"curl *","action":"deny","words":"deny it any network tool\n","channel":"chat","ref":null}
+{"v":1,"op":"grant","id":"g1791810517-68701-32535","ts":1791810517,"scope":"standing","task":null,"task_dispatched_at":null,"session":null,"permission":"bash","pattern":"wget *","action":"deny","words":"deny it any network tool\n","channel":"chat","ref":null}
