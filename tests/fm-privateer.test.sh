@@ -19,9 +19,11 @@
 # command the first mate starts through tmux reaches nothing but the proxy and
 # cannot stop or rewrite it, one that a first mate running as opencode
 # detects its harness and owns the fleet lock while a plain shell in the same
-# session stays read-only, and one that such a command can move aside, replace,
-# link over, or plant no directory leading to a Git config or hooks while the
-# session's own pool worktrees are still added and removed. The live egress audit
+# session stays read-only, one that such a command can move aside, replace,
+# link over, or plant no directory leading to a Git config or hooks, and one
+# that it can point Git at no other config and hooks through a commondir or a
+# .git gitfile, while the session's own pool worktrees are still added and
+# removed. The live egress audit
 # (tests/fm-privateer-egress-live-e2e.test.sh) and session lock check
 # (tests/fm-privateer-session-lock-live-e2e.test.sh) run the real OpenCode.
 # docs/configuration.md ("Privateer quarantine") owns the contract.
@@ -625,12 +627,13 @@ test_start_refuses_without_the_flag() {
   root="$dir/root"
   make_checkout "$root"
   # A clone with a linked worktree and a submodule's git dir, whose Git
-  # metadata a home without the quarantine keeps exactly as it was.
+  # metadata, like the checkout's and the worktree's gitfile, a home without
+  # the quarantine keeps exactly as it was.
   proj="$home/projects/proj"
   fm_git_init_commit "$proj"
   git -C "$proj" worktree add -q -b side "$dir/side"
   mkdir -p "$proj/.git/modules/lib/sub"
-  before=$(cd "$proj/.git" && find . | LC_ALL=C sort)
+  before=$(cd "$proj/.git" && find . | LC_ALL=C sort; cd "$root/.git" && find . | LC_ALL=C sort; cat "$dir/side/.git")
   make_launcher_fakebin "$dir" >/dev/null
   make_stub_primary "$dir" >/dev/null
   out=$(run_launcher "$dir" "$home" "$root" start)
@@ -639,7 +642,8 @@ test_start_refuses_without_the_flag() {
   assert_contains "$out" "config/privateer is absent" "the refusal must name the flag"
   [ ! -e "$dir/tmux.log" ] || fail "start must not touch tmux without the flag"
   [ ! -e "$dir/profile.sb" ] || fail "start must render no sandbox without the flag"
-  assert_equals "$before" "$(cd "$proj/.git" && find . | LC_ALL=C sort)" "a home without the flag must keep its clones' Git metadata untouched"
+  assert_equals "$before" "$(cd "$proj/.git" && find . | LC_ALL=C sort; cd "$root/.git" && find . | LC_ALL=C sort; cat "$dir/side/.git")" \
+    "a home without the flag must keep the Git metadata of its checkout, its clones, and their worktrees untouched"
   pass "start refuses a home without config/privateer and leaves its Git metadata untouched"
 }
 
@@ -745,11 +749,11 @@ test_start_passes_only_the_allowlist() {
   (regex #\"^$(rq "$home_real")/state/privateer/egress\$\")
   (regex #\"^$(rq "$home_real")/state/privateer\$\")
   (regex #\"^$(rq "$home_real")/state\$\")
-  (regex #\"^$(rq "$root_real")/\\.git(\$|/(modules(/[^/]+)?\$|(worktrees/[^/]+/|modules/.+/)?(hooks(/|\$)|config)))\")
+  (regex #\"^$(rq "$root_real")/\\.git(\$|/(modules(/[^/]+)?\$|(modules/.+/)?commondir\$|(worktrees/[^/]+/|modules/.+/)?(hooks(/|\$)|config)))\")
   (regex #\"^$(rq "$home_real")/projects/[^/]+\$\")
-  (regex #\"^$(rq "$home_real")/projects/[^/]+/(.+/)?\\.git(\$|/(modules(/[^/]+)?\$|(worktrees/[^/]+/|modules/.+/)?(hooks(/|\$)|config)))\")
+  (regex #\"^$(rq "$home_real")/projects/[^/]+/(.+/)?\\.git(\$|/(modules(/[^/]+)?\$|(modules/.+/)?commondir\$|(worktrees/[^/]+/|modules/.+/)?(hooks(/|\$)|config)))\")
   (regex #\"^$(rq "$home_real")/projects\$\")
-  (regex #\"^$(rq "$root_real")/\\.git/worktrees/side(\$|/(commondir|gitdir)\$|/modules(\$|/[^/]+\$|/.+/(hooks(/|\$)|config)))\")
+  (regex #\"^$(rq "$root_real")/\\.git/worktrees/side(\$|/(commondir|gitdir)\$|/modules(\$|/[^/]+\$|/.+/(hooks(/|\$)|config|commondir\$)))\")
 )" "$(sed -n '/^(deny file-write\*$/,/^)$/p' "$profile")" \
     "the sandbox must take back only the egress record and the directories leading to it, the home's config and scripts, the helm and the directories leading to it, and every Git config and hook and the directories leading to them, so every worker's OpenCode directories stay writable"
   assert_equals "(deny file-write-unlink (regex #\"^$(rq "$root_real")/\\.git/worktrees\$\"))
@@ -807,6 +811,46 @@ test_start_denies_the_instructions_of_a_checkout_that_is_the_home() {
   out=$(run_launcher "$dir" "$home" "$home" stop)
   expect_code 0 "$?" "stop must end the session: $out"
   pass "start denies writes to every path a checkout that is the home gives its first mate's OpenCode, and leaves the rest of .opencode writable"
+}
+
+test_start_denies_the_gitfiles_of_submodules_and_outside_worktrees() {
+  local dir home out status deny proj repo p
+  dir="$TMP_ROOT/start-gitfiles"
+  home=$(make_home start-gitfiles)
+  make_checkout "$home"
+  home=$(cd "$home" && pwd -P)
+  # A submodule lib/sub checked out in the checkout that is the home and in a
+  # clone, a linked worktree of the clone in the home outside the pool with the
+  # submodule checked out, and one in the pool.
+  proj="$home/projects/proj"
+  fm_git_init_commit "$proj"
+  fm_git_init_commit "$dir/sub"
+  for repo in "$home" "$proj"; do
+    git -C "$repo" -c protocol.file.allow=always submodule add -q "$dir/sub" lib/sub >/dev/null 2>&1 ||
+      fail "the fixture submodule could not be added to $repo"
+    git -C "$repo" -c user.name=t -c user.email=t@example.invalid commit -qm sub
+  done
+  git -C "$proj" worktree add -q -b side "$home/side"
+  git -C "$home/side" -c protocol.file.allow=always submodule update --init -q >/dev/null 2>&1
+  git -C "$proj" worktree add -q -b slot "$home/state/privateer/treehouse/pool/slot"
+  make_launcher_fakebin "$dir" >/dev/null
+  make_stub_primary "$dir" >/dev/null
+  out=$(run_launcher "$dir" "$home" "$home" start)
+  status=$?
+  expect_code 0 "$status" "start must succeed from a checkout that is the home: $out"
+  [ -f "$dir/profile.sb" ] || fail "the tmux server never started inside the sandbox"
+  deny=$(sed -n '/^(deny file-write\*$/,/^)$/p' "$dir/profile.sb")
+  for p in lib/sub/.git lib/sub lib projects/proj/lib/sub/.git projects/proj/lib/sub projects/proj/lib \
+    side/.git side side/lib/sub/.git side/lib/sub side/lib; do
+    assert_contains "$deny" "  (regex #\"^$(rq "$home/$p")\$\")" "the sandbox must deny writes to $p, so no gitfile can be rewritten or moved aside"
+  done
+  assert_contains "$deny" "  (regex #\"^$(rq "$proj/.git/worktrees/side")(\$|/(commondir|gitdir)\$|/modules(\$|/[^/]+\$|/.+/(hooks(/|\$)|config|commondir\$)))\")" \
+    "the sandbox must deny the outside worktree's commondir and gitdir and its submodules' config, hooks, and commondir"
+  assert_not_contains "$deny" "pool/slot" "the pool worktree's gitfile must stay the session's own"
+  assert_not_contains "$deny" "worktrees/slot" "the pool worktree's commondir and gitdir must stay the session's own"
+  out=$(run_launcher "$dir" "$home" "$home" stop)
+  expect_code 0 "$?" "stop must end the session: $out"
+  pass "start denies the gitfile of every submodule and outside linked worktree checkout in the home and every directory leading to it, and the commondir of the outside worktree's submodules, and leaves the pool's worktrees alone"
 }
 
 test_start_renders_the_helm_afresh() {
@@ -1701,6 +1745,105 @@ slot=0" "$(cat "$probe" 2>/dev/null)" \
   pass "in the real sandboxed session no directory leading to a Git config or hooks of the checkout, a clone, their submodules, or a linked worktree outside the pool can be moved aside, replaced, linked over, or planted, while the session's own pool worktrees are still added and removed"
 }
 
+test_session_sandbox_refuses_git_redirects() {
+  local dir home root_git proj proj_git wt wt_git repo c expected out status spid sport socket probe
+  if ! "$ROOT/bin/fm-sandbox-exec.sh" available || ! command -v tmux >/dev/null 2>&1; then
+    pass "session Git redirect checks not run: sandbox-exec or tmux is not available on this machine"
+    return 0
+  fi
+  dir="$TMP_ROOT/session-redirect"
+  home=$(make_home session-redirect)
+  # The checkout is the home, as it usually is, with a submodule lib/sub checked
+  # out in it and in a clone, and a linked worktree of the clone that lives in
+  # the home outside the pool with that submodule checked out as well.
+  make_checkout "$home"
+  home=$(cd "$home" && pwd -P)
+  probe="$home/state/probe"
+  proj="$home/projects/proj"
+  fm_git_init_commit "$proj"
+  fm_git_init_commit "$dir/sub"
+  for repo in "$home" "$proj"; do
+    git -C "$repo" -c protocol.file.allow=always submodule add -q "$dir/sub" lib/sub >/dev/null 2>&1 ||
+      fail "the fixture submodule could not be added to $repo"
+    git -C "$repo" -c user.name=t -c user.email=t@example.invalid commit -qm sub
+  done
+  wt="$home/side"
+  git -C "$proj" worktree add -q -b side "$wt"
+  git -C "$wt" -c protocol.file.allow=always submodule update --init -q >/dev/null 2>&1
+  root_git="$home/.git"
+  proj_git="$proj/.git"
+  wt_git="$proj_git/worktrees/side"
+  for c in "$home/lib/sub" "$proj/lib/sub" "$wt" "$wt/lib/sub"; do
+    [ -f "$c/.git" ] || fail "the fixture has no gitfile at $c/.git"
+  done
+  mkdir -p "$dir/sailor/v1"
+  printf '{"data":[{"id":"coder"}]}\n' > "$dir/sailor/v1/models"
+  read -r spid sport < <(serve_dir "$dir/sailor" "$dir/sailor.log")
+  [ -n "$sport" ] || fail "the stand-in sailor did not start"
+  jq -n --arg e "http://127.0.0.1:$sport/v1" '{sailors: {tiller: {title: "Tiller", endpoint: $e, status: "live", models: ["coder"]}}, default: {harness: "opencode", sailor: "tiller", model: "coder"}}' \
+    > "$home/config/crew-dispatch.json"
+  # A command the first mate starts through tmux, as a worker's pane is: it
+  # tries to write, link, or rename a commondir into the git dir of the
+  # checkout, the clone, and each submodule, to rewrite the outside worktree's
+  # commondir in place and by renaming a new one over it, to rewrite the
+  # gitfile of each submodule and linked worktree checkout, and, innermost
+  # first, to move aside each directory leading to one; then it adds, commits
+  # in, and removes a worktree in the home's own pool for the checkout and for
+  # the clone.
+  cat > "$dir/window" <<SH
+#!/bin/sh
+planted=
+for g in '$root_git' '$root_git/modules/lib/sub' '$proj_git' '$proj_git/modules/lib/sub' '$wt_git/modules/lib/sub'; do
+  ( echo '$home/state' > "\$g/commondir" ) 2>/dev/null && planted="\$planted commondir:\$g"
+  ln -s '$home/state/commondir.link' "\$g/commondir" 2>/dev/null && planted="\$planted symlink:\$g"
+  echo '$home/state' > '$home/state/commondir.new' && mv -f '$home/state/commondir.new' "\$g/commondir" 2>/dev/null &&
+    planted="\$planted rename:\$g"
+done
+( echo '$home/state' > '$wt_git/commondir' ) 2>/dev/null && planted="\$planted rewrite:$wt_git/commondir"
+echo '$home/state' > '$home/state/commondir.new' && mv -f '$home/state/commondir.new' '$wt_git/commondir' 2>/dev/null &&
+  planted="\$planted rename:$wt_git/commondir"
+for c in '$home/lib/sub' '$proj/lib/sub' '$wt' '$wt/lib/sub'; do
+  ( echo 'gitdir: $home/state' > "\$c/.git" ) 2>/dev/null && planted="\$planted gitfile:\$c"
+done
+for t in '$home/lib/sub' '$home/lib' '$proj/lib/sub' '$proj/lib' '$wt/lib/sub' '$wt/lib' '$wt'; do
+  mv "\$t" "\$t.aside" 2>/dev/null && planted="\$planted move:\$t"
+done
+echo "planted=\${planted:-none}" > '$probe.tmp'
+for repo in '$home' '$proj'; do
+  git -C "\$repo" worktree add -q -b pv-slot "\$TREEHOUSE_ROOT/pool/slot" >/dev/null 2>&1 &&
+    git -C "\$TREEHOUSE_ROOT/pool/slot" -c user.name=probe -c user.email=probe@example.test commit -q --allow-empty -m work >/dev/null 2>&1 &&
+    git -C "\$repo" worktree remove "\$TREEHOUSE_ROOT/pool/slot" >/dev/null 2>&1
+  echo "slot=\$?" >> '$probe.tmp'
+done
+mv '$probe.tmp' '$probe'
+SH
+  cat > "$dir/primary" <<SH
+#!/bin/sh
+tmux new-window -d '$dir/window'
+exec sleep 60
+SH
+  chmod +x "$dir/window" "$dir/primary"
+  out=$(FM_TEST_SEAM=1 FM_PRIVATEER_PRIMARY="$dir/primary" FM_HOME="$home" FM_ROOT_OVERRIDE="$home" "$PRIVATEER" start 2>&1)
+  status=$?
+  socket=$(printf '%s\n' "$out" | sed -n 's/.*on tmux socket \([^ ]*\).*/\1/p' | head -1)
+  wait_for_file "$probe"
+  FM_HOME="$home" FM_ROOT_OVERRIDE="$home" "$PRIVATEER" stop >/dev/null 2>&1 || { [ -z "$socket" ] || tmux -L "$socket" kill-server 2>/dev/null; }
+  kill "$spid" 2>/dev/null
+  expect_code 0 "$status" "the real session must start: $out"
+  assert_equals "planted=none
+slot=0
+slot=0" "$(cat "$probe" 2>/dev/null)" \
+    "a command started through tmux must write no commondir into the git dir of the checkout, a clone, or their submodules, rewrite no outside worktree's commondir, and rewrite or move aside no gitfile of a submodule or linked worktree checkout, while it still adds, commits in, and removes worktrees in the home's own pool"
+  for c in "$home:$root_git" "$home/lib/sub:$root_git/modules/lib/sub" "$proj:$proj_git" "$proj/lib/sub:$proj_git/modules/lib/sub" \
+    "$wt:$proj_git" "$wt/lib/sub:$wt_git/modules/lib/sub"; do
+    expected=${c#*:}
+    c=${c%%:*}
+    assert_equals "$expected" "$(cd "$(git -C "$c" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" 2>/dev/null && pwd -P)" "Git in $c must still read its config and hooks from its own common dir"
+  done
+  assert_not_contains "$(git -C "$home" worktree list --porcelain; git -C "$proj" worktree list --porcelain)" "pool/slot" "the pool worktrees must be gone after their removal"
+  pass "in the real sandboxed session no commondir can be written into the git dir of the checkout, a clone, their submodules, or a linked worktree outside the pool, and no gitfile of a submodule or such a worktree can be rewritten or moved aside, while the session's own pool worktrees are still added and removed"
+}
+
 # --- spawn ------------------------------------------------------------------
 
 # make_spawn_case <name> <id>: a Privateer home with a project and worktree for
@@ -1997,6 +2140,7 @@ test_start_refuses_with_a_forbidden_file
 test_start_refuses_without_a_first_mate_line
 test_start_passes_only_the_allowlist
 test_start_denies_the_instructions_of_a_checkout_that_is_the_home
+test_start_denies_the_gitfiles_of_submodules_and_outside_worktrees
 test_start_renders_the_helm_afresh
 test_start_refuses_without_the_rulebook
 test_start_refuses_when_the_proxy_cannot_bind
@@ -2005,6 +2149,7 @@ test_session_sandbox_holds_every_command
 test_session_first_mate_owns_the_lock_and_a_plain_shell_does_not
 test_session_zsh_here_document_runs
 test_session_sandbox_pins_git_metadata
+test_session_sandbox_refuses_git_redirects
 test_proxy_reloads_its_allowlist
 test_reload_rewrites_the_allowlist
 test_start_refuses_while_running
