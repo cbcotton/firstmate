@@ -742,13 +742,16 @@ test_start_passes_only_the_allowlist() {
   (regex #\"^$(rq "$helm_real")\$\")
   (regex #\"^$(rq "$home_real")/state/privateer\$\")
   (regex #\"^$(rq "$home_real")/state\$\")
+  (regex #\"^$(rq "$home_real")/state/privateer/egress\$\")
+  (regex #\"^$(rq "$home_real")/state/privateer\$\")
+  (regex #\"^$(rq "$home_real")/state\$\")
   (regex #\"^$(rq "$root_real")/\\.git(\$|/(modules(/[^/]+)?\$|(worktrees/[^/]+/|modules/.+/)?(hooks(/|\$)|config)))\")
   (regex #\"^$(rq "$home_real")/projects/[^/]+\$\")
   (regex #\"^$(rq "$home_real")/projects/[^/]+/(.+/)?\\.git(\$|/(modules(/[^/]+)?\$|(worktrees/[^/]+/|modules/.+/)?(hooks(/|\$)|config)))\")
   (regex #\"^$(rq "$home_real")/projects\$\")
   (regex #\"^$(rq "$root_real")/\\.git/worktrees/side(\$|/(commondir|gitdir)\$|/modules(\$|/[^/]+\$|/.+/(hooks(/|\$)|config)))\")
 )" "$(sed -n '/^(deny file-write\*$/,/^)$/p' "$profile")" \
-    "the sandbox must take back only the egress record, the home's config and scripts, the helm and the directories leading to it, and every Git config and hook and the directories leading to them, so every worker's OpenCode directories stay writable"
+    "the sandbox must take back only the egress record and the directories leading to it, the home's config and scripts, the helm and the directories leading to it, and every Git config and hook and the directories leading to them, so every worker's OpenCode directories stay writable"
   assert_equals "(deny file-write-unlink (regex #\"^$(rq "$root_real")/\\.git/worktrees\$\"))
 (deny file-write-create (require-all (regex #\"^$(rq "$root_real")/\\.git/worktrees\$\") (vnode-type SYMLINK)))
 (deny file-write-unlink (regex #\"^$(rq "$home_real")/projects/[^/]+/(.+/)?\\.git/worktrees\$\"))
@@ -926,7 +929,8 @@ test_proxy_forwards_only_allowed_destinations() {
     sleep 0.1
   done
   [ -n "$sailor_port" ] || fail "the stand-in sailor did not start"
-  python3 "$ROOT/bin/fm-privateer-proxy.py" "$dir/port" "$dir/log" "127.0.0.1:$sailor_port" &
+  printf '127.0.0.1:%s\n' "$sailor_port" > "$dir/allow"
+  python3 "$ROOT/bin/fm-privateer-proxy.py" "$dir/port" "$dir/log" "$dir/allow" &
   pid=$!
   wait_for_file "$dir/port" || fail "the proxy did not record its port"
   port=$(cat "$dir/port")
@@ -949,6 +953,80 @@ refused GET http://user@127.0.0.1:$sailor_port/v1
 refused GET https://127.0.0.1:$sailor_port/v1
 refused CONNECT api.anthropic.com:443" "$(jq -r '"\(.verdict) \(.method) \(.dest)"' "$dir/log")" "the proxy must log every allowed and refused destination"
   pass "the egress proxy forwards to an allowed sailor and refuses and logs every other destination, including an authority hidden behind ?, #, a backslash, or userinfo"
+}
+
+test_proxy_reloads_its_allowlist() {
+  local dir port pid
+  dir="$TMP_ROOT/reload-proxy"
+  mkdir -p "$dir"
+  printf 'one.example.test:443\n' > "$dir/allow"
+  python3 "$ROOT/bin/fm-privateer-proxy.py" "$dir/port" "$dir/log" "$dir/allow" &
+  pid=$!
+  wait_for_file "$dir/port" || fail "the proxy did not record its port"
+  port=$(cat "$dir/port")
+  assert_not_contains "$(proxy_request "$port" 'CONNECT one.example.test:443 HTTP/1.1')" "403" "a listed host must be allowed"
+  assert_contains "$(proxy_request "$port" 'CONNECT two.example.test:443 HTTP/1.1')" "HTTP/1.1 403" "an unlisted host must be refused"
+  printf 'two.example.test:443\n' > "$dir/allow.new"
+  mv "$dir/allow.new" "$dir/allow"
+  assert_not_contains "$(proxy_request "$port" 'CONNECT two.example.test:443 HTTP/1.1')" "403" "a newly listed host must be allowed without a restart"
+  assert_contains "$(proxy_request "$port" 'CONNECT one.example.test:443 HTTP/1.1')" "HTTP/1.1 403" "a removed host must be refused"
+  rm -f "$dir/allow"
+  assert_not_contains "$(proxy_request "$port" 'CONNECT two.example.test:443 HTTP/1.1')" "403" "a missing file must keep the last good set"
+  assert_contains "$(proxy_request "$port" 'CONNECT one.example.test:443 HTTP/1.1')" "HTTP/1.1 403" "a missing file must not open the proxy up"
+  printf 'one.example.test:443\n' > "$dir/allow"
+  chmod 000 "$dir/allow"
+  if [ -r "$dir/allow" ]; then
+    chmod 644 "$dir/allow"
+  else
+    assert_not_contains "$(proxy_request "$port" 'CONNECT two.example.test:443 HTTP/1.1')" "403" "an unreadable file must keep the last good set"
+    assert_contains "$(proxy_request "$port" 'CONNECT one.example.test:443 HTTP/1.1')" "HTTP/1.1 403" "an unreadable file must not open the proxy up"
+    chmod 644 "$dir/allow"
+    assert_not_contains "$(proxy_request "$port" 'CONNECT one.example.test:443 HTTP/1.1')" "403" "a file readable again must be applied"
+    assert_contains "$(proxy_request "$port" 'CONNECT two.example.test:443 HTTP/1.1')" "HTTP/1.1 403" "a file readable again must replace the last good set"
+  fi
+  kill "$pid" 2>/dev/null
+  wait "$pid" 2>/dev/null
+  assert_contains "$(jq -r 'select(.verdict | startswith("reload")) | "\(.verdict) \(.dest)"' "$dir/log")" "reload +1 -1" "the reload must be logged with what changed"
+  assert_contains "$(jq -r '.verdict' "$dir/log")" "reload-failed" "a reload that cannot read the file must be logged"
+  pass "the egress proxy applies a changed allowlist file without a restart, keeps the last good set when the file is missing or unreadable, and logs each reload"
+}
+
+test_reload_rewrites_the_allowlist() {
+  local dir home root out status port allow
+  dir="$TMP_ROOT/reload"
+  home=$(make_home reload)
+  root="$dir/root"
+  make_checkout "$root"
+  git -C "$root" remote add origin https://forge.example.test:3000/captain/firstmate.git
+  make_launcher_fakebin "$dir" >/dev/null
+  make_stub_primary "$dir" >/dev/null
+  out=$(run_launcher "$dir" "$home" "$root" reload)
+  status=$?
+  expect_code 1 "$status" "reload must refuse without a running proxy"
+  assert_contains "$out" "the Privateer egress proxy is not running" "the refusal must name the proxy"
+  out=$(run_launcher "$dir" "$home" "$root" start)
+  expect_code 0 $? "start must succeed: $out"
+  port=$(cat "$home/state/privateer/egress/port")
+  allow="$home/state/privateer/egress/allow"
+  assert_contains "$(cat "$allow")" "forge.example.test:3000" "start must write the allowlist file"
+  assert_contains "$(proxy_request "$port" 'CONNECT new.example.test:9999 HTTP/1.1')" "HTTP/1.1 403" "an unlisted host must be refused"
+  jq '.sailors.newcomer = {endpoint: "http://new.example.test:9999/v1"}' "$home/config/crew-dispatch.json" > "$dir/dispatch.new" && mv "$dir/dispatch.new" "$home/config/crew-dispatch.json"
+  out=$(run_launcher "$dir" "$home" "$root" reload)
+  status=$?
+  expect_code 0 "$status" "reload must succeed with a running proxy: $out"
+  assert_contains "$out" "privateer: added new.example.test:9999" "reload must print what it added"
+  assert_not_contains "$(proxy_request "$port" 'CONNECT new.example.test:9999 HTTP/1.1')" "403" "a newly listed sailor must be allowed without a restart"
+  jq 'del(.sailors.newcomer)' "$home/config/crew-dispatch.json" > "$dir/dispatch.new" && mv "$dir/dispatch.new" "$home/config/crew-dispatch.json"
+  out=$(run_launcher "$dir" "$home" "$root" reload)
+  assert_contains "$out" "privateer: removed new.example.test:9999" "reload must print what it removed"
+  assert_contains "$(proxy_request "$port" 'CONNECT new.example.test:9999 HTTP/1.1')" "HTTP/1.1 403" "a removed sailor must be refused again"
+  assert_contains "$(jq -r 'select(.verdict == "reload") | .verdict' "$home/state/privateer/egress/log")" "reload" "each reload must be logged"
+  out=$(env FM_HOME="$home" TMUX="/private/tmp/tmux-501/$(session_socket "$home"),1,0" "$PRIVATEER" reload 2>&1)
+  status=$?
+  expect_code 1 "$status" "reload must refuse from inside the session"
+  assert_contains "$out" "runs outside the Privateer session" "the refusal must say reload is the captain's"
+  run_launcher "$dir" "$home" "$root" stop >/dev/null
+  pass "reload rewrites the allowlist without a restart, prints what changed, and refuses without a proxy or from inside the session"
 }
 
 test_start_refuses_while_running() {
@@ -1306,7 +1384,7 @@ for t in '$proj/.git/hooks/post-checkout' '$proj/.git/config' '$wtgit/config.wor
   ( : >> "\$t" ) 2>/dev/null && planted="\$planted \$t"
 done
 ( mkdir -p '$helm/.opencode/skills/new' && : >> '$helm/.opencode/skills/new/SKILL.md' ) 2>/dev/null && planted="\$planted $helm/.opencode/skills/new"
-for t in '$helm' '$home/state/privateer' '$home/state'; do
+for t in '$helm' '$home/state/privateer/egress' '$home/state/privateer' '$home/state'; do
   mv "\$t" "\$t.aside" 2>/dev/null && planted="\$planted move:\$t"
 done
 for d in agent agents command commands mode modes plugin plugins skill skills tool tools; do
@@ -1927,6 +2005,8 @@ test_session_sandbox_holds_every_command
 test_session_first_mate_owns_the_lock_and_a_plain_shell_does_not
 test_session_zsh_here_document_runs
 test_session_sandbox_pins_git_metadata
+test_proxy_reloads_its_allowlist
+test_reload_rewrites_the_allowlist
 test_start_refuses_while_running
 test_stop_refuses_with_work_in_flight_and_stops_an_idle_session
 test_stop_stow_delivers_the_stow_then_stops
