@@ -1,0 +1,8 @@
+ok - T9 firstmate off its default branch is skipped, not forced
+ok - T10 firstmate detached HEAD is skipped
+ok - T11 unsafe secondmate home is not fast-forwarded
+ok - T12 a self-update rebinds a locally armed watch on the primary
+ok - T13 stopped and stale-socket forks update, running fork skipped, plain directory ignored
+ok - T13 dirty and diverged forks reported and untouched
+ok - T13 no forks/ directory is a no-op
+# all fm-update tests passed

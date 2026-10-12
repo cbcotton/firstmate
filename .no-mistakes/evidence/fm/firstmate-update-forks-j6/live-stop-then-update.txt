@@ -1,0 +1,6 @@
+== captain stops the running session (kill-server), re-runs update ==
+fork running: updated de9b6dc..8925356 (instructions changed: AGENTS.md)
+fork stale: already current
+fork stopped: already current
+running now 8925356
+== cleaned up ==
