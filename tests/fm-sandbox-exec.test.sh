@@ -2,7 +2,8 @@
 # tests/fm-sandbox-exec.test.sh - bin/fm-sandbox-exec.sh: the Seatbelt profile
 # it renders, and, where macOS sandbox-exec is available, that a command run
 # inside it can write only where it was allowed and connect only where it was
-# allowed, while ps and stock macOS Bash here-documents still work there.
+# allowed, cannot move, replace, or link over an entry kept in place, while ps
+# and stock macOS Bash here-documents still work there.
 # docs/configuration.md ("Sailor sandbox") owns the contract.
 set -u
 
@@ -33,6 +34,7 @@ test_profile_denies_by_default_and_allows_back_exactly() {
   assert_contains "$out" "(subpath \"$TMP_ROOT/render/wt\")" "the copy must be writable"
   assert_contains "$out" $'(deny file-write*\n'"  (subpath \"$TMP_ROOT/render/wt/.git/hooks\")"$'\n)\n(allow file-write*\n'"  (regex #\"^$(printf '%s' "$TMP_ROOT/render/state/t1." | sed 's/[][\.^$*+?(){}|]/\\&/g')\")" \
     "a denied path must follow the directory allows, and an exact prefix, anchored and escaped, must follow the denies"
+  assert_not_contains "$out" 'file-write-unlink' "a profile asking for no moved-entry denial must carry none"
   assert_contains "$out" '(deny network-outbound)' "outbound network must be denied by default"
   assert_contains "$out" '(allow network-outbound (remote ip "localhost:11234"))' "a loopback endpoint must allow exactly its port"
   assert_contains "$out" '(allow network-outbound (remote ip "*:8000"))' "a remote endpoint can only be pinned to its port"
@@ -97,6 +99,47 @@ srv.serve_forever()' "$TMP_ROOT/port" >/dev/null 2>&1 &
   pass "inside the sandbox a command writes only where allowed and connects only to the allowed port"
 }
 
+test_deny_move_keeps_an_entry_in_place() {
+  local wt re out
+  mkdir -p "$TMP_ROOT/move/wt"
+  wt="$TMP_ROOT/move/wt"
+  re="^$(printf '%s' "$wt" | sed 's/[][\.^$*+?(){}|]/\\&/g')/(kept|empty|absent|made)\$"
+  out=$("$SBX" profile --write "$wt" --deny-write "$wt/hooks" --deny-move-regex "$re" --write-prefix "$wt/hooks/exposed.")
+  assert_contains "$out" $'  (subpath "'"$wt/hooks"$'")\n)\n(deny file-write-unlink (regex #"'"$re"$'"))\n(deny file-write-create (require-all (regex #"'"$re"$'") (vnode-type SYMLINK)))\n(allow file-write*\n' \
+    "a moved-entry denial must follow the denies and precede the exact prefixes"
+  if ! "$SBX" available; then
+    pass "the profile denies moving an entry; confinement checks not run: sandbox-exec is not available on this machine"
+    return 0
+  fi
+  [ "$(python3 -I -c 'print("ok")' 2>/dev/null)" = ok ] || fail "the replacement check needs a working python3"
+  mkdir -p "$wt/kept/child" "$wt/empty" "$wt/spare" "$wt/other"
+  ln -s "$wt/other" "$wt/link"
+  out=$("$SBX" run --write "$wt" --deny-move-regex "$re" -- /bin/sh -c "
+    mv '$wt/kept' '$wt/kept.aside' 2>/dev/null && echo move-allowed || echo move-denied
+    python3 -I -c '
+import errno, os, sys
+try:
+    os.rename(sys.argv[1], sys.argv[2])
+    print(\"replace-allowed\")
+except OSError as e:
+    print(\"replace-\" + errno.errorcode.get(e.errno, str(e.errno)))' '$wt/spare' '$wt/empty' 2>/dev/null || echo replace-failed
+    ln -s '$wt/other' '$wt/absent' 2>/dev/null && echo symlink-allowed || echo symlink-denied
+    mv '$wt/link' '$wt/absent' 2>/dev/null && echo link-move-allowed || echo link-move-denied
+    mkdir '$wt/made' 2>/dev/null && echo mkdir-allowed || echo mkdir-denied
+    (echo in > '$wt/kept/file') 2>/dev/null && echo inside-allowed || echo inside-denied
+    mv '$wt/kept/child' '$wt/child' 2>/dev/null && echo child-allowed || echo child-denied")
+  assert_equals "move-denied
+replace-EPERM
+symlink-denied
+link-move-denied
+mkdir-allowed
+inside-allowed
+child-allowed" "$out" \
+    "a moved-entry denial must refuse moving the entry away, renaming over it, and a symlink there, while the entry may be created and what is inside it stays writable"
+  [ -d "$wt/kept" ] && [ ! -e "$wt/kept.aside" ] && [ -d "$wt/spare" ] && [ ! -L "$wt/absent" ] || fail "every refused move must leave the entries as they were"
+  pass "a moved-entry denial keeps an entry in place against a move, a replacement, or a symlink, while it may still be created and written inside"
+}
+
 # Harness detection and the session lock walk the process ancestry with ps and
 # parse it through here-documents, from inside the Privateer session's sandbox.
 test_process_info_and_here_documents_work_where_sandbox_exec_runs() {
@@ -138,6 +181,7 @@ EOF
 test_profile_denies_by_default_and_allows_back_exactly
 test_unsafe_paths_and_endpoints_are_refused
 test_confinement_holds_where_sandbox_exec_runs
+test_deny_move_keeps_an_entry_in_place
 test_process_info_and_here_documents_work_where_sandbox_exec_runs
 
 echo "# all fm-sandbox-exec tests passed"

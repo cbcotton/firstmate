@@ -157,16 +157,22 @@
 # rewrite the first mate's instructions, docs, config, skills, agents,
 # commands, modes, plugins, or tools there; the Git config or hooks of this
 # checkout, of any clone under projects/, or of any linked worktree or
-# submodule of those
-# (git dirs under .git/worktrees/<name>/ and .git/modules/<path>/); the git
-# dir, commondir, or gitdir of a linked worktree that lives outside this
-# home's pool, so none can be redirected or relabeled as a pool worktree;
-# any .git entry inside a clone, or the checkout's own .git; or the projects
-# directory, any clone's directory, or any directory between this home and the
-# checkout's git dir, so none of those directory entries can be moved aside,
-# changed, and moved back; of the git dirs, only the top-level git dir of the
-# checkout and of each clone has its entry denied, and the directory entries
-# inside it are not all covered (see the remaining limits below).
+# submodule of those (git dirs under .git/worktrees/<name>/ and
+# .git/modules/<path>/, and, for a linked worktree outside this home's pool,
+# its own modules/<path>/); the git dir, commondir, or gitdir of a linked
+# worktree that lives outside the pool, so none can be redirected or relabeled
+# as a pool worktree; any .git entry inside a clone, or the checkout's own
+# .git; or the projects directory, any clone's directory, any directory between
+# this home and the checkout's git dir, or any directory entry that leads to
+# one of those Git configs or hooks: the top-level git dir of the checkout and
+# of each clone, its modules directory, every entry under that leading to a
+# submodule's git dir, each submodule git dir's own modules and worktrees
+# entries, and the git dir of a linked worktree outside the pool with the same
+# modules entries of its own; so none of those can be moved aside, changed,
+# and moved back, replaced, or linked over. The worktrees directory of the
+# checkout's and each clone's git dir is the one such entry that may still be
+# created, because the session's first pool worktree creates it, but nothing
+# inside may move it, remove it, or place a symlink there.
 # It may connect only to the egress proxy, the DNS resolver, and that socket,
 # so a client that ignores the proxy variables reaches nothing remote at all,
 # and may signal only processes inside the same sandbox, so it can neither
@@ -189,14 +195,15 @@
 #   - clones under projects/ are added, moved, and removed outside the
 #     session, and a worktree the session creates in its own pool is meant
 #     for use only inside it;
-#   - the directory entries denied are the projects directory, each clone's
-#     directory, the top-level git dir of the checkout and of each clone, and
-#     the directories between this home and the checkout's git dir; the
-#     worktrees and modules directories inside a git dir, a submodule's own
-#     git dir (modules/<path>), the intermediate directories under modules,
-#     and a symlink placed over any of them can still be moved aside and back
-#     from inside the session, so a linked worktree's or submodule's Git config
-#     or hooks can be planted that way; closing that class is follow-up work;
+#   - start finds the linked worktrees and submodule git dirs that exist when
+#     it runs, so for one added from outside while the session runs, only its
+#     Git config and hooks, and the worktrees and modules entries of the
+#     checkout's or clone's git dir with the entries directly in that modules
+#     directory, are covered until the next start;
+#   - a commondir file written into the top-level git dir of the checkout or
+#     of a clone, or into a submodule's git dir, still points Git at the
+#     config and hooks of another directory; that is a plain write rather
+#     than a rename, and denying it is follow-up work;
 #   - OpenCode also loads plugins and configuration from its own directories
 #     under state/privateer/opencode/, which stay writable, so a worker can
 #     still add one there that the first mate loads at its next start; and a
@@ -615,6 +622,27 @@ deny_entries() {
   done
 }
 
+# deny_module_entries <modules-dir>: below a modules directory whose own entry
+# and entries are denied already, deny every entry inside each intermediate
+# directory, and the modules and worktrees directories and their entries of
+# each submodule git dir (a directory holding HEAD), recursing into its modules,
+# so none can be renamed, replaced, removed, or created. Uses cmd_start's
+# sandbox_args.
+deny_module_entries() {
+  local d
+  [ -d "$1" ] && [ ! -L "$1" ] || return 0
+  for d in "$1"/* "$1"/.[!.]* "$1"/..?*; do
+    [ -d "$d" ] && [ ! -L "$d" ] || continue
+    if [ -f "$d/HEAD" ]; then
+      sandbox_args+=(--deny-write-regex "^$(regex_quote "$d")/(modules|worktrees)(/[^/]+)?\$")
+      deny_module_entries "$d/modules"
+    else
+      sandbox_args+=(--deny-write-regex "^$(regex_quote "$d")/[^/]+\$")
+      deny_module_entries "$d"
+    fi
+  done
+}
+
 # render_helm <checkout>: build the helm afresh from the checkout's tracked
 # Privateer sources, as the header describes; fails on any error.
 render_helm() {
@@ -653,7 +681,7 @@ render_helm() {
 
 cmd_start() {
   local line sailor model check provider config socket socket_path primary port
-  local name value launch tmp_real home_real root_real egress_real root_git projects_real git_meta pool_real wt_git helm_real
+  local name value launch tmp_real home_real root_real egress_real root_git projects_real git_meta pool_real wt_git helm_real modules_dir
   local -a env_args session_env sandbox_args
   env_args=()
   session_env=()
@@ -737,30 +765,43 @@ cmd_start() {
   # to it may be moved aside, rewritten, and moved back either.
   deny_entries "$egress_real"
   # The directory entries leading to the top-level git dir of the checkout and
-  # of each clone are denied too, so none of them can be moved aside, written,
-  # and moved back; the worktrees and modules directories inside a git dir and
-  # a submodule's own git dir are not, a remaining limit the header names.
-  git_meta='($|/(worktrees/[^/]+/|modules/.+/)?(hooks(/|$)|config))'
+  # of each clone are denied too, and so is every entry inside it that leads to
+  # a Git config or hooks: its modules directory and everything leading to a
+  # submodule's git dir, which nothing inside creates, and its worktrees
+  # directory, which the session's first pool worktree may create but nothing
+  # inside may move, remove, or replace with a symlink; so none of them can be
+  # moved aside, written, and moved back.
+  git_meta='($|/(modules(/[^/]+)?$|(worktrees/[^/]+/|modules/.+/)?(hooks(/|$)|config)))'
   root_git=$(cd "$FM_ROOT" && cd "$(git rev-parse --git-common-dir 2>/dev/null)" 2>/dev/null && pwd -P) || root_git=
   if [ -n "$root_git" ]; then
-    sandbox_args+=(--deny-write-regex "^$(regex_quote "$root_git")$git_meta")
+    sandbox_args+=(--deny-write-regex "^$(regex_quote "$root_git")$git_meta"
+      --deny-move-regex "^$(regex_quote "$root_git")/worktrees\$")
     deny_entries "$root_git"
+    deny_module_entries "$root_git/modules"
   fi
   deny_entries "$root_real/.git"
   if projects_real=$(cd "$PROJECTS" 2>/dev/null && pwd -P); then
     sandbox_args+=(--deny-write-regex "^$(regex_quote "$projects_real")/[^/]+\$"
-      --deny-write-regex "^$(regex_quote "$projects_real")/[^/]+/(.+/)?\.git$git_meta")
+      --deny-write-regex "^$(regex_quote "$projects_real")/[^/]+/(.+/)?\.git$git_meta"
+      --deny-move-regex "^$(regex_quote "$projects_real")/[^/]+/(.+/)?\.git/worktrees\$")
     deny_entries "$projects_real"
+    for modules_dir in "$projects_real"/*/.git/modules; do
+      deny_module_entries "$modules_dir"
+    done
   fi
   # A linked worktree that lives outside this home's pool is used outside the
-  # session, so its git dir can be neither redirected nor swapped; the pool's
+  # session, so its git dir can be neither redirected nor swapped, and neither
+  # can the git dirs of its submodules or their config and hooks; the pool's
   # own worktrees are created inside the session and used only there.
   for wt_git in "$root_git"/worktrees/*/ "${projects_real:-/nonexistent}"/*/.git/worktrees/*/; do
     [ -d "$wt_git" ] || continue
     wt_git=${wt_git%/}
     case "$(cat "$wt_git/gitdir" 2>/dev/null)" in
       "$pool_real"/*) ;;
-      *) sandbox_args+=(--deny-write-regex "^$(regex_quote "$wt_git")(\$|/(commondir|gitdir)\$)") ;;
+      *)
+        sandbox_args+=(--deny-write-regex "^$(regex_quote "$wt_git")(\$|/(commondir|gitdir)\$|/modules(\$|/[^/]+\$|/.+/(hooks(/|\$)|config)))")
+        deny_module_entries "$wt_git/modules"
+        ;;
     esac
   done
   # A checkout inside the home is writable, so everything its first mate's
