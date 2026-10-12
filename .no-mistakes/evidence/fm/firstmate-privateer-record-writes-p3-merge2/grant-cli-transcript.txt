@@ -1,0 +1,63 @@
+### Privateer home: $T/home (config/privateer present)
+
+### 1. Inside the session (TMUX=/tmp/tmux-501/fm-privateer-3ec65d78c663,1,0): grant
+exit=2
+error: fm-permission-grant.sh refused: in a Privateer home only the captain records a grant or revocation, from their own shell outside this session; ask the captain to run it there, then relaunch the worker once the captain says it is recorded: FM_HOME=$T/home /Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M4R88M8YTAG66KETDBP10ZR8/bin/fm-permission-grant.sh grant --scope task --task pv-x --permission bash --pattern 'npm test' --action allow --words-file $T/words --channel chat
+ledger exists after refused grant? no
+
+### 2. Captain's own shell runs the printed command verbatim
+$ FM_HOME=$T/home /Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M4R88M8YTAG66KETDBP10ZR8/bin/fm-permission-grant.sh grant --scope task --task pv-x --permission bash --pattern 'npm test' --action allow --words-file $T/words --channel chat
+g1791815532-15527-26235: allow bash "npm test" for task pv-x; it applies at each OpenCode worker's next launch (bin/fm-control.sh <task> relaunch to apply now)
+exit=0
+ledger:
+{"v":1,"op":"grant","id":"g1791815532-15527-26235","ts":1791815532,"scope":"task","task":"pv-x","task_dispatched_at":"1000","session":null,"permission":"bash","pattern":"npm test","action":"allow","words":"yes, allow npm test\n","channel":"chat","ref":null}
+
+### 3. list/active from IN
+exit=0
+[{"bash":{"npm test":"allow"}}]
+exit=0
+
+### 3. list/active from OUT
+exit=0
+[{"bash":{"npm test":"allow"}}]
+exit=0
+
+### 4. revoke inside
+error: fm-permission-grant.sh refused: in a Privateer home only the captain records a grant or revocation, from their own shell outside this session; ask the captain to run it there, then relaunch the worker once the captain says it is recorded: FM_HOME=$T/home /Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M4R88M8YTAG66KETDBP10ZR8/bin/fm-permission-grant.sh revoke g1791815532-15527-26235 --words-file $T/words --channel chat
+exit=2
+
+### 5. revoke from captain's shell
+g1791815532-15527-26235: revoked; it no longer applies from each OpenCode worker's next launch
+exit=0
+active inside after revoke:
+[]
+
+### 6. No TMUX at all (captain's plain terminal): grant
+refused: a wildcard allow is granted only over git log, diff, show, status, add, commit, rev-parse, blame, ls-files, shortlog, or describe; grant one exact command otherwise; the captain approves that one action in the moment and firstmate performs it
+exit=1
+
+### 7. Non-Privateer home, inside a tmux: grant still works
+refused: a wildcard allow is granted only over git log, diff, show, status, add, commit, rev-parse, blame, ls-files, shortlog, or describe; grant one exact command otherwise; the captain approves that one action in the moment and firstmate performs it
+exit=1
+
+### 8. Adversarial: inside, FM_CONFIG_OVERRIDE pointing at a config without the privateer flag
+refused: a blanket shell allow is never granted; the captain approves that one action in the moment and firstmate performs it
+exit=1
+### 3b. list --task pv-x from inside and outside (grant revoked above, so it shows as revoked or absent)
+exit=0
+exit=0
+
+### 6. Captain's plain terminal (no TMUX): standing deny grant
+g1791815557-18915-3465: deny bash "curl *" for standing; it applies at each OpenCode worker's next launch (bin/fm-control.sh <task> relaunch to apply now)
+exit=0
+list from inside:
+g1791815557-18915-3465 standing deny bash "curl *" via chat: yes, allow npm test 
+exit=0
+
+### 7. Non-Privateer home, TMUX set: grant works (gate only applies to Privateer homes)
+g1791815560-18954-22545: deny bash "curl *" for standing; it applies at each OpenCode worker's next launch (bin/fm-control.sh <task> relaunch to apply now)
+exit=0
+
+### 9. Inside, valid shape: grant refused before touching ledger
+error: fm-permission-grant.sh refused: in a Privateer home only the captain records a grant or revocation, from their own shell outside this session; ask the captain to run it there, then relaunch the worker once the captain says it is recorded: FM_HOME=…
+exit= ledger lines before=       3 after=       3
