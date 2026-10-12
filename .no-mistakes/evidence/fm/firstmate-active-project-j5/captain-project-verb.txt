@@ -1,0 +1,42 @@
+$ bin/fm-privateer.sh project 
+  app
+  other
+active project: none
+[exit 0]
+  config/active-project: <absent>
+$ bin/fm-privateer.sh project app
+privateer: the active project is now app
+[exit 0]
+  config/active-project: app
+$ bin/fm-privateer.sh project 
+* app
+  other
+active project: app
+[exit 0]
+  config/active-project: app
+$ bin/fm-privateer.sh project ghost
+fm-privateer: refused: 'ghost' has no clone under projects/
+[exit 1]
+  config/active-project: app
+$ bin/fm-privateer.sh project nosuch
+fm-privateer: refused: 'nosuch' is not registered in data/projects.md
+[exit 1]
+  config/active-project: app
+$ bin/fm-privateer.sh project ../etc
+fm-privateer: refused: '../etc' is not a project name; give the name of a project under projects/
+[exit 1]
+  config/active-project: app
+$ bin/fm-privateer.sh project --clear
+privateer: no active project
+[exit 0]
+  config/active-project: <absent>
+$ bin/fm-privateer.sh project 
+  app
+  other
+active project: none
+[exit 0]
+  config/active-project: <absent>
+$ bin/fm-privateer.sh project other
+privateer: the active project is now other
+[exit 0]
+  config/active-project: other

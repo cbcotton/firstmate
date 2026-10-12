@@ -1,0 +1,45 @@
+
+  ┃                                                                                                                     New session - 2026-10-12T13:37:23.
+  ┃  app                                                                                                                083Z
+  ┃  * other
+  ┃  active project: other                                                                                              Context
+  ┃                                                                                                                     0 tokens
+  ┃                                                                                                                     0% used
+  ┃  That is this home's project list, shown for the captain's /project, with the active project marked.                $0.00 spent
+  ┃  Tell the captain in a plain line or two which project is active, or that none is.
+  ┃  Only the captain switches it, outside this session, with: bin/fm-privateer.sh project <name>                       LSP
+  ┃  When the captain asks you to switch it, give that command and do not try to change it yourself.                    LSPs are disabled
+  ┃
+
+     ▣  Build · Qwen3.8 27B TURBO Fable (mlx-serve)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  ┃
+  ┃
+  ┃                                                                                                                     ~/.no-mistakes/worktrees/e74e4e411ceb/
+  ┃  Build · Qwen3.8 27B TURBO Fable (mlx-serve) MLX Serve (local)                                                      01M4R3TZ8MRXQ858WXESHBJRKY
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+   ⬝⬝⬝⬝⬝⬝⬝⬝  esc interrupt                                                               tab agents  ctrl+p commands    • OpenCode 1.18.33
+

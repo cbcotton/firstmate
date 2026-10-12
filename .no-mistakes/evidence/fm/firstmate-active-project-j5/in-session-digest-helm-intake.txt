@@ -1,0 +1,94 @@
+TMUX socket: /private/tmp/fml.nY69if/tmux-501/fm-privateer-52115631dadb
+
+$ bin/fm-privateer.sh project app
+fm-privateer: refused: the session cannot write config/, so the active project is set by the captain outside it: run bin/fm-privateer.sh project <name> from a terminal outside the session
+[exit 1]
+
+$ bin/fm-helm.sh project
+  app
+* other
+active project: other
+[exit 0]
+
+--- digest (active-project line) with config/active-project=other
+front door: bin/fm-helm.sh helm
+active project: other
+
+=== intake with active project=other
+
+$ bin/fm-helm.sh ship add a flag to the parser
+project: other, the active project, because the ask names no project
+refused: this home's dispatch rules are chosen by judgment, not by this script; repeat the call with --rule <n> for the rule whose condition fits the work, or --rule default when none fits:
+  --rule 1: small change (tiller/coder)
+  --rule default (tiller/coder)
+the call: bin/fm-helm.sh ship --rule <n> other 'add a flag to the parser'
+[exit 1]
+
+$ bin/fm-helm.sh scout app why is startup slow
+refused: this home's dispatch rules are chosen by judgment, not by this script; repeat the call with --rule <n> for the rule whose condition fits the work, or --rule default when none fits:
+  --rule 1: small change (tiller/coder)
+  --rule default (tiller/coder)
+the call: bin/fm-helm.sh scout --rule <n> app 'why is startup slow'
+[exit 1]
+
+$ bin/fm-helm.sh ship ghost add a flag
+refused: 'ghost' is not a registered project with a clone under projects/; the projects here are: app, other; ask the captain which one
+[exit 1]
+
+$ bin/fm-helm.sh ship apq add a flag
+project: other, the active project, because the ask names no project
+refused: this home's dispatch rules are chosen by judgment, not by this script; repeat the call with --rule <n> for the rule whose condition fits the work, or --rule default when none fits:
+  --rule 1: small change (tiller/coder)
+  --rule default (tiller/coder)
+the call: bin/fm-helm.sh ship --rule <n> other 'apq add a flag'
+[exit 1]
+
+=== malformed values
+
+config/active-project := $'app\nother'
+active project: not used - config/active-project must hold one project name on one line, not 2 lines; the captain sets it outside the session with bin/fm-privateer.sh project <name>
+$ bin/fm-helm.sh project
+  app
+  other
+active project: none - config/active-project must hold one project name on one line, not 2 lines
+$ bin/fm-helm.sh ship add a flag
+refused: 'add' is not a registered project with a clone under projects/; the projects here are: app, other; ask the captain which one
+[exit 1]
+
+config/active-project := ../app
+active project: not used - config/active-project holds '../app', which is not a project name; the captain sets it outside the session with bin/fm-privateer.sh project <name>
+$ bin/fm-helm.sh project
+  app
+  other
+active project: none - config/active-project holds '../app', which is not a project name
+$ bin/fm-helm.sh ship add a flag
+refused: 'add' is not a registered project with a clone under projects/; the projects here are: app, other; ask the captain which one
+[exit 1]
+
+config/active-project := nosuch
+active project: not used - config/active-project names 'nosuch', which data/projects.md does not register; the captain sets it outside the session with bin/fm-privateer.sh project <name>
+$ bin/fm-helm.sh project
+  app
+  other
+active project: none - config/active-project names 'nosuch', which data/projects.md does not register
+$ bin/fm-helm.sh ship add a flag
+refused: 'add' is not a registered project with a clone under projects/; the projects here are: app, other; ask the captain which one
+[exit 1]
+
+config/active-project := ghost
+active project: not used - config/active-project names 'ghost', which has no clone under projects/; the captain sets it outside the session with bin/fm-privateer.sh project <name>
+$ bin/fm-helm.sh project
+  app
+  other
+active project: none - config/active-project names 'ghost', which has no clone under projects/
+$ bin/fm-helm.sh ship add a flag
+refused: 'add' is not a registered project with a clone under projects/; the projects here are: app, other; ask the captain which one
+[exit 1]
+
+config/active-project absent:
+active-project digest lines: 0
+
+$ bin/fm-helm.sh ship add a flag
+refused: 'add' is not a registered project with a clone under projects/; the projects here are: app, other; ask the captain which one
+[exit 1]
+DONE

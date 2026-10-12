@@ -1,0 +1,19 @@
+$ /ship ghost add a flag   (OpenCode heredoc: $ARGUMENTS x2, $1=ghost) -> bin/fm-helm.sh ship --stdin
+refused: 'ghost' is not a registered project with a clone under projects/; the projects here are: app, other; ask the captain which one
+[exit 1]
+$ /ship make the parser faster   (OpenCode heredoc: $ARGUMENTS x2, $1=make) -> bin/fm-helm.sh ship --stdin
+project: app, the active project, because the ask names no project
+refused: this home's dispatch rules are chosen by judgment, not by this script; repeat the call with --rule <n> for the rule whose condition fits the work, or --rule default when none fits:
+  --rule 1: small change (tiller/coder)
+  --rule default (tiller/coder)
+the call: bin/fm-helm.sh ship --rule <n> app 'make the parser faster'
+[exit 1]
+DONE
+
+$ bin/fm-privateer.sh project    # main home, no config/privateer
+fm-privateer: refused: config/privateer is absent; the active project is set only in a Privateer home
+[exit 1]
+$ bin/fm-privateer.sh project app   # main home, no config/privateer
+fm-privateer: refused: config/privateer is absent; the active project is set only in a Privateer home
+[exit 1]
+config/active-project in main home: <absent>
