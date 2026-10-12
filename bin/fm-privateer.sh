@@ -546,18 +546,20 @@ egress_allowlist() {
   done
 }
 
+# proxy_running: the proxy this home last started is alive.
+proxy_running() {
+  local pid
+  pid=$(cat "$EGRESS/pid" 2>/dev/null) || return 1
+  case "$pid" in '' | *[!0-9]*) return 1 ;; esac
+  case "$(ps -p "$pid" -o command= 2>/dev/null)" in
+    *fm-privateer-proxy.py*) return 0 ;;
+  esac
+  return 1
+}
+
 # stop_egress_proxy: stop the proxy this home last started, if it still runs.
 stop_egress_proxy() {
-  local pid
-  pid=$(cat "$EGRESS/pid" 2>/dev/null) || pid=
-  case "$pid" in
-    '' | *[!0-9]*) ;;
-    *)
-      case "$(ps -p "$pid" -o command= 2>/dev/null)" in
-        *fm-privateer-proxy.py*) kill "$pid" 2>/dev/null || true ;;
-      esac
-      ;;
-  esac
+  if proxy_running; then kill "$(cat "$EGRESS/pid")" 2>/dev/null || true; fi
   rm -f "$EGRESS/port" "$EGRESS/pid" "$EGRESS/allow"
 }
 
@@ -731,6 +733,9 @@ cmd_start() {
   # may write it or move aside any directory that leads to it.
   sandbox_args+=(--deny-write "$helm_real")
   deny_entries "$helm_real"
+  # The proxy re-reads the egress allowlist by path, so no directory leading
+  # to it may be moved aside, rewritten, and moved back either.
+  deny_entries "$egress_real"
   # The directory entries leading to the top-level git dir of the checkout and
   # of each clone are denied too, so none of them can be moved aside, written,
   # and moved back; the worktrees and modules directories inside a git dir and
@@ -895,17 +900,6 @@ cmd_stop() {  # [--stow]
   else
     echo "privateer: stopped session $SESSION$where"
   fi
-}
-
-# proxy_running: the proxy this home last started is alive.
-proxy_running() {
-  local pid
-  pid=$(cat "$EGRESS/pid" 2>/dev/null) || return 1
-  case "$pid" in '' | *[!0-9]*) return 1 ;; esac
-  case "$(ps -p "$pid" -o command= 2>/dev/null)" in
-    *fm-privateer-proxy.py*) return 0 ;;
-  esac
-  return 1
 }
 
 cmd_reload() {

@@ -731,13 +731,16 @@ test_start_passes_only_the_allowlist() {
   (regex #\"^$(rq "$helm_real")\$\")
   (regex #\"^$(rq "$home_real")/state/privateer\$\")
   (regex #\"^$(rq "$home_real")/state\$\")
+  (regex #\"^$(rq "$home_real")/state/privateer/egress\$\")
+  (regex #\"^$(rq "$home_real")/state/privateer\$\")
+  (regex #\"^$(rq "$home_real")/state\$\")
   (regex #\"^$(rq "$root_real")/\\.git(\$|/(worktrees/[^/]+/|modules/.+/)?(hooks(/|\$)|config))\")
   (regex #\"^$(rq "$home_real")/projects/[^/]+\$\")
   (regex #\"^$(rq "$home_real")/projects/[^/]+/(.+/)?\\.git(\$|/(worktrees/[^/]+/|modules/.+/)?(hooks(/|\$)|config))\")
   (regex #\"^$(rq "$home_real")/projects\$\")
   (regex #\"^$(rq "$root_real")/\\.git/worktrees/side(\$|/(commondir|gitdir)\$)\")
 )" "$(sed -n '/^(deny file-write\*$/,/^)$/p' "$profile")" \
-    "the sandbox must take back only the egress record, the home's config and scripts, the helm and the directories leading to it, and every Git config and hook, so every worker's OpenCode directories stay writable"
+    "the sandbox must take back only the egress record and the directories leading to it, the home's config and scripts, the helm and the directories leading to it, and every Git config and hook, so every worker's OpenCode directories stay writable"
   assert_grep '(deny signal)' "$profile" "the sandbox must deny signals outside itself"
   assert_grep '(allow signal (target same-sandbox))' "$profile" "the sandbox must allow signals within itself"
   assert_grep "(subpath \"$root_real/.opencode\")" "$profile" "the sandbox must allow OpenCode's scratch in the checkout"
@@ -1364,7 +1367,7 @@ for t in '$proj/.git/hooks/post-checkout' '$proj/.git/config' '$wtgit/config.wor
   ( : >> "\$t" ) 2>/dev/null && planted="\$planted \$t"
 done
 ( mkdir -p '$helm/.opencode/skills/new' && : >> '$helm/.opencode/skills/new/SKILL.md' ) 2>/dev/null && planted="\$planted $helm/.opencode/skills/new"
-for t in '$helm' '$home/state/privateer' '$home/state'; do
+for t in '$helm' '$home/state/privateer/egress' '$home/state/privateer' '$home/state'; do
   mv "\$t" "\$t.aside" 2>/dev/null && planted="\$planted move:\$t"
 done
 for d in agent agents command commands mode modes plugin plugins skill skills tool tools; do
