@@ -112,17 +112,21 @@ pass "event_wait_or_sleep: herdr windows go on the event pane list, but kind=sec
 
 reset_state
 fm_write_meta "$STATE_DIR/tk3.meta" "window=default:wG:pQ" "backend=herdr" "kind=ship"
-CAP_CALLS=0
+: > "$TMP/capcalls"
+# The watcher runs the probe and the wait as child reads, so record in files.
 # shellcheck disable=SC2329 # Runtime overrides called by the isolated watcher.
-fm_backend_events_capable() { CAP_CALLS=$((CAP_CALLS + 1)); return 0; }
+fm_backend_events_capable() { printf 'CAP\n' >> "$TMP/capcalls"; return 0; }
 # shellcheck disable=SC2329 # Runtime overrides called by the isolated watcher.
 fm_backend_wait_transition() {
-  [ "${FM_BACKEND_EVENTS_CAPABILITY_CONFIRMED:-0}" = 1 ] || fail "cached capability verdict was not passed to the wait"
+  printf '%s\n' "${FM_BACKEND_EVENTS_CAPABILITY_CONFIRMED:-0}" >> "$TMP/wtconfirmed"
   return 1
 }
+: > "$TMP/wtconfirmed"
 event_wait_or_sleep
 event_wait_or_sleep
+CAP_CALLS=$(wc -l < "$TMP/capcalls" | tr -d '[:space:]')
 [ "$CAP_CALLS" = 1 ] || fail "capability probe must be memoized across waits, got $CAP_CALLS calls"
+[ "$(sort -u "$TMP/wtconfirmed")" = 1 ] || fail "cached capability verdict was not passed to the wait: $(cat "$TMP/wtconfirmed")"
 pass "event_wait_or_sleep: one cached capability probe owns validation across bounded waits"
 
 # --- event_wait_or_sleep: a tmux-only home never runs the event path ----------
