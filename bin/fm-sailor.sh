@@ -75,11 +75,12 @@
 # sailor, and nothing when there is none. A sailor whose endpoint lies under
 # the baseURL of a server in the mlx-serve registry (FM_MLX_SERVE_SERVERS,
 # default ~/.mlx-serve/servers.json) that names a healthPath is up when GET
-# <baseURL><healthPath> answers 2xx within FM_SAILOR_PROBE_TIMEOUT seconds,
-# the longest matching baseURL winning; any other sailor is up when GET
-# <endpoint>/models does. Every sailor is probed at once, so the whole run
-# takes about one probe timeout however many there are. bin/fm-watch.sh turns
-# its changes into wakes. It exits 0 whatever the sailors answer.
+# <baseURL><healthPath> answers without an HTTP error status within
+# FM_SAILOR_PROBE_TIMEOUT seconds, the longest matching baseURL winning; any
+# other sailor is up when GET <endpoint>/models does. Every sailor is probed
+# at once, so the whole run takes about one probe timeout however many there
+# are. bin/fm-watch.sh turns its changes into wakes. It exits 0 whatever the
+# sailors answer.
 #
 # The registry commands edit config/crew-dispatch.json and nothing else,
 # except that set-model --first-mate also writes config/privateer. Each builds
