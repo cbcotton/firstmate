@@ -380,6 +380,23 @@ test_dispatched_names_the_sailor_or_null() {
   pass "flag on: a dispatch record names the worker's sailor, or null for a worker on a hosted model"
 }
 
+test_sailor_state_records_no_task_and_refuses_malformed_input() {
+  local rows status
+  make_case on-sailor-state on
+  in_home "$ROOT/bin/fm-fleet-ledger.sh" sailor_state tiller down || fail "a sailor.state record was refused"
+  in_home "$ROOT/bin/fm-fleet-ledger.sh" sailor_state tiller up || fail "a sailor.state record was refused"
+  in_home "$ROOT/bin/fm-fleet-ledger.sh" sailor_state Tiller down 2>/dev/null
+  status=$?
+  expect_code 2 "$status" "a malformed sailor name must be a usage error"
+  in_home "$ROOT/bin/fm-fleet-ledger.sh" sailor_state tiller sideways 2>/dev/null
+  status=$?
+  expect_code 2 "$status" "a state other than up or down must be a usage error"
+  rows=$(ledger_rows 'select(.event == "sailor.state") | [.task, .name, .state]')
+  assert_equals '[null,"tiller","down"]
+[null,"tiller","up"]' "$rows" "sailor.state rows"
+  pass "flag on: a sailor.state record names the sailor and its state with a null task, and malformed input writes nothing"
+}
+
 test_flag_off_writes_nothing() {
   local leftovers
   make_case off-lifecycle off
@@ -401,4 +418,5 @@ test_worker_status_command_fails_when_the_append_fails
 test_worker_status_line_lands_when_the_ledger_fails
 test_worker_status_line_with_the_flag_absent
 test_dispatched_names_the_sailor_or_null
+test_sailor_state_records_no_task_and_refuses_malformed_input
 test_flag_off_writes_nothing
