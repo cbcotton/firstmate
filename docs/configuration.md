@@ -897,6 +897,7 @@ An allow is refused, at every scope, for what the captain approves only one acti
 `bin/fm-permission-grant.sh` owns the record, the scope bindings, and the refusal list; `list` shows the grants in force and `active --task <id>` prints what a launch would fold in.
 In a [Privateer home](#privateer-quarantine-configprivateer) only the captain records a grant or revocation, from their own shell outside the session, because the session sandbox denies the ledger to the first mate and every worker alike.
 Inside the session `grant` and `revoke` refuse with exit status 2 and name the same call as the command for the captain to run, and the first mate relaunches the worker once the captain says it is recorded; `list` and `active` run on both sides.
+The words file that command reads lives in the home, so a worker can rewrite it before the captain runs the command: the recorded words are first-mate-supplied and not tamper-proof, while the permission, pattern, scope, and task are unaffected because the captain sees them in the command.
 
 ## Sailor sandbox (config/sailor-sandbox)
 
@@ -1002,6 +1003,7 @@ Version 1 has these remaining limits:
 - `sandbox-exec` is required, so Privateer runs on macOS only, and `python3` is required for the proxy.
 - macOS cannot apply one sandbox inside another, so one session sandbox covers the first mate and every worker alike, in place of the per-task [sailor sandbox](#sailor-sandbox-configsailor-sandbox).
 - A worker can therefore still write the task records `state/<id>.meta` that the first mate's own spawn writes from inside that sandbox.
+- The words file the printed grant or revoke command reads with `--words-file` lives in the home, so a worker can rewrite it before the captain runs the command; the words in the ledger are first-mate-supplied and not tamper-proof, while the permission, pattern, scope, and task are unaffected because the captain sees them in the command.
 - The per-task temp roots under `/tmp/fm-`, the user's own temporary directory (`$TMPDIR`), and the flat here-document files stock macOS Bash writes directly in `/var/tmp` as `sh-thd*` are namespaces shared by every home on the machine.
 - Clones under `projects/` are added, moved, and removed from outside the session, and a worktree the session creates in its own pool is meant for use only inside it.
 - The directory entries denied are the `projects/` directory, each clone's directory, the top-level git dir of the checkout and of each clone, and the directories between the home and the checkout's git dir.
