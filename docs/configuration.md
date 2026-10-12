@@ -1371,7 +1371,7 @@ A sailor is a named machine serving local models through an OpenAI-compatible en
   - `retire` removes a sailor and every profile naming it, with any rule or default left without a profile.
 - Each edit writes nothing unless the whole result validates and keeps a dated copy of the file it replaces; `set-model --dry-run` only prints the change, and refuses `--warm`, which would load the model.
   `set-model --replace` and `retire` refuse while a task still runs on what they would remove, and `set-model` refuses a model a live sailor does not serve.
-  A change reaches each worker at its next spawn, while running workers keep what they launched with.
+  A change reaches each worker at its next spawn, while running workers keep what they launched with; a Privateer session's egress proxy allows a new or moved endpoint only after [`bin/fm-privateer.sh reload`](#how-a-privateer-session-runs).
 - `set-model --warm` asks the model for one token, so a server that loads models on demand loads it now and a failed load shows up then rather than in a worker's first request.
 - When every sailor candidate a matched rule or default offers is refused, firstmate uses `sailor_fallback` (one profile object or a non-empty array, never itself a sailor), for example Opus 5.5 in a home orchestrated through Claude Code.
 - Without `sailor_fallback`, sailor work waits in the queue until a sailor answers.
