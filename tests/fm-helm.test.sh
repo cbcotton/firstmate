@@ -443,6 +443,22 @@ test_active_project_is_the_default_project() {
   assert_equals "$rows" "$(backlog_rows)" "a refused project word must file nothing"
   rm -rf "$HOME_DIR/projects/scratch"
 
+  out=$(run_helm ship add "a flag")
+  status=$?
+  track "$out"
+  expect_code 0 "$status" "a short ask word near a short project name must use the active project"$'\n'"$out"
+  assert_equals "project: app, the active project, because the ask names no project" "$(printf '%s\n' "$out" | head -1)" \
+    "'add' must not be read as a typo of 'app'"
+  assert_equals "add a flag" "$(intent_of "$ID")" "the whole ask must be the intent"
+  mkdir -p "$HOME_DIR/projects/ui"
+  printf -- '- ui [local-only branch=ui/] - a two-letter project (added 2026-09-30)\n' >> "$HOME_DIR/data/projects.md"
+  out=$(run_helm ship fix "the build")
+  status=$?
+  track "$out"
+  expect_code 0 "$status" "a two-letter project must not swallow the ask word 'fix'"$'\n'"$out"
+  assert_equals app "$(row "$ID" repo)" "'fix' must leave the ask on the active project"
+  assert_equals "fix the build" "$(intent_of "$ID")" "the whole ask must be the intent"
+
   out=$(run_helm project)
   assert_contains "$out" "* app" "the project view must mark the active project"
   assert_contains "$out" "  other" "the project view must list the other projects"

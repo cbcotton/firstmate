@@ -55,10 +55,11 @@
 # captain sets it outside the session with bin/fm-privateer.sh project), scout
 # and ship accept the ask without a project word and use that project, saying
 # so in the first output line. A first word that data/projects.md registers,
-# that is a directory under projects/, or that is within edit distance 2 of a
-# registered name is taken as the project, and is refused as before when it is
-# not a registered project with a clone, with the close name as a did-you-mean
-# line. A value that is malformed is not used.
+# that is a directory under projects/, or that is a likely typo of a registered
+# name (one insertion, deletion, substitution, or adjacent swap away, both at
+# least 4 characters long) is taken as the project, and is refused as before
+# when it is not a registered project with a clone, with the close name as a
+# did-you-mean line. A value that is malformed is not used.
 #
 # project prints every registered project that has a clone, the active one
 # marked `*`, and the active project; it only reads. The session cannot write
@@ -218,27 +219,22 @@ project_registered() {
   "$SCRIPT_DIR/fm-project-mode.sh" --registered "$1"
 }
 
-# close_project <word>: the first project data/projects.md registers within
-# edit distance 2 of <word>, other than <word> itself.
+# close_project <word>: the first project data/projects.md registers that
+# <word> is a likely typo of: one insertion, deletion, substitution, or swap of
+# adjacent characters away, with both at least 4 characters long.
 close_project() {
   [ -f "$DATA/projects.md" ] || return 1
   awk -v w="$1" '
-    function dist(a, b,   i, j, la, lb, c, prev, cur) {
+    function typo(a, b,   i, la, lb) {
       la = length(a); lb = length(b)
-      for (j = 0; j <= lb; j++) prev[j] = j
-      for (i = 1; i <= la; i++) {
-        cur[0] = i
-        for (j = 1; j <= lb; j++) {
-          c = prev[j - 1] + (substr(a, i, 1) != substr(b, j, 1))
-          if (prev[j] + 1 < c) c = prev[j] + 1
-          if (cur[j - 1] + 1 < c) c = cur[j - 1] + 1
-          cur[j] = c
-        }
-        for (j = 0; j <= lb; j++) prev[j] = cur[j]
-      }
-      return prev[lb]
+      if (a == b || la < 4 || lb < 4 || la - lb > 1 || lb - la > 1) return 0
+      for (i = 1; substr(a, i, 1) == substr(b, i, 1); i++) ;
+      if (la > lb) return substr(a, i + 1) == substr(b, i)
+      if (lb > la) return substr(a, i) == substr(b, i + 1)
+      return substr(a, i + 1) == substr(b, i + 1) ||
+        (substr(a, i, 1) == substr(b, i + 1, 1) && substr(a, i + 1, 1) == substr(b, i, 1) && substr(a, i + 2) == substr(b, i + 2))
     }
-    /^- / && $2 != w && dist(w, $2) <= 2 { print $2; found = 1; exit }
+    /^- / && typo(w, $2) { print $2; found = 1; exit }
     END { exit !found }' "$DATA/projects.md"
 }
 
