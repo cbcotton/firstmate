@@ -1,0 +1,16 @@
+base run 1:
+not ok - TERM did not stop a watcher blocked inside a poll
+base run 2:
+not ok - TERM did not stop a watcher blocked inside a poll
+base run 3:
+ok - TERM stops a watcher blocked inside a poll and still runs its cleanup
+fixed run 1:
+ok - TERM stops a watcher blocked inside a poll and still runs its cleanup
+fixed run 2:
+ok - TERM stops a watcher blocked inside a poll and still runs its cleanup
+fixed run 3:
+ok - TERM stops a watcher blocked inside a poll and still runs its cleanup
+fixed run 4:
+ok - TERM stops a watcher blocked inside a poll and still runs its cleanup
+fixed run 5:
+ok - TERM stops a watcher blocked inside a poll and still runs its cleanup

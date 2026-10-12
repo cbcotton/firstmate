@@ -1,0 +1,6 @@
+ok f1: same output+status (rc=3)
+ok f2: same output+status (rc=0)
+ok f3: same output+status (rc=1)
+dash form rc=3 (expect 3)
+read files before stop: 1
+read files after stop: 0

@@ -1,0 +1,2 @@
+not ok - the watcher's cleanup left its in-flight read child 1269 running
+FM_TEST_ONLY=test_term_stops_a_watcher_blocked_inside_a_poll /bin/bash   1.86s user 2.73s system 43% cpu 10.665 total

@@ -1,0 +1,2 @@
+ok - TERM stops a watcher blocked inside a poll and still runs its cleanup
+FM_TEST_ONLY=test_term_stops_a_watcher_blocked_inside_a_poll /bin/bash   0.92s user 1.81s system 24% cpu 11.162 total
