@@ -233,7 +233,7 @@ test_validate_is_silent_without_sailors_and_names_the_first_problem() {
 
 # --- the local HTTP stub ------------------------------------------------------
 #
-# A python3 server answers GET /v1/models and /metrics and POST
+# A python3 server answers GET /v1/models, /metrics, and /health and POST
 # /v1/chat/completions from control files in STUB_DIR and logs one line per
 # request to STUB_DIR/requests.log, so a case can drive loaded versus listed
 # models, a failed warm-up, and the queue gauges, and prove which requests the
@@ -289,7 +289,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
     def do_GET(self):
         self.note("GET " + self.path)
-        body = {"/v1/models": read("models.json"), "/metrics": read("metrics.txt")}.get(self.path)
+        body = {"/v1/models": read("models.json"), "/metrics": read("metrics.txt"), "/health": read("health.json")}.get(self.path)
         if body is None:
             self.reply(404, '{"error":"not found"}')
         else:
@@ -327,10 +327,10 @@ PY
 }
 
 # stub_reset [<models-body>]: serve <models-body> (default STUB_MODELS), no
-# metrics, successful completions, and an empty request log.
+# metrics, no /health (a 404), successful completions, and an empty request log.
 stub_reset() {
   start_stub
-  rm -f "$STUB_DIR/metrics.txt" "$STUB_DIR/chat.code" "$STUB_DIR/chat.body"
+  rm -f "$STUB_DIR/metrics.txt" "$STUB_DIR/health.json" "$STUB_DIR/chat.code" "$STUB_DIR/chat.body"
   printf '%s' "${1:-$STUB_MODELS}" > "$STUB_DIR/models.json"
   : > "$STUB_DIR/requests.log"
 }
@@ -681,6 +681,77 @@ test_add_from_mlx_serve_reads_the_registry_and_nothing_more() {
   pass "add --from-mlx-serve takes the endpoint and live models from servers.json and the server, never writing the registry or touching the server"
 }
 
+test_health_probes_the_mlx_serve_health_path() {
+  local out status
+  stub_reset
+  make_stub_case health "$(stub_map | jq '.sailors.stoker = {endpoint: "http://127.0.0.1:1/v1", status: "live", models: ["qwen-coder"]}')"
+  jq -n --arg b "$STUB/" '{servers: [
+      {id: "near-miss", baseURL: ($b + "v"), healthPath: "/never"},
+      {id: "mlx-serve", kind: "mlx-serve", baseURL: $b, modelsPath: "/v1/models", healthPath: "/health", enabled: true}]}' > "$CASE_DIR/servers.json"
+  printf '{"status":"ok"}' > "$STUB_DIR/health.json"
+  out=$(run_real health)
+  status=$?
+  expect_code 0 "$status" "health must exit 0 whatever the sailors answer: $out"
+  assert_equals "tiller up $STUB/health
+stoker down http://127.0.0.1:1/v1/models" "$out" "an mlx-serve sailor must be probed at its server's healthPath, any other at <endpoint>/models, and a placeholder not at all"
+  assert_equals "GET /health" "$(cat "$STUB_DIR/requests.log")" "the health probe of an mlx-serve sailor must read only the healthPath"
+
+  rm -f "$STUB_DIR/health.json"
+  out=$(run_real health)
+  assert_contains "$out" "tiller down $STUB/health" "a healthPath that fails must read down even while the model list answers"
+
+  jq '.servers |= map(del(.healthPath))' "$CASE_DIR/servers.json" > "$CASE_DIR/servers.tmp" && mv "$CASE_DIR/servers.tmp" "$CASE_DIR/servers.json"
+  out=$(run_real health)
+  assert_contains "$out" "tiller up $STUB/v1/models" "a server without a healthPath must keep the model-list probe"
+  rm -f "$CASE_DIR/servers.json"
+  out=$(run_real health)
+  assert_contains "$out" "tiller up $STUB/v1/models" "without the registry a sailor must keep the model-list probe"
+
+  make_stub_case health-none "$(stub_map | jq '.sailors.tiller.status = "placeholder"')"
+  out=$(run_real health)
+  expect_code 0 "$?" "a home with no live sailor must still exit 0"
+  assert_equals "" "$out" "a home with no live sailor must print nothing"
+  pass "health probes an mlx-serve sailor at its server's healthPath and any other sailor at its model list"
+}
+
+test_health_probes_every_sailor_at_once_within_the_bound() {
+  local hole_dir="$TMP_ROOT/hole" hole_pid port start elapsed out
+  mkdir -p "$hole_dir"
+  # A listener that accepts connections and never answers, so every probe
+  # runs to its timeout.
+  python3 - "$hole_dir" <<'PY' &
+import os, socket, sys, time
+s = socket.socket()
+s.bind(("127.0.0.1", 0))
+s.listen(16)
+with open(os.path.join(sys.argv[1], "port.tmp"), "w") as f:
+    f.write(str(s.getsockname()[1]))
+os.rename(os.path.join(sys.argv[1], "port.tmp"), os.path.join(sys.argv[1], "port"))
+time.sleep(30)
+PY
+  hole_pid=$!
+  for _ in $(seq 100); do
+    [ -s "$hole_dir/port" ] && break
+    sleep 0.1
+  done
+  [ -s "$hole_dir/port" ] || fail "the silent listener did not start"
+  port=$(cat "$hole_dir/port")
+  make_stub_case health-bound "$(jq -n --arg e "http://127.0.0.1:$port/v1" '{sailors: {
+      a: {endpoint: $e, status: "live", models: ["m"]},
+      b: {endpoint: $e, status: "live", models: ["m"]},
+      c: {endpoint: $e, status: "live", models: ["m"]}}}')"
+  start=$(date +%s)
+  out=$(FM_SAILOR_PROBE_TIMEOUT=2 run_real health)
+  elapsed=$(( $(date +%s) - start ))
+  kill "$hole_pid" 2>/dev/null
+  wait "$hole_pid" 2>/dev/null
+  assert_equals "a down http://127.0.0.1:$port/v1/models
+b down http://127.0.0.1:$port/v1/models
+c down http://127.0.0.1:$port/v1/models" "$out" "a sailor that never answers must read down"
+  [ "$elapsed" -lt 5 ] || fail "three silent sailors took ${elapsed}s, so they were not probed at once within the 2s bound"
+  pass "health probes every sailor at once, so the whole run stays within about one probe timeout"
+}
+
 test_live_sailor_serving_the_model_passes_check
 test_endpoint_trailing_slash_is_not_doubled
 test_placeholder_is_refused_without_a_probe
@@ -702,5 +773,7 @@ test_privateer_first_mate_sailor_stays_live_and_restarts_only_when_it_changes
 test_retire_refuses_busy_sailors_and_removes_emptied_rules
 test_add_and_set_edit_one_sailor
 test_add_from_mlx_serve_reads_the_registry_and_nothing_more
+test_health_probes_the_mlx_serve_health_path
+test_health_probes_every_sailor_at_once_within_the_bound
 
 echo "# all fm-sailor tests passed"

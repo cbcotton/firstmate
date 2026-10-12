@@ -4,9 +4,9 @@
 # docs/configuration.md ("Crew dispatch profiles", "Named sailors") owns the
 # schema and what firstmate does with each answer. This header owns the checks:
 # map and reference validation, the placeholder lock, the per-sailor capacity
-# count, the endpoint probe and warm-up, the OpenCode provider fragment, and
-# the status view; and the registry commands that edit the map, with their
-# refusals.
+# count, the endpoint probe and warm-up, the OpenCode provider fragment, the
+# status view, and the health probe; and the registry commands that edit the
+# map, with their refusals.
 #
 # Usage:
 #   fm-sailor.sh validate
@@ -14,6 +14,7 @@
 #   fm-sailor.sh check <sailor> <model> [--task <id>]
 #   fm-sailor.sh provider-json <sailor> <model>
 #   fm-sailor.sh status [--all]
+#   fm-sailor.sh health
 #   fm-sailor.sh add <sailor> --endpoint <url> --models <id>[,<id>...]
 #                    [--title <text>] [--host <text>] [--max-concurrent <n>]
 #                    [--live | --placeholder]
@@ -69,6 +70,16 @@
 # vllm:num_requests_waiting), and each listed model as loaded, unloaded
 # (listed with loaded=false), listed (the server reports no loaded flag), or
 # missing. It exits 0 whatever the sailors answer.
+#
+# health prints `<sailor> up <url>` or `<sailor> down <url>` for each live
+# sailor, and nothing when there is none. A sailor whose endpoint lies under
+# the baseURL of a server in the mlx-serve registry (FM_MLX_SERVE_SERVERS,
+# default ~/.mlx-serve/servers.json) that names a healthPath is up when GET
+# <baseURL><healthPath> answers 2xx within FM_SAILOR_PROBE_TIMEOUT seconds,
+# the longest matching baseURL winning; any other sailor is up when GET
+# <endpoint>/models does. Every sailor is probed at once, so the whole run
+# takes about one probe timeout however many there are. bin/fm-watch.sh turns
+# its changes into wakes. It exits 0 whatever the sailors answer.
 #
 # The registry commands edit config/crew-dispatch.json and nothing else,
 # except that set-model --first-mate also writes config/privateer. Each builds
@@ -152,7 +163,7 @@ DRY_RUN=0
 
 usage() {
   cat >&2 <<'EOF'
-usage: fm-sailor.sh validate | list | status [--all]
+usage: fm-sailor.sh validate | list | status [--all] | health
        fm-sailor.sh check <sailor> <model> [--task <id>]
        fm-sailor.sh provider-json <sailor> <model>
        fm-sailor.sh add <sailor> (--endpoint <url> --models <ids> | --from-mlx-serve <server-id> [--models <ids>])
@@ -442,6 +453,46 @@ cmd_status() {
     done <<<"$models"
     echo "$name $status answering endpoint=$endpoint tasks=$busy/${max:-1}${queue:+ $queue} models=$states"
   done <<<"$names"
+}
+
+# health_targets: `<sailor>\t<url>` for each live sailor, the URL its health
+# probe reads (see the header).
+health_targets() {
+  local registry='{}'
+  if [ -f "$SERVERS_FILE" ] && jq -e '.servers | type == "array"' "$SERVERS_FILE" >/dev/null 2>&1; then
+    registry=$(jq -c . "$SERVERS_FILE")
+  fi
+  jq -r --argjson reg "$registry" '
+    [$reg.servers[]?
+     | select(type == "object" and (.baseURL | type) == "string" and (.healthPath | type) == "string" and (.healthPath | length) > 0)
+     | {base: (.baseURL | sub("/+$"; "")), health: .healthPath}] as $servers
+    | (.sailors // {}) | to_entries[] | select(.value.status == "live")
+    | (.value.endpoint | sub("/+$"; "")) as $e
+    | ([$servers[] | .base as $b | select($b != "" and ($e == $b or ($e | startswith($b + "/"))))] | max_by(.base | length)) as $m
+    | "\(.key)\t\(if $m then $m.base + "/" + ($m.health | ltrimstr("/")) else $e + "/models" end)"' "$FILE"
+}
+
+cmd_health() {
+  local targets name url state n=0
+  load_valid
+  need_curl
+  load_timeouts
+  targets=$(health_targets) || die "could not read the sailors from config/crew-dispatch.json"
+  [ -n "$targets" ] || return 0
+  WORK=$(mktemp -d "${TMPDIR:-/tmp}/fm-sailor.XXXXXX") || die "cannot create a scratch directory"
+  trap cleanup EXIT
+  while IFS=$'\t' read -r name url; do
+    n=$((n + 1))
+    { curl -fsS -o /dev/null --proto '=http,https' --max-time "$PROBE_TIMEOUT" "$url" 2>/dev/null && echo up || echo down; } > "$WORK/$n" &
+  done <<<"$targets"
+  wait
+  n=0
+  while IFS=$'\t' read -r name url; do
+    n=$((n + 1))
+    state=$(cat "$WORK/$n" 2>/dev/null)
+    [ "$state" = up ] || state=down
+    printf '%s %s %s\n' "$name" "$state" "$url"
+  done <<<"$targets"
 }
 
 # --- registry commands -------------------------------------------------------
@@ -900,6 +951,10 @@ case "$1" in
       2:--all) cmd_status true ;;
       *) usage ;;
     esac
+    ;;
+  health)
+    [ "$#" -eq 1 ] || usage
+    cmd_health
     ;;
   add) shift; cmd_add "$@" ;;
   set) shift; cmd_set "$@" ;;
