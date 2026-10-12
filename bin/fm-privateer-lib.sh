@@ -57,6 +57,13 @@ fm_privateer_socket_name() {
   printf 'fm-privateer-%s\n' "$hash"
 }
 
+# fm_privateer_socket_path <home>: the filesystem path of <home>'s session socket.
+# Its existence is the read-only "session may be running" test for a caller
+# outside the session, such as bin/fm-update.sh; it never talks to the server.
+fm_privateer_socket_path() {
+  printf '%s/tmux-%s/%s\n' "${TMUX_TMPDIR:-/tmp}" "$(id -u)" "$(fm_privateer_socket_name "$1")"
+}
+
 # fm_privateer_inside_session <home>: return 0 when this process runs inside
 # <home>'s Privateer session.
 fm_privateer_inside_session() {

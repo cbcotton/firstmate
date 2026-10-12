@@ -62,6 +62,14 @@
 # fm-procevent-when.sh rebind-all to republish those bindings against the new
 # bytes; a failure there is swallowed rather than failing the update.
 #
+# Privateer forks: after the main home, every forks/<name> that is a git checkout
+# with config/privateer is fast-forwarded from its own origin through the same
+# ff_target guards (a dirty, diverged, or non-default-branch fork is reported and
+# left untouched). A fork whose session socket exists (fm-privateer-lib.sh,
+# checked read-only, never attached to) is skipped with the stop-then-update
+# step. It is a git fast-forward only: the fork's own scripts, state/, data/,
+# and config/ are never run, read beyond the config/privateer marker, or changed.
+#
 # Usage: fm-update.sh [--help]
 set -eu
 
@@ -74,6 +82,8 @@ SECONDMATES_MD="$FM_HOME/data/secondmates.md"
 . "$SCRIPT_DIR/fm-ff-lib.sh"
 # shellcheck source=bin/fm-secondmate-restart-lib.sh
 . "$SCRIPT_DIR/fm-secondmate-restart-lib.sh"
+# shellcheck source=bin/fm-privateer-lib.sh
+. "$SCRIPT_DIR/fm-privateer-lib.sh"
 
 "$SCRIPT_DIR/fm-guard.sh" || true
 
@@ -234,6 +244,22 @@ if [ -f "$SECONDMATES_MD" ]; then
     fi
   done < "$SECONDMATES_MD"
 fi
+
+# --- Privateer forks -------------------------------------------------------
+# A running session cannot update itself and must not be touched from outside,
+# so a fork with a live session socket is skipped and the captain stops it first.
+for fork in "$FM_HOME"/forks/*/; do
+  [ -d "$fork" ] || continue
+  fork=${fork%/}
+  fork_name=${fork##*/}
+  [ -e "$fork/.git" ] || continue
+  fm_privateer_home "$fork/config" || continue
+  if [ -S "$(fm_privateer_socket_path "$fork")" ]; then
+    echo "fork $fork_name: skipped: Privateer session is running; stop it with FM_HOME=$fork $fork/bin/fm-privateer.sh stop, re-run the update, then start it again"
+    continue
+  fi
+  ff_target "$fork" "fork $fork_name" origin no no
+done
 
 # --- caller action summary -------------------------------------------------
 

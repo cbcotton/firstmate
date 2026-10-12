@@ -556,6 +556,77 @@ test_primary_update_rebinds_local_watch() {
   pass "T12 a self-update rebinds a locally armed watch on the primary"
 }
 
+# --- T13: Privateer forks under forks/ --------------------------------------
+# A fork is a clone of the origin with config/privateer (excluded locally, as a
+# real home's gitignored config/ is). Its session is faked by a unix socket at
+# the path fm-privateer-lib.sh names, under a per-test TMUX_TMPDIR.
+add_fork() {  # <world> <name> [privateer]
+  local w=$1 name=$2 marker=${3:-yes} d
+  d="$w/home/forks/$name"
+  mkdir -p "$w/home/forks"
+  git clone -q "$w/origin.git" "$d" 2>/dev/null
+  printf 'config/\n' >> "$d/.git/info/exclude"
+  if [ "$marker" = yes ]; then
+    mkdir -p "$d/config"
+    : > "$d/config/privateer"
+  fi
+}
+
+fake_session() {  # <world> <fork-dir>
+  local w=$1 sock
+  TMUX_TMPDIR=$(mktemp -d /tmp/fmu.XXXXXX)
+  export TMUX_TMPDIR
+  sock=$(bash -c '. "$1/bin/fm-privateer-lib.sh"; fm_privateer_socket_path "$2"' _ "$ROOT" "$2")
+  mkdir -p "${sock%/*}"
+  python3 -I -c 'import socket,sys; s=socket.socket(socket.AF_UNIX); s.bind(sys.argv[1])' "$sock"
+}
+
+test_forks() {
+  local w out head0 f
+  w=$(new_world t13)
+  add_fork "$w" stopped
+  add_fork "$w" running
+  add_fork "$w" plain no
+  bump_origin "$w" instr
+  fake_session "$w" "$w/home/forks/running"
+  head0=$(git -C "$w/home/forks/running" rev-parse HEAD)
+  out=$(run_update "$w")
+  assert_contains "$out" "fork stopped: updated" "stopped fork fast-forwards"
+  [ "$(git -C "$w/home/forks/stopped" rev-parse HEAD)" = "$(git -C "$w/origin.git" rev-parse main)" ] \
+    || fail "stopped fork did not reach origin"
+  assert_contains "$out" "fork running: skipped: Privateer session is running" "running fork skipped"
+  assert_contains "$out" "fm-privateer.sh stop" "skip names the stop step"
+  [ "$(git -C "$w/home/forks/running" rev-parse HEAD)" = "$head0" ] || fail "running fork moved"
+  assert_not_contains "$out" "fork plain" "non-Privateer directory ignored"
+  [ "$(git -C "$w/home/forks/plain" rev-parse HEAD)" = "$head0" ] || fail "plain directory was updated"
+  rm -rf "$TMUX_TMPDIR"
+  unset TMUX_TMPDIR
+  pass "T13 stopped fork updates, running fork skipped, plain directory ignored"
+
+  w=$(new_world t13b)
+  add_fork "$w" dirty
+  add_fork "$w" diverged
+  printf 'edit\n' >> "$w/home/forks/dirty/AGENTS.md"
+  printf 'local\n' > "$w/home/forks/diverged/AGENTS.md"
+  git -C "$w/home/forks/diverged" commit -qam local-work
+  head0=$(git -C "$w/home/forks/diverged" rev-parse HEAD)
+  bump_origin "$w" instr
+  out=$(run_update "$w")
+  assert_contains "$out" "fork dirty: skipped: dirty working tree" "dirty fork reported"
+  assert_contains "$out" "fork diverged: skipped: diverged" "diverged fork reported"
+  grep -q edit "$w/home/forks/dirty/AGENTS.md" || fail "dirty edit lost"
+  [ "$(git -C "$w/home/forks/diverged" rev-parse HEAD)" = "$head0" ] || fail "diverged fork moved"
+  f=$(git -C "$w/home/forks/dirty" rev-parse HEAD)
+  [ "$f" = "$(git -C "$w/seed" rev-parse HEAD~1)" ] || fail "dirty fork HEAD moved"
+  pass "T13 dirty and diverged forks reported and untouched"
+
+  w=$(new_world t13c)
+  bump_origin "$w" instr
+  out=$(run_update "$w")
+  assert_not_contains "$out" "fork " "no forks/ changes nothing"
+  pass "T13 no forks/ directory is a no-op"
+}
+
 test_updates_main_and_secondmate
 test_reread_gate_is_instruction_only
 test_bin_only_advance_restarts
@@ -572,5 +643,6 @@ test_firstmate_wrong_branch_skipped
 test_firstmate_detached_head_skipped
 test_unsafe_secondmate_home_skipped_before_git_update
 test_primary_update_rebinds_local_watch
+test_forks
 
 echo "# all fm-update tests passed"
