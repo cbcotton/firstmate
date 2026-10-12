@@ -1361,7 +1361,10 @@ A sailor is a named machine serving local models through an OpenAI-compatible en
 - A `placeholder` sailor is never dispatched, even when something answers at its address; only the captain changes its status to `live`.
 - A `live` sailor is eligible only while `bin/fm-sailor.sh check <sailor> <model>` passes: its endpoint must answer within a few seconds and list the model, and this home must hold fewer than `max_concurrent` tasks on it.
   The capacity count is per home, so homes that share one machine each count only their own tasks.
-- `bin/fm-sailor.sh status` shows each live sailor, or every sailor with `--all`: whether it answers, this home's tasks on it, the server's running and waiting requests when it reports them, and each listed model as loaded, unloaded, or missing.
+- `bin/fm-sailor.sh status` shows each live sailor, or every sailor with `--all`: whether it answers the same health probe the watcher uses (below), this home's tasks on it, the server's running and waiting requests when it reports them, and, when its model list answers, each listed model as loaded, unloaded, or missing.
+- The supervision watcher probes every live sailor on the heartbeat's base interval through `bin/fm-sailor.sh health`, at its mlx-serve server's `healthPath` when `~/.mlx-serve/servers.json` lists a server whose `baseURL` the endpoint lies under, and otherwise at the endpoint's model list.
+  It wakes firstmate only when a sailor's state changes, with `check: sailor <name> down` or `check: sailor <name> up`; work routed to a down sailor waits or uses `sailor_fallback`, and firstmate tells the captain only when queued work is stuck on it.
+  To scale out, add more mlx-serve servers to that registry, each with its own sailor, and every one is watched the same way.
 - `bin/fm-sailor.sh` also edits the map, from the captain's own shell:
   - `add` registers a sailor, as a `placeholder` unless `--live`.
   - `add --from-mlx-serve <server-id>` takes the endpoint and the live model list from that server's entry in the local mlx-serve registry, `~/.mlx-serve/servers.json`; it only reads the registry and never loads, unloads, or starts a server.

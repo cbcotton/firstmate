@@ -4,9 +4,9 @@
 # docs/configuration.md ("Crew dispatch profiles", "Named sailors") owns the
 # schema and what firstmate does with each answer. This header owns the checks:
 # map and reference validation, the placeholder lock, the per-sailor capacity
-# count, the endpoint probe and warm-up, the OpenCode provider fragment, and
-# the status view; and the registry commands that edit the map, with their
-# refusals.
+# count, the endpoint probe and warm-up, the OpenCode provider fragment, the
+# status view, and the health probe; and the registry commands that edit the
+# map, with their refusals.
 #
 # Usage:
 #   fm-sailor.sh validate
@@ -14,6 +14,7 @@
 #   fm-sailor.sh check <sailor> <model> [--task <id>]
 #   fm-sailor.sh provider-json <sailor> <model>
 #   fm-sailor.sh status [--all]
+#   fm-sailor.sh health
 #   fm-sailor.sh add <sailor> --endpoint <url> --models <id>[,<id>...]
 #                    [--title <text>] [--host <text>] [--max-concurrent <n>]
 #                    [--live | --placeholder]
@@ -63,12 +64,24 @@
 # and an `options` object, in OpenCode's own field names.
 #
 # status prints one line per live sailor, or per sailor with --all: its status,
-# whether GET <endpoint>/models answers, this home's tasks on it against its
-# capacity, the server's running and waiting requests when <endpoint's
-# origin>/metrics exposes vLLM-style gauges (vllm:num_requests_running and
-# vllm:num_requests_waiting), and each listed model as loaded, unloaded
-# (listed with loaded=false), listed (the server reports no loaded flag), or
-# missing. It exits 0 whatever the sailors answer.
+# whether it is answering by the same probe health uses (below), this home's
+# tasks on it against its capacity, and, for an answering sailor, the server's
+# running and waiting requests when <endpoint's origin>/metrics exposes
+# vLLM-style gauges (vllm:num_requests_running and vllm:num_requests_waiting),
+# and, when GET <endpoint>/models answers, each listed model as loaded,
+# unloaded (listed with loaded=false), listed (the server reports no loaded
+# flag), or missing. It exits 0 whatever the sailors answer.
+#
+# health prints `<sailor> up <url>` or `<sailor> down <url>` for each live
+# sailor, and nothing when there is none. A sailor whose endpoint lies under
+# the baseURL of a server in the mlx-serve registry (FM_MLX_SERVE_SERVERS,
+# default ~/.mlx-serve/servers.json) that names a healthPath is up when GET
+# <baseURL><healthPath> answers without an HTTP error status within
+# FM_SAILOR_PROBE_TIMEOUT seconds, the longest matching baseURL winning; any
+# other sailor is up when GET <endpoint>/models does. Every sailor is probed
+# at once, so the whole run takes about one probe timeout however many there
+# are. bin/fm-watch.sh turns its changes into wakes. It exits 0 whatever the
+# sailors answer.
 #
 # The registry commands edit config/crew-dispatch.json and nothing else,
 # except that set-model --first-mate also writes config/privateer. Each builds
@@ -153,7 +166,7 @@ DRY_RUN=0
 
 usage() {
   cat >&2 <<'EOF'
-usage: fm-sailor.sh validate | list | status [--all]
+usage: fm-sailor.sh validate | list | status [--all] | health
        fm-sailor.sh check <sailor> <model> [--task <id>]
        fm-sailor.sh provider-json <sailor> <model>
        fm-sailor.sh add <sailor> (--endpoint <url> --models <ids> | --from-mlx-serve <server-id> [--models <ids>])
@@ -417,32 +430,80 @@ cmd_provider_json() {
 }
 
 cmd_status() {
-  local all=$1 names name status endpoint max busy body queue models m states
+  local all=$1 targets name url status endpoint max busy body queue models m states
   load_valid
   need_curl
   load_timeouts
-  names=$(jq -r --argjson all "$all" '(.sailors // {}) | to_entries[] | select($all or .value.status == "live") | .key' "$FILE")
-  if [ -z "$names" ]; then
+  targets=$(health_targets "$all") || die "could not read the sailors from config/crew-dispatch.json"
+  if [ -z "$targets" ]; then
     if [ "$all" = true ]; then echo "no sailors"; else echo "no live sailors"; fi
     return 0
   fi
-  while IFS= read -r name; do
+  while IFS=$'\t' read -r name url; do
     status=$(sailor_field "$name" '.status')
     endpoint=$(sailor_field "$name" '.endpoint')
     max=$(sailor_field "$name" '.max_concurrent')
     busy=$(busy_count "$name" "")
-    if ! body=$(fetch_models "$endpoint"); then
+    if ! probe_up "$url"; then
       echo "$name $status not-answering endpoint=$endpoint tasks=$busy/${max:-1}"
       continue
     fi
     queue=$(server_queue "$endpoint")
-    models=$(jq -r --arg s "$name" '.sailors[$s].models[]' "$FILE")
     states=
-    while IFS= read -r m; do
-      states="$states${states:+,}$m($(model_state "$body" "$m"))"
-    done <<<"$models"
-    echo "$name $status answering endpoint=$endpoint tasks=$busy/${max:-1}${queue:+ $queue} models=$states"
-  done <<<"$names"
+    if body=$(fetch_models "$endpoint"); then
+      models=$(jq -r --arg s "$name" '.sailors[$s].models[]' "$FILE")
+      while IFS= read -r m; do
+        states="$states${states:+,}$m($(model_state "$body" "$m"))"
+      done <<<"$models"
+    fi
+    echo "$name $status answering endpoint=$endpoint tasks=$busy/${max:-1}${queue:+ $queue}${states:+ models=$states}"
+  done <<<"$targets"
+}
+
+# probe_up <url>: whether GET <url> answers without an HTTP error status
+# within the probe timeout.
+probe_up() {
+  curl -fsS -o /dev/null --proto '=http,https' --max-time "$PROBE_TIMEOUT" "$1" >/dev/null 2>&1
+}
+
+# health_targets <all>: `<sailor>\t<url>` for each live sailor, or each sailor
+# when <all> is true, the URL its health probe reads (see the header).
+health_targets() {
+  local registry='{}'
+  if [ -f "$SERVERS_FILE" ] && jq -e '.servers | type == "array"' "$SERVERS_FILE" >/dev/null 2>&1; then
+    registry=$(jq -c . "$SERVERS_FILE")
+  fi
+  jq -r --argjson reg "$registry" --argjson all "$1" '
+    [$reg.servers[]?
+     | select(type == "object" and (.baseURL | type) == "string" and (.healthPath | type) == "string" and (.healthPath | length) > 0)
+     | {base: (.baseURL | sub("/+$"; "")), health: .healthPath}] as $servers
+    | (.sailors // {}) | to_entries[] | select($all or .value.status == "live")
+    | (.value.endpoint | sub("/+$"; "")) as $e
+    | ([$servers[] | .base as $b | select($b != "" and ($e == $b or ($e | startswith($b + "/"))))] | max_by(.base | length)) as $m
+    | "\(.key)\t\(if $m then $m.base + "/" + ($m.health | ltrimstr("/")) else $e + "/models" end)"' "$FILE"
+}
+
+cmd_health() {
+  local targets name url state n=0
+  load_valid
+  need_curl
+  load_timeouts
+  targets=$(health_targets false) || die "could not read the sailors from config/crew-dispatch.json"
+  [ -n "$targets" ] || return 0
+  WORK=$(mktemp -d "${TMPDIR:-/tmp}/fm-sailor.XXXXXX") || die "cannot create a scratch directory"
+  trap cleanup EXIT
+  while IFS=$'\t' read -r name url; do
+    n=$((n + 1))
+    { probe_up "$url" && echo up || echo down; } > "$WORK/$n" &
+  done <<<"$targets"
+  wait
+  n=0
+  while IFS=$'\t' read -r name url; do
+    n=$((n + 1))
+    state=$(cat "$WORK/$n" 2>/dev/null)
+    [ "$state" = up ] || state=down
+    printf '%s %s %s\n' "$name" "$state" "$url"
+  done <<<"$targets"
 }
 
 # --- registry commands -------------------------------------------------------
@@ -901,6 +962,10 @@ case "$1" in
       2:--all) cmd_status true ;;
       *) usage ;;
     esac
+    ;;
+  health)
+    [ "$#" -eq 1 ] || usage
+    cmd_health
     ;;
   add) shift; cmd_add "$@" ;;
   set) shift; cmd_set "$@" ;;
