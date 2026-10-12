@@ -7,12 +7,19 @@ destinations it allows; docs/configuration.md ("Privateer quarantine") owns the
 operator contract. This header owns the wire behavior.
 
 Usage:
-  fm-privateer-proxy.py <port-file> <log> [<host>:<port> ...]
+  fm-privateer-proxy.py <port-file> <log> <allow-file>
 
 It listens on 127.0.0.1 on a port the system picks, and only once it is bound
 writes that port to <port-file>; if it cannot bind it writes nothing and exits
-1. Each <host>:<port> is one allowed destination: a lowercase host name or
-IPv4 address, or a bracketed IPv6 address, and a port.
+1. <allow-file> holds one allowed destination per line, as <host>:<port>: a
+lowercase host name or IPv4 address, or a bracketed IPv6 address, and a port.
+
+The proxy re-reads <allow-file> whenever its inode, size, or modification time
+changes, checked on each request, and swaps in the new set whole; the launcher
+replaces the file by rename, so a half-written file is never read. A file that
+is missing or unreadable leaves the last good set in force, so a failed reload
+never opens the proxy up; before the first good read the set is empty. Each
+change of the set appends a reload line to <log>.
 
 A CONNECT to an allowed destination becomes a tunnel. A request whose target is
 an absolute http:// URL naming an allowed destination is forwarded to it with
@@ -24,6 +31,9 @@ aliases or redirects.
 
 Every request appends one JSON line to <log>: {"time", "verdict" (allowed or
 refused), "method", "dest" (host:port, or the raw target when it has none)}.
+A reload appends {"time", "verdict": "reload", "method": "-", "dest":
+"+<added> -<removed>"}, and a reload that could not read the file appends
+verdict "reload-failed" with the error as "dest".
 """
 import json
 import os
@@ -34,9 +44,44 @@ import sys
 import threading
 import time
 
-PORT_FILE, LOG = sys.argv[1], sys.argv[2]
-ALLOW = set(a.lower() for a in sys.argv[3:])
+if len(sys.argv) != 4:
+    sys.stderr.write("usage: fm-privateer-proxy.py <port-file> <log> <allow-file>\n")
+    sys.exit(2)
+PORT_FILE, LOG, ALLOW_FILE = sys.argv[1], sys.argv[2], sys.argv[3]
+ALLOW = frozenset()
+ALLOW_SIG = None
+FAIL_SIG = None
 LOCK = threading.Lock()
+RELOAD_LOCK = threading.Lock()
+
+
+def refresh_allow():
+    """Swap in ALLOW_FILE's set when the file changed; keep the last good set
+    when it cannot be read."""
+    global ALLOW, ALLOW_SIG, FAIL_SIG
+    try:
+        st = os.stat(ALLOW_FILE)
+        sig = (st.st_ino, st.st_size, st.st_mtime_ns)
+    except OSError as e:
+        sig = ("error", str(e))
+    if sig == ALLOW_SIG:
+        return
+    with RELOAD_LOCK:
+        if sig == ALLOW_SIG:
+            return
+        try:
+            with open(ALLOW_FILE) as f:
+                new = frozenset(l.strip().lower() for l in f if l.strip())
+        except (OSError, UnicodeDecodeError) as e:
+            if sig != FAIL_SIG:
+                FAIL_SIG = sig
+                record("reload-failed", "-", str(e))
+            return
+        old = ALLOW
+        first = ALLOW_SIG is None and FAIL_SIG is None
+        ALLOW, ALLOW_SIG, FAIL_SIG = new, sig, None
+        if not first:
+            record("reload", "-", "+%d -%d" % (len(new - old), len(old - new)))
 
 
 def hostport(authority, default_port):
@@ -137,6 +182,7 @@ class Handler(socketserver.BaseRequestHandler):
         if len(parts) != 3:
             return self.refuse("?", lines[0])
         method, target, version = parts
+        refresh_allow()
         if method.upper() == "CONNECT":
             dest = hostport(target, None)
             if dest not in ALLOW:
@@ -176,6 +222,7 @@ class Server(socketserver.ThreadingTCPServer):
     allow_reuse_address = True
 
 
+refresh_allow()
 try:
     server = Server(("127.0.0.1", 0), Handler)
 except OSError as e:
