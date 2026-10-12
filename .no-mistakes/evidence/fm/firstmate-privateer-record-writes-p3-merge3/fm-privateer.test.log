@@ -1,0 +1,57 @@
+ok - check is silent and passes when config/privateer is absent
+ok - check passes a Privateer home with only opencode, a sandbox, and private sailors
+ok - check names every forbidden file, key, Bedrock side channel, harness, profile, fallback, endpoint, and first mate line
+ok - check requires config/crew-dispatch.json so nothing can dispatch off a sailor
+ok - check refuses a checkout or clone whose origin is on an Anthropic or Claude host, in https, ssh, and scp form, with or without trailing dots
+ok - check accepts loopback, private, tailnet, .local, and .ts.net endpoints and refuses the rest, including an authority hidden behind ?, #, a backslash, or userinfo
+ok - launch-env points every OpenCode directory inside the home, turns auto-update off, names the egress proxy, and refuses outside the session or without the proxy
+ok - inside answers yes only for the session's own socket, refuses outside it with a step back to the captain that names no socket, and answers 3 in a home with no quarantine
+ok - the seal plugin adds no hook in a home with no quarantine or a checkout with no launcher
+ok - outside the sealed session the plugin tells each session once, as privateer-seal operational input, to stop and hand back to the captain, and refuses every tool with the same words
+ok - inside the sealed session the plugin refuses a tmux command that names another server or changes TMUX, and allows the session's own tmux and every other tool
+ok - an outside session in a sealed checkout is sealed even when its inherited FM_HOME names another home, sealed or not
+ok - a checkout outside its sealed home, with FM_HOME naming the home and TMUX its socket, gets the inside rules
+ok - inside the sealed session three refused firstmate scripts in a row stop every further firstmate script with the last refusal, a success starts the count again, and only a captain message, never Firstmate's own input, resets it
+ok - start refuses a home without config/privateer and leaves its Git metadata untouched
+ok - start refuses while a forbidden file is present
+ok - start refuses until config/privateer names the first mate's sailor and model
+ok - start runs the egress proxy with the sailor and forge allowed, and the first mate with only the allowlist and isolated OpenCode directories in a tmux server whose sandbox reaches only that proxy
+ok - start denies writes to every path a checkout that is the home gives its first mate's OpenCode, and leaves the rest of .opencode writable
+ok - start denies writes to the scripts of a checkout nested below the home, which the captain runs outside the session
+ok - start denies the gitfile of every submodule and outside linked worktree checkout in the home and every directory leading to it, and the commondir of the outside worktree's submodules, and leaves the pool's worktrees alone
+ok - start renders the helm afresh: the rulebook, the agent, exactly the rulebook's skills, the checkout's plugins and slash commands, its own Git repository, and a bin/ that runs every checkout script by its real path
+ok - start refuses, and starts nothing, when the checkout carries no Privateer rulebook
+ok - start refuses, and leaves nothing running, when the egress proxy cannot bind
+ok - the egress proxy forwards to an allowed sailor and refuses and logs every other destination, including an authority hidden behind ?, #, a backslash, or userinfo
+ok - in the real sandboxed session, a command started through tmux reaches nothing but the proxy, plants nothing that runs outside, forges no grant while the captain's own shell still records one, and cannot rewrite the first mate's instructions, skills, docs, or plugins in the checkout or the helm, a worker still commits in its own copy and in a new slot of the home's own pool, and the first mate cannot stop or rewrite the proxy
+ok - in the real sandboxed session the opencode first mate detects its harness and owns the fleet lock, while a plain shell in the same session stays read-only
+ok - in the real sandboxed session a captain whose shell is zsh can run a slash-command here-document
+ok - in the real sandboxed session no directory leading to a Git config or hooks of the checkout, a clone, their submodules, or a linked worktree outside the pool can be moved aside, replaced, linked over, or planted, while the session's own pool worktrees are still added and removed
+ok - in the real sandboxed session no commondir can be written into the git dir of the checkout, a clone, their submodules, or a linked worktree outside the pool, and no gitfile of a submodule or such a worktree can be rewritten or moved aside, while the session's own pool worktrees are still added and removed
+ok - the egress proxy applies a changed allowlist file without a restart, keeps the last good set when the file is missing or unreadable, and logs each reload
+ok - reload rewrites the allowlist without a restart, prints what changed, and refuses without a proxy or from inside the session
+ok - start refuses while the Privateer session is already running
+ok - stop refuses while task records exist and stops the idle session otherwise
+ok - stop --stow types /stow into the first mate's pane, waits for that turn to finish, and only then stops the session, naming no socket or port
+ok - stop --stow stows and stops a first mate whose narrow pane wraps its composer footer
+ok - stop --stow still refuses a draft above a wrapped footer and types nothing over it
+ok - stop --stow refuses while work is in flight before delivering anything
+ok - stop --stow refuses with exit 1 and leaves the session running when the stow turn does not finish in time
+ok - stop --stow refuses with exit 1 and leaves the session running when the stow turn never reads busy
+ok - stop still stops the watcher and the egress proxy when the session has already ended
+ok - attach refuses when the Privateer session is not running
+ok - a Privateer home refuses a Claude worker before any record exists
+ok - a Privateer home ships local-only only
+ok - a Privateer home refuses an OpenCode worker that names no sailor
+ok - a Privateer home refuses a raw launch command it cannot check
+ok - a Privateer home refuses to spawn a secondmate
+ok - a Privateer home refuses every spawn while a forbidden file or key exists
+ok - a Privateer home launches a local-only sailor with a cleared environment and isolated OpenCode directories inside the session's sandbox
+ok - a Privateer home refuses every spawn while its egress proxy is not running
+ok - a Privateer home refuses every spawn from outside its sandboxed session without naming the session
+ok - every gated script refuses a sealed Privateer home from outside its session, names no socket, and changes nothing
+ok - every gated script runs inside the home's own Privateer session
+ok - the gate seals only a home whose config holds the flag, and only its own session is inside
+ok - the quarantine check and the sailor registry stay usable from the captain's own shell
+ok - in a Privateer home only the captain's own shell records a grant or revocation, the refusal inside names that exact command, and list and active run on both sides
+# all fm-privateer tests passed

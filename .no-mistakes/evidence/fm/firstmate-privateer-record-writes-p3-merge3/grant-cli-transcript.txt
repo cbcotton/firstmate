@@ -1,0 +1,60 @@
+# Privateer lab home: /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.Jn9psF (config/privateer present); session socket: fm-privateer-4668b932977b
+## 1. first mate / worker inside the session tries to record a grant
+$ [inside] fm-permission-grant.sh grant --scope task --task pv-t --permission bash --pattern npm test --action allow --words-file /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.Jn9psF/data/words.txt --channel chat
+error: fm-permission-grant.sh refused: in a Privateer home only the captain records a grant or revocation, from their own shell outside this session; ask the captain to run it there, then relaunch the worker once the captain says it is recorded: FM_HOME=/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.Jn9psF /Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M4RAXTQRMM69V86VB2PMEGWM/bin/fm-permission-grant.sh grant --scope task --task pv-t --permission bash --pattern 'npm test' --action allow --words-file /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.Jn9psF/data/words.txt --channel chat
+[exit 2]
+
+ledger exists after refused grant? no
+
+## 2. captain runs the printed command from their own shell
+$ FM_HOME=/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.Jn9psF /Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M4RAXTQRMM69V86VB2PMEGWM/bin/fm-permission-grant.sh grant --scope task --task pv-t --permission bash --pattern 'npm test' --action allow --words-file /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.Jn9psF/data/words.txt --channel chat
+g1791818577-63262-27240: allow bash "npm test" for task pv-t; it applies at each OpenCode worker's next launch (bin/fm-control.sh <task> relaunch to apply now)
+[exit 0]
+
+ledger:
+{"op":"grant","id":"g1791818577-63262-27240","scope":"task","task":"pv-t","permission":"bash","pattern":"npm test","action":"allow","words":"yes, let it run npm test\n"}
+
+## 3. list and active from both sides
+$ [inside] fm-permission-grant.sh list --task pv-t
+g1791818577-63262-27240 task pv-t allow bash "npm test" via chat: yes, let it run npm test 
+[exit 0]
+
+$ [inside] fm-permission-grant.sh active --task pv-t
+[{"bash":{"npm test":"allow"}}]
+[exit 0]
+
+$ [outside] fm-permission-grant.sh list --task pv-t
+g1791818577-63262-27240 task pv-t allow bash "npm test" via chat: yes, let it run npm test 
+[exit 0]
+
+$ [outside] fm-permission-grant.sh active --task pv-t
+[{"bash":{"npm test":"allow"}}]
+[exit 0]
+
+## 4. revoke inside (refused) vs outside (recorded)
+$ [inside] fm-permission-grant.sh revoke g1791818577-63262-27240 --words-file /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.Jn9psF/data/words.txt --channel chat
+error: fm-permission-grant.sh refused: in a Privateer home only the captain records a grant or revocation, from their own shell outside this session; ask the captain to run it there, then relaunch the worker once the captain says it is recorded: FM_HOME=/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.Jn9psF /Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M4RAXTQRMM69V86VB2PMEGWM/bin/fm-permission-grant.sh revoke g1791818577-63262-27240 --words-file /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.Jn9psF/data/words.txt --channel chat
+[exit 2]
+
+$ [outside] fm-permission-grant.sh revoke g1791818577-63262-27240 --words-file /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.Jn9psF/data/words.txt --channel chat
+g1791818577-63262-27240: revoked; it no longer applies from each OpenCode worker's next launch
+[exit 0]
+
+$ [inside] fm-permission-grant.sh active --task pv-t
+[]
+[exit 0]
+
+## 5. adversarial: pattern with quotes/metachars; printed command must stay one quoted word
+error: fm-permission-grant.sh refused: in a Privateer home only the captain records a grant or revocation, from their own shell outside this session; ask the captain to run it there, then relaunch the worker once the captain says it is recorded: FM_HOME=/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.Jn9psF /Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M4RAXTQRMM69V86VB2PMEGWM/bin/fm-permission-grant.sh grant --scope standing --permission bash --pattern 'x'\''; touch /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.Jn9psF/pwned; echo '\''' --action deny --words-file /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.Jn9psF/data/words.txt --channel chat
+g1791818578-63853-1277: deny bash "x'; touch /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.Jn9psF/pwned; echo '" for standing; it applies at each OpenCode worker's next launch (bin/fm-control.sh <task> relaunch to apply now)
+[exit 0]
+pwned file created? no
+recorded pattern: x'; touch /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.Jn9psF/pwned; echo '
+
+## 6. non-Privateer home: grant still works with any TMUX (no regression)
+refused: a wildcard allow is granted only over git log, diff, show, status, add, commit, rev-parse, blame, ls-files, shortlog, or describe; grant one exact command otherwise; the captain approves that one action in the moment and firstmate performs it
+[exit 1]
+
+## 6b. non-Privateer home, exact pattern, TMUX naming a session socket: grant still recorded
+g1791818585-65960-11409: allow bash "ls -la" for standing; it applies at each OpenCode worker's next launch (bin/fm-control.sh <task> relaunch to apply now)
+[exit 0]
