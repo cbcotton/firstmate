@@ -1,0 +1,22 @@
+ok - check is silent and passes when config/privateer is absent
+ok - check passes a Privateer home with only opencode, a sandbox, and private sailors
+ok - check names every forbidden file, key, Bedrock side channel, harness, profile, fallback, endpoint, and first mate line
+ok - check requires config/crew-dispatch.json so nothing can dispatch off a sailor
+ok - check refuses a checkout or clone whose origin is on an Anthropic or Claude host, in https, ssh, and scp form, with or without trailing dots
+ok - check accepts loopback, private, tailnet, .local, and .ts.net endpoints and refuses the rest, including an authority hidden behind ?, #, a backslash, or userinfo
+ok - launch-env points every OpenCode directory inside the home, turns auto-update off, names the egress proxy, and refuses outside the session or without the proxy
+ok - inside answers yes only for the session's own socket, refuses outside it with a step back to the captain that names no socket, and answers 3 in a home with no quarantine
+ok - the seal plugin adds no hook in a home with no quarantine or a checkout with no launcher
+ok - outside the sealed session the plugin tells each session once, as privateer-seal operational input, to stop and hand back to the captain, and refuses every tool with the same words
+ok - inside the sealed session the plugin refuses a tmux command that names another server or changes TMUX, and allows the session's own tmux and every other tool
+ok - an outside session in a sealed checkout is sealed even when its inherited FM_HOME names another home, sealed or not
+ok - a checkout outside its sealed home, with FM_HOME naming the home and TMUX its socket, gets the inside rules
+ok - inside the sealed session three refused firstmate scripts in a row stop every further firstmate script with the last refusal, a success starts the count again, and only a captain message, never Firstmate's own input, resets it
+ok - start refuses a home without config/privateer and leaves its Git metadata untouched
+ok - start runs the egress proxy with the sailor and forge allowed, and the first mate with only the allowlist and isolated OpenCode directories in a tmux server whose sandbox reaches only that proxy
+ok - start denies the gitfile of every submodule and outside linked worktree checkout in the home and every directory leading to it, and the commondir of the outside worktree's submodules, and leaves the pool's worktrees alone
+not ok - a command started through tmux must move aside, replace, link over, or plant none of the directories that lead to the Git config or hooks of the checkout, a clone, their submodules, or a linked worktree outside the pool, nor write that worktree's submodule config, while it still renames a directory of the home and adds, commits in, and removes worktrees in the home's own pool (expected 'planted=none
+control=0
+rootslot=0
+rootworktrees=kept
+slot=0', got '')

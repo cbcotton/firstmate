@@ -1,0 +1,15 @@
+ok - start runs the egress proxy with the sailor and forge allowed, and the first mate with only the allowlist and isolated OpenCode directories in a tmux server whose sandbox reaches only that proxy
+ok - start denies the gitfile of every submodule and outside linked worktree checkout in the home and every directory leading to it, and the commondir of the outside worktree's submodules, and leaves the pool's worktrees alone
+ok - in the real sandboxed session no directory leading to a Git config or hooks of the checkout, a clone, their submodules, or a linked worktree outside the pool can be moved aside, replaced, linked over, or planted, while the session's own pool worktrees are still added and removed
+ok - in the real sandboxed session no commondir can be written into the git dir of the checkout, a clone, their submodules, or a linked worktree outside the pool, and no gitfile of a submodule or such a worktree can be rewritten or moved aside, while the session's own pool worktrees are still added and removed
+# selected tests passed
+ok - start runs the egress proxy with the sailor and forge allowed, and the first mate with only the allowlist and isolated OpenCode directories in a tmux server whose sandbox reaches only that proxy
+ok - start denies the gitfile of every submodule and outside linked worktree checkout in the home and every directory leading to it, and the commondir of the outside worktree's submodules, and leaves the pool's worktrees alone
+ok - in the real sandboxed session no directory leading to a Git config or hooks of the checkout, a clone, their submodules, or a linked worktree outside the pool can be moved aside, replaced, linked over, or planted, while the session's own pool worktrees are still added and removed
+ok - in the real sandboxed session no commondir can be written into the git dir of the checkout, a clone, their submodules, or a linked worktree outside the pool, and no gitfile of a submodule or such a worktree can be rewritten or moved aside, while the session's own pool worktrees are still added and removed
+# selected tests passed
+ok - start runs the egress proxy with the sailor and forge allowed, and the first mate with only the allowlist and isolated OpenCode directories in a tmux server whose sandbox reaches only that proxy
+ok - start denies the gitfile of every submodule and outside linked worktree checkout in the home and every directory leading to it, and the commondir of the outside worktree's submodules, and leaves the pool's worktrees alone
+ok - in the real sandboxed session no directory leading to a Git config or hooks of the checkout, a clone, their submodules, or a linked worktree outside the pool can be moved aside, replaced, linked over, or planted, while the session's own pool worktrees are still added and removed
+ok - in the real sandboxed session no commondir can be written into the git dir of the checkout, a clone, their submodules, or a linked worktree outside the pool, and no gitfile of a submodule or such a worktree can be rewritten or moved aside, while the session's own pool worktrees are still added and removed
+# selected tests passed
