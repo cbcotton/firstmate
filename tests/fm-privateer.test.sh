@@ -1497,6 +1497,114 @@ status=0" "$(cat "$state/heredoc" 2>/dev/null)" \
   pass "in the real sandboxed session a captain whose shell is zsh can run a slash-command here-document"
 }
 
+test_session_sandbox_pins_git_metadata() {
+  local dir home root root_git proj proj_git wt_git repo g out status spid sport socket probe
+  if ! "$ROOT/bin/fm-sandbox-exec.sh" available || ! command -v tmux >/dev/null 2>&1; then
+    pass "session Git metadata checks not run: sandbox-exec or tmux is not available on this machine"
+    return 0
+  fi
+  dir="$TMP_ROOT/session-git"
+  home=$(make_home session-git)
+  probe="$home/state/probe"
+  # The checkout sits in this test's temporary directory, which the session may
+  # write like the home, so only the Git metadata rules stand in its way.
+  root="$dir/root"
+  make_checkout "$root"
+  proj="$home/projects/proj"
+  fm_git_init_commit "$proj"
+  # A submodule named lib/sub, so an intermediate directory leads to its git
+  # dir, in the checkout and in a clone, and a linked worktree of the clone
+  # outside the pool with the submodule checked out, so it has a git dir under
+  # the worktree's own.
+  fm_git_init_commit "$dir/sub"
+  for repo in "$root" "$proj"; do
+    git -C "$repo" -c protocol.file.allow=always submodule add -q "$dir/sub" lib/sub >/dev/null 2>&1 &&
+      git -C "$repo" -c user.name=t -c user.email=t@example.invalid commit -qm sub ||
+      fail "the fixture submodule could not be added to $repo"
+  done
+  git -C "$proj" worktree add -q -b side "$dir/wt"
+  git -C "$dir/wt" -c protocol.file.allow=always submodule update --init -q >/dev/null 2>&1
+  root_git=$(cd "$root/.git" && pwd -P)
+  proj_git=$(cd "$proj/.git" && pwd -P)
+  wt_git="$proj_git/worktrees/wt"
+  for g in "$root_git/modules/lib/sub" "$proj_git/modules/lib/sub" "$wt_git/modules/lib/sub"; do
+    [ -f "$g/HEAD" ] || fail "the fixture has no submodule git dir at $g"
+  done
+  [ ! -e "$root_git/worktrees" ] || fail "the fixture checkout must start with no linked worktree"
+  mkdir -p "$dir/sailor/v1" "$home/state/prepared/hooks"
+  printf '{"data":[{"id":"coder"}]}\n' > "$dir/sailor/v1/models"
+  read -r spid sport < <(serve_dir "$dir/sailor" "$dir/sailor.log")
+  [ -n "$sport" ] || fail "the stand-in sailor did not start"
+  jq -n --arg e "http://127.0.0.1:$sport/v1" '{sailors: {tiller: {title: "Tiller", endpoint: $e, status: "live", models: ["coder"]}}, default: {harness: "opencode", sailor: "tiller", model: "coder"}}' \
+    > "$home/config/crew-dispatch.json"
+  # A command the first mate starts through tmux, as a worker's pane is: it
+  # tries to move aside each directory that leads to a Git config or hooks, to
+  # create, link, or move a directory of its own into a place one would be
+  # adopted, and to write a submodule's config under the linked worktree; then
+  # it renames a directory of the home, and adds, commits in, and removes a
+  # worktree in the home's own pool for the checkout and for the clone.
+  cat > "$dir/window" <<SH
+#!/bin/sh
+planted=
+for t in '$root_git/modules' '$root_git/modules/lib' '$root_git/modules/lib/sub' '$proj_git/worktrees' '$wt_git' \
+  '$proj_git/modules' '$proj_git/modules/lib' '$proj_git/modules/lib/sub' \
+  '$wt_git/modules' '$wt_git/modules/lib' '$wt_git/modules/lib/sub'; do
+  mv "\$t" "\$t.aside" 2>/dev/null && planted="\$planted move:\$t"
+done
+for t in '$root_git/modules' '$root_git/modules/lib' '$proj_git/modules' '$proj_git/modules/lib' '$wt_git/modules/lib'; do
+  mkdir "\$t/new" 2>/dev/null && planted="\$planted mkdir:\$t/new"
+  ln -s '$home/state/prepared' "\$t/link" 2>/dev/null && planted="\$planted symlink:\$t/link"
+  mkdir -p '$home/state/prepared/moved' && mv '$home/state/prepared/moved' "\$t/moved" 2>/dev/null && planted="\$planted movein:\$t/moved"
+done
+for t in '$proj_git/modules/lib/sub/modules' '$proj_git/modules/lib/sub/worktrees'; do
+  mkdir "\$t" 2>/dev/null && planted="\$planted mkdir:\$t"
+done
+ln -s '$home/state/prepared' '$root_git/worktrees' 2>/dev/null && planted="\$planted symlink:$root_git/worktrees"
+for t in '$wt_git/modules/lib/sub/config' '$wt_git/modules/lib/sub/hooks/post-checkout'; do
+  ( : >> "\$t" ) 2>/dev/null && planted="\$planted write:\$t"
+done
+echo "planted=\${planted:-none}" > '$probe.tmp'
+mkdir '$home/state/control' && mv '$home/state/control' '$home/state/control.moved'
+echo "control=\$?" >> '$probe.tmp'
+git -C '$root' worktree add -q -b pv-root-slot "\$TREEHOUSE_ROOT/pool/root-slot" >/dev/null 2>&1 &&
+  git -C '$root' worktree remove "\$TREEHOUSE_ROOT/pool/root-slot" >/dev/null 2>&1
+echo "rootslot=\$?" >> '$probe.tmp'
+mv '$root_git/worktrees' '$root_git/worktrees.aside' 2>/dev/null && echo "rootworktrees=moved" >> '$probe.tmp' ||
+  echo "rootworktrees=kept" >> '$probe.tmp'
+git -C '$proj' worktree add -q -b pv-slot "\$TREEHOUSE_ROOT/pool/slot" >/dev/null 2>&1 &&
+  echo work > "\$TREEHOUSE_ROOT/pool/slot/work.txt" &&
+  git -C "\$TREEHOUSE_ROOT/pool/slot" add work.txt &&
+  git -C "\$TREEHOUSE_ROOT/pool/slot" -c user.name=probe -c user.email=probe@example.test commit -q -m work >/dev/null 2>&1 &&
+  git -C '$proj' worktree remove "\$TREEHOUSE_ROOT/pool/slot" >/dev/null 2>&1
+echo "slot=\$?" >> '$probe.tmp'
+mv '$probe.tmp' '$probe'
+SH
+  cat > "$dir/primary" <<SH
+#!/bin/sh
+tmux new-window -d '$dir/window'
+exec sleep 60
+SH
+  chmod +x "$dir/window" "$dir/primary"
+  out=$(FM_TEST_SEAM=1 FM_PRIVATEER_PRIMARY="$dir/primary" FM_HOME="$home" FM_ROOT_OVERRIDE="$root" "$PRIVATEER" start 2>&1)
+  status=$?
+  socket=$(printf '%s\n' "$out" | sed -n 's/.*on tmux socket \([^ ]*\).*/\1/p' | head -1)
+  wait_for_file "$probe"
+  FM_HOME="$home" FM_ROOT_OVERRIDE="$root" "$PRIVATEER" stop >/dev/null 2>&1 || { [ -z "$socket" ] || tmux -L "$socket" kill-server 2>/dev/null; }
+  kill "$spid" 2>/dev/null
+  expect_code 0 "$status" "the real session must start: $out"
+  assert_equals "planted=none
+control=0
+rootslot=0
+rootworktrees=kept
+slot=0" "$(cat "$probe" 2>/dev/null)" \
+    "a command started through tmux must move aside, replace, link over, or plant none of the directories that lead to the Git config or hooks of the checkout, a clone, their submodules, or a linked worktree outside the pool, nor write that worktree's submodule config, while it still renames a directory of the home and adds, commits in, and removes worktrees in the home's own pool"
+  for g in "$root_git/modules/lib/sub" "$proj_git/modules/lib/sub" "$wt_git/modules/lib/sub"; do
+    [ -f "$g/HEAD" ] || fail "the submodule git dir at $g must still be in place after the session"
+  done
+  assert_not_contains "$(git -C "$proj" worktree list --porcelain)" "pool/slot" "the clone's pool worktree must be gone after its removal"
+  pass "in the real sandboxed session no directory leading to a Git config or hooks of the checkout, a clone, their submodules, or a linked worktree outside the pool can be moved aside, replaced, linked over, or planted, while the session's own pool worktrees are still added and removed"
+}
+
 # --- spawn ------------------------------------------------------------------
 
 # make_spawn_case <name> <id>: a Privateer home with a project and worktree for
@@ -1800,6 +1908,7 @@ test_proxy_forwards_only_allowed_destinations
 test_session_sandbox_holds_every_command
 test_session_first_mate_owns_the_lock_and_a_plain_shell_does_not
 test_session_zsh_here_document_runs
+test_session_sandbox_pins_git_metadata
 test_start_refuses_while_running
 test_stop_refuses_with_work_in_flight_and_stops_an_idle_session
 test_stop_stow_delivers_the_stow_then_stops
