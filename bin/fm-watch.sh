@@ -2221,8 +2221,9 @@ fm_active_check_stop() {
 }
 
 # Blocking-prone external reads in the poll (backend pane, agent, and composer
-# reads, crew state, the event wait and its capability probe) go through
-# watcher_read instead of a bare command substitution. Stock macOS bash 3.2
+# reads, crew state, the active check's process-group read, the event wait and
+# its capability probe) go through watcher_read instead of a bare command
+# substitution. Stock macOS bash 3.2
 # retries a command-substitution read without acting on a pending TERM, so one
 # hung read kept a stopped watcher alive until KILL, skipping watcher_cleanup;
 # a waited child is stoppable on every supported bash. In the main shell the
