@@ -1,0 +1,42 @@
+### Lab home: /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.K5DtsG (config/privateer present); session socket fm-privateer-2748adf306cf
+
+### 1. INSIDE the session (real tmux pane): first mate tries to grant
+error: fm-permission-grant.sh refused: in a Privateer home only the captain records a grant or revocation, from their own shell outside this session; ask the captain to run it there, then relaunch the worker once the captain says it is recorded: FM_HOME=/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.K5DtsG /Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M4R5GAXRXVS8PJGMAZB5J81A/bin/fm-permission-grant.sh grant --scope task --task pv-demo --permission bash --pattern 'npm test' --action allow --words-file /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.K5DtsG/words --channel chat
+[exit=2]
+bash-3.2$ 
+ledger exists after refused grant? no
+
+### 2. OUTSIDE (captain's own shell, TMUX and FM_HOME unset, cwd /): run the exact command the refusal named
+$ FM_HOME=/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.K5DtsG /Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M4R5GAXRXVS8PJGMAZB5J81A/bin/fm-permission-grant.sh grant --scope task --task pv-demo --permission bash --pattern 'npm test' --action allow --words-file /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.K5DtsG/words --channel chat
+g1791813086-37852-29807: allow bash "npm test" for task pv-demo; it applies at each OpenCode worker's next launch (bin/fm-control.sh <task> relaunch to apply now)
+[exit=0]
+ledger:
+{"v":1,"op":"grant","id":"g1791813086-37852-29807","ts":1791813086,"scope":"task","task":"pv-demo","task_dispatched_at":"1000","session":null,"permission":"bash","pattern":"npm test","action":"allow","words":"yes, let it run npm test\n","channel":"chat","ref":null}
+
+### 3. INSIDE: list and active still work
+g1791813086-37852-29807 task pv-demo allow bash "npm test" via chat: yes, let it run npm test 
+[{"bash":{"npm test":"allow"}}]
+[exit=0]
+bash-3.2$ 
+
+### 4. OUTSIDE: list and active
+g1791813086-37852-29807 task pv-demo allow bash "npm test" via chat: yes, let it run npm test 
+[{"bash":{"npm test":"allow"}}]
+
+### 5. INSIDE: revoke refused
+error: fm-permission-grant.sh refused: in a Privateer home only the captain records a grant or revocation, from their own shell outside this session; ask the captain to run it there, then relaunch the worker once the captain says it is recorded: FM_HOME=/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.K5DtsG /Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M4R5GAXRXVS8PJGMAZB5J81A/bin/fm-permission-grant.sh revoke g1791813086-37852-29807 --words-file /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.K5DtsG/words --channel chat
+[exit=2]
+bash-3.2$ 
+
+### 6. OUTSIDE: captain revokes
+g1791813086-37852-29807: revoked; it no longer applies from each OpenCode worker's next launch
+[exit=0]
+active inside after revoke:
+[]
+[exit=0]
+bash-3.2$ 
+
+### 7. Non-Privateer home (config/privateer removed): grant from the same socket is NOT refused
+g1791813092-44584-10731: allow bash "ls" for task pv-demo; it applies at each OpenCode worker's next launch (bin/fm-control.sh <task> relaunch to apply now)
+[exit=0]
+bash-3.2$ 
