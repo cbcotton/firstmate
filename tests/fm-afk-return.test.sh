@@ -36,6 +36,9 @@ install_runner() {  # <case-dir>
   cp "$ROOT/bin/fm-branch-outcome.sh" "$dir/bin/"
   cp "$ROOT/bin/fm-tasks-axi-lib.sh" "$dir/bin/"
   cp "$ROOT/bin/fm-backlog-transition-lib.sh" "$dir/bin/"
+  # fm-privateer-lib.sh: the backlog transition library sources it to route a
+  # Privateer session's task records.
+  cp "$ROOT/bin/fm-privateer-lib.sh" "$dir/bin/"
   # The merge-notification marker reader behind the brief's landed section.
   cp "$ROOT/bin/fm-pr-lib.sh" "$dir/bin/"
   cp "$ROOT/.tasks.toml" "$dir/home/.tasks.toml"

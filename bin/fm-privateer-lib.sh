@@ -5,8 +5,9 @@
 # docs/configuration.md ("Privateer quarantine") owns the operator contract,
 # including which scripts call the gate and which captain-side commands stay
 # usable outside the session. bin/fm-privateer.sh owns the session itself; this
-# library owns its tmux socket name, the inside-session predicate, and the
-# refusal every gated script prints.
+# library owns its tmux socket name, the inside-session predicate, the refusal
+# every gated script prints, and when a script inside the session hands a task
+# record write to the session's record writer (bin/fm-privateer-records.py).
 #
 # A home is a Privateer home while its config/privateer exists, as a file or a
 # symlink. Its session runs on a dedicated tmux server whose socket name is
@@ -26,8 +27,9 @@
 # the refusal as a negative answer (bin/fm-captain-hold.sh open reads 2 as
 # "cannot tell").
 #
-# Sourced by bin/fm-privateer.sh and the gated scripts. No side effects on
-# source. set -u / set -e safe.
+# Sourced by bin/fm-privateer.sh, the gated scripts, and
+# bin/fm-backlog-transition-lib.sh. No side effects on source. set -u / set -e
+# safe.
 
 FM_PRIVATEER_SEALED_EXIT=2
 FM_PRIVATEER_SEALED_REFUSAL='this is a sealed Privateer home; attach with bin/fm-privateer.sh attach, and never drive its session from outside'
@@ -63,6 +65,37 @@ FM_PRIVATEER_SESSION=privateer
 # fm_privateer_socket_path <socket-name>: the filesystem path of that socket.
 fm_privateer_socket_path() {
   printf '%s/tmux-%s/%s\n' "${TMUX_TMPDIR:-/tmp}" "$(id -u)" "$1"
+}
+
+# fm_privateer_records_socket <home>: the socket of <home>'s record writer
+# (bin/fm-privateer-records.py), fm-records-<the same 12 hex digits> beside the
+# session's tmux socket, a path short enough for a Unix socket wherever the
+# home lives. The session sandbox denies every write to it.
+fm_privateer_records_socket() {
+  local name
+  name=$(fm_privateer_socket_name "$1")
+  fm_privateer_socket_path "fm-records-${name#fm-privateer-}"
+}
+
+# fm_privateer_records_route <home> <config-dir>: return 0 when this process
+# must hand <home>'s task-record writes to its record writer: a Privateer home,
+# called inside its session, while the writer's socket exists. Anywhere else a
+# record is written directly, so a home without the writer is unchanged.
+fm_privateer_records_route() {
+  fm_privateer_home "$2" || return 1
+  fm_privateer_inside_session "$1" || return 1
+  [ -S "$(fm_privateer_records_socket "$1")" ]
+}
+
+# fm_privateer_records_request <home> <op> [<id> [<mode>]]: one request to
+# <home>'s record writer (ping, or publish, append, or remove of <id>, with the
+# content on stdin, and a publish's octal file mode); exits as
+# bin/fm-privateer-records.py request does, the refusal on stderr.
+fm_privateer_records_request() {
+  local home=$1 dir
+  shift
+  dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd) || return 3
+  python3 -I "$dir/fm-privateer-records.py" request "$(fm_privateer_records_socket "$home")" "$@"
 }
 
 # fm_privateer_session_running <socket-name>: return 0 when that socket's server

@@ -3487,9 +3487,16 @@ if [ "$TEARDOWN_BACKLOG_APPLIES" = 1 ]; then
 # size before reporting success, so a rollback that cannot be proven complete
 # is reported as not rolled back.
 teardown_legacy_stamp_rollback() {
+  local prestamp
   [ "$TEARDOWN_LEGACY_PRESTAMP_SIZE" -gt 0 ] 2>/dev/null || return 1
-  perl -e 'truncate($ARGV[0], $ARGV[1]) or exit 1' -- \
-    "$META" "$TEARDOWN_LEGACY_PRESTAMP_SIZE" || return 1
+  if fm_backlog_record_routed "$META"; then
+    # Inside a Privateer session the record writer republishes those bytes.
+    prestamp=$(head -c "$TEARDOWN_LEGACY_PRESTAMP_SIZE" -- "$META" && printf x) || return 1
+    fm_backlog_atomic_transition publish-content "${prestamp%x}" "$META" "task record" "$STATE" || return 1
+  else
+    perl -e 'truncate($ARGV[0], $ARGV[1]) or exit 1' -- \
+      "$META" "$TEARDOWN_LEGACY_PRESTAMP_SIZE" || return 1
+  fi
   [ "$(wc -c < "$META" | tr -d ' ')" = "$TEARDOWN_LEGACY_PRESTAMP_SIZE" ]
 }
 
@@ -3504,10 +3511,10 @@ teardown_legacy_stamp_rollback() {
     TEARDOWN_LEGACY_PRESTAMP_SIZE=$(wc -c < "$META" | tr -d ' ')
     TEARDOWN_LEGACY_STAMP_FAILED=
     if [ -s "$META" ] && [ -n "$(tail -c 1 -- "$META" 2>/dev/null)" ]; then
-      printf '\n' >> "$META" || TEARDOWN_LEGACY_STAMP_FAILED=newline
+      fm_backlog_record_append "$META" $'\n' "task record" || TEARDOWN_LEGACY_STAMP_FAILED=newline
     fi
     if [ -z "$TEARDOWN_LEGACY_STAMP_FAILED" ]; then
-      printf 'spawn_gen=%s\n' "$TEARDOWN_META_SPAWN_GEN" >> "$META" \
+      fm_backlog_record_append "$META" "spawn_gen=$TEARDOWN_META_SPAWN_GEN"$'\n' "task record" \
         || TEARDOWN_LEGACY_STAMP_FAILED=append
     fi
     if [ -z "$TEARDOWN_LEGACY_STAMP_FAILED" ] \

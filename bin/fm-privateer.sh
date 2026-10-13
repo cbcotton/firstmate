@@ -84,6 +84,20 @@
 # sandbox cannot write, by temp-file-and-rename, and the proxy re-reads the file
 # when it changes.
 #
+# The record writer (bin/fm-privateer-records.py, whose header owns its wire
+# behavior and identity check) is the only writer of the task records
+# state/<id>.meta while the session runs. start runs it as its own process,
+# outside the session and its sandbox, after the tmux server, with the first
+# mate's pane process id and start time, which it captures right after the
+# server starts, and writes its process id to
+# state/privateer/egress/records.pid. Its socket is the one
+# bin/fm-privateer-lib.sh names, beside the session's tmux socket; it stages
+# each write in state/privateer/egress/records.tmp/ and logs each refusal to
+# state/privateer/egress/records.log. It writes a record only for the first
+# mate's own process or one that descends from it, so a worker, which is a pane
+# the tmux server forks, can write none; the home's scripts inside the session
+# hand it every write of a task record (bin/fm-backlog-transition-lib.sh).
+#
 # reload is the captain's command to rewrite that file from the current config
 # (config/crew-dispatch.json and the forge origins) without restarting the
 # session. It runs outside the session like start and stop, refuses inside it
@@ -99,7 +113,9 @@
 # bind, then starts a dedicated tmux server (the socket bin/fm-privateer-lib.sh
 # names) inside bin/fm-sandbox-exec.sh, whose session `privateer` runs the
 # OpenCode primary as `opencode --agent privateer` in window `firstmate`, in
-# the helm with FM_HOME set to this home. The
+# the helm with FM_HOME set to this home. Once that window's pane exists, and
+# before any worker can, it starts the record writer for the pane's process,
+# and if it cannot, stops the server and the proxy and refuses. The
 # server, and again the primary itself, start from an empty environment plus
 # exactly: HOME PATH USER LOGNAME SHELL TERM TERMINFO TERMINFO_DIRS COLORTERM LANG
 # LC_ALL LC_CTYPE TMPDIR TMP TEMP TMUX_TMPDIR as the launcher saw them (TERMINFO
@@ -149,7 +165,8 @@
 # slots there; the shared pool under ~/.treehouse, and every other home's
 # slots, are out of reach. Nothing inside may write this home's egress
 # directory, config/, or bin/; the grant ledger state/permission-grants.jsonl,
-# which the captain writes from outside (bin/fm-permission-grant.sh); the
+# which the captain writes from outside (bin/fm-permission-grant.sh); any task
+# record state/<id>.meta, which the record writer writes, or its socket; the
 # helm, or any directory entry between this home and it; when this checkout
 # is inside this home, its bin/, the scripts the captain runs outside the
 # session, and any path in it an
@@ -183,11 +200,12 @@
 # clone's git dir is the one such entry that may still be created, because the
 # session's first pool worktree creates it, but nothing inside may move it,
 # remove it, or place a symlink there.
-# It may connect only to the egress proxy, the DNS resolver, and that socket,
-# so a client that ignores the proxy variables reaches nothing remote at all,
-# and may signal only processes inside the same sandbox, so it can neither
-# stop the proxy nor rewrite its record. Process information stays readable,
-# as bin/fm-sandbox-exec.sh states, so the first mate finds its own OpenCode
+# It may connect only to the egress proxy, the DNS resolver, that socket, and
+# the record writer's socket, so a client that ignores the proxy variables
+# reaches nothing remote at all, and may signal only processes inside the same
+# sandbox, so it can neither stop the proxy or the record writer nor rewrite
+# their records. Process information stays readable, as
+# bin/fm-sandbox-exec.sh states, so the first mate finds its own OpenCode
 # process and owns this home's session lock, while a plain shell started in
 # the session finds no harness and stays read-only.
 #
@@ -195,8 +213,15 @@
 #   - macOS cannot apply a second sandbox inside the first, so one session
 #     sandbox covers the first mate and every worker alike, in place of a
 #     per-task sailor sandbox;
-#   - a worker can therefore still write what the first mate's own fm-spawn
-#     writes from inside it: the task records state/<id>.meta;
+#   - a worker can therefore still write every other file under state/ and
+#     data/, including the status lines the first mate reads as evidence, and
+#     hold a task record's lock (state/.meta-<id>.lock) so the first mate's
+#     spawn waits; on the session's one tmux server it can also type into the
+#     first mate's pane, and so make the first mate write a record for it;
+#   - a record write from a script the first mate detaches (nohup, setsid)
+#     is refused, because that script no longer descends from the first mate;
+#     and once the first mate's process ends, every record write is refused
+#     until the session is started again;
 #   - the per-task temp roots under /tmp/fm-*, the user's own temporary
 #     directory ($TMPDIR), and the flat here-document files stock macOS
 #     Bash writes directly in /var/tmp as sh-thd* are namespaces shared by
@@ -223,9 +248,9 @@
 # attach attaches this terminal to the running session. stop refuses while any
 # task record (state/<id>.meta) exists, because a running worker's copy would
 # be orphaned, and otherwise stops this home's watcher and the whole server,
-# and then the egress proxy. When the session has already ended, stop still
-# stops the watcher and any egress proxy left behind and says so, and refuses
-# only when there was no proxy to stop.
+# and then the egress proxy and the record writer. When the session has already
+# ended, stop still stops the watcher and any egress proxy or record writer
+# left behind and says so, and refuses only when there was neither to stop.
 #
 # stop --stow is the captain's stop with a /stow first, for a caller such as a
 # Dock app. It applies the same refusals as stop, then, as the front door acting
@@ -501,6 +526,11 @@ tmux_socket_path() {  # <socket-name>
   fm_privateer_socket_path "$1"
 }
 
+# records_socket: the record writer's socket, beside the session's tmux socket.
+records_socket() {
+  fm_privateer_records_socket "$FM_HOME"
+}
+
 session_running() {  # <socket-name>
   fm_privateer_session_running "$1"
 }
@@ -625,6 +655,53 @@ start_egress_proxy() {
   return 1
 }
 
+# records_running: the record writer this home last started is alive.
+records_running() {
+  local pid
+  pid=$(cat "$EGRESS/records.pid" 2>/dev/null) || return 1
+  case "$pid" in '' | *[!0-9]*) return 1 ;; esac
+  case "$(ps -p "$pid" -o command= 2>/dev/null)" in
+    *fm-privateer-records.py*) return 0 ;;
+  esac
+  return 1
+}
+
+# stop_record_writer: stop the record writer this home last started, if it
+# still runs, and retire its socket.
+stop_record_writer() {
+  local pid _
+  if records_running; then
+    pid=$(cat "$EGRESS/records.pid")
+    kill "$pid" 2>/dev/null || true
+    for _ in $(seq 20); do
+      kill -0 "$pid" 2>/dev/null || break
+      sleep 0.1
+    done
+  fi
+  rm -f "$EGRESS/records.pid" "$EGRESS/records.ready" "$(records_socket)"
+}
+
+# start_record_writer <anchor-pid> <anchor-start>: the record writer as its own
+# process, outside the session and its sandbox, started with cmd_start's
+# env_args and serving cmd_start's home_real state directory for the first
+# mate's process <anchor-pid>, started at <anchor-start>; fails unless it
+# listens.
+start_record_writer() {
+  local pid _
+  stop_record_writer
+  /usr/bin/env -i "${env_args[@]}" nohup python3 -I "$SCRIPT_DIR/fm-privateer-records.py" serve "$(records_socket)" \
+    "$home_real/state" "$EGRESS" "$1" "$2" </dev/null >>"$EGRESS/records.err" 2>&1 &
+  pid=$!
+  printf '%s\n' "$pid" > "$EGRESS/records.pid"
+  for _ in $(seq 100); do
+    [ ! -e "$EGRESS/records.ready" ] || return 0
+    kill -0 "$pid" 2>/dev/null || break
+    sleep 0.1
+  done
+  stop_record_writer
+  return 1
+}
+
 # deny_entries <path>: deny writes to <path> and to each directory entry above
 # it up to, but not including, this home, so none can be renamed or created;
 # a path outside the home needs nothing. Uses cmd_start's home_real and
@@ -711,6 +788,7 @@ render_helm() {
 cmd_start() {
   local line sailor model check provider config socket socket_path primary port
   local name value launch tmp_real home_real root_real egress_real root_git projects_real git_meta pool_real wt_git wt_gitfile helm_real modules_dir
+  local anchor anchor_start records
   local -a env_args session_env sandbox_args
   env_args=()
   session_env=()
@@ -728,7 +806,7 @@ cmd_start() {
   [ -f "$RULEBOOK/AGENTS.md" ] && [ -f "$RULEBOOK/agents/privateer.md" ] ||
     refuse "the checkout at $FM_ROOT carries no Privateer rulebook (docs/privateer/AGENTS.md and docs/privateer/agents/privateer.md); update the checkout first"
   command -v tmux >/dev/null 2>&1 || refuse "tmux is required to run the Privateer session"
-  command -v python3 >/dev/null 2>&1 || refuse "python3 is required to run the Privateer egress proxy"
+  command -v python3 >/dev/null 2>&1 || refuse "python3 is required to run the Privateer egress proxy and record writer"
   "$SCRIPT_DIR/fm-sandbox-exec.sh" available || refuse "the Privateer sandbox needs sandbox-exec, which cannot run on this machine"
   primary=opencode
   if [ "${FM_TEST_SEAM:-}" = 1 ] && [ -n "${FM_PRIVATEER_PRIMARY:-}" ]; then
@@ -789,6 +867,12 @@ cmd_start() {
   # The grant ledger widens a worker's permissions at its next launch, so only
   # the captain's own shell outside the session writes it.
   sandbox_args+=(--deny-write "$home_real/state/permission-grants.jsonl")
+  # The task records steer relaunch, landing, and cleanup, so only the record
+  # writer outside the session writes them, for the first mate's own processes;
+  # everything inside may reach its socket but never replace it.
+  records=$(records_socket)
+  sandbox_args+=(--deny-write-regex "^$(regex_quote "$home_real/state")/[^/]+\\.meta\$"
+    --unix-socket "$records" --deny-write "$records")
   # The helm is the first mate's whole instruction surface, so nothing inside
   # may write it or move aside any directory that leads to it.
   sandbox_args+=(--deny-write "$helm_real")
@@ -877,6 +961,19 @@ cmd_start() {
   fi
   # Never copy a variable from a client that attaches later.
   tmux -L "$socket" set-option -g update-environment '' >/dev/null 2>&1 || true
+  # The first mate's pane process, taken before any worker can exist, is the
+  # one lineage the record writer serves; its start time rules out a reused pid.
+  anchor=$(tmux -L "$socket" list-panes -t "$SESSION:firstmate" -F '#{pane_pid}' 2>/dev/null | head -1)
+  anchor_start=
+  case "$anchor" in
+    '' | *[!0-9]*) ;;
+    *) anchor_start=$(LC_ALL=C ps -o lstart= -p "$anchor" 2>/dev/null) || anchor_start= ;;
+  esac
+  if [ -z "$anchor_start" ] || ! start_record_writer "$anchor" "$anchor_start"; then
+    tmux -L "$socket" kill-server 2>/dev/null || true
+    stop_egress_proxy
+    refuse "the Privateer record writer could not start for the first mate's process; nothing was left running"
+  fi
   echo "privateer: started session $SESSION on tmux socket $socket (first mate $sailor/$model, egress proxy 127.0.0.1:$port); attach with: FM_HOME=$(shell_quote "$home_real") $(shell_quote "$SCRIPT_DIR/fm-privateer.sh") attach"
 }
 
@@ -963,9 +1060,11 @@ cmd_stop() {  # [--stow]
   [ "$stow" -eq 0 ] || where=
   if ! session_running "$socket"; then
     FM_HOME="$FM_HOME" FM_STATE_OVERRIDE="$STATE" "$SCRIPT_DIR/fm-watch-arm.sh" --stop >/dev/null 2>&1 || true
-    [ -e "$EGRESS/pid" ] || refuse "the Privateer session is not running, and no egress proxy was left behind"
+    [ -e "$EGRESS/pid" ] || [ -e "$EGRESS/records.pid" ] ||
+      refuse "the Privateer session is not running, and no egress proxy or record writer was left behind"
     stop_egress_proxy
-    echo "privateer: the session$where had already ended; stopped its watcher and its egress proxy"
+    stop_record_writer
+    echo "privateer: the session$where had already ended; stopped its watcher, its egress proxy, and its record writer"
     return 0
   fi
   refuse_work_in_flight
@@ -976,6 +1075,7 @@ cmd_stop() {  # [--stow]
   FM_HOME="$FM_HOME" FM_STATE_OVERRIDE="$STATE" "$SCRIPT_DIR/fm-watch-arm.sh" --stop >/dev/null 2>&1 || true
   tmux -L "$socket" kill-server 2>/dev/null || refuse "the Privateer tmux server could not be stopped"
   stop_egress_proxy
+  stop_record_writer
   if [ "$stow" -eq 1 ]; then
     echo "privateer: the first mate stowed; stopped session $SESSION"
   else

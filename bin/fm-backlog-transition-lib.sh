@@ -55,6 +55,14 @@
 # closes a row that reads as an open captain call. An answer that closes the row
 # first applies any supported retained artifact from the validated record, then
 # replay simply retires the record.
+#
+# PRIVATEER. Inside a Privateer home's session the sandbox denies every
+# state/<id>.meta, so a task record in this home's state directory is removed,
+# published, and appended to by the session's record writer while it runs
+# (bin/fm-privateer-lib.sh owns when). Its content travels from memory, never
+# from a file staged where a worker could rewrite it: such a record is published
+# only with `publish-content`, and a staged-file `publish` of it is refused.
+# Every other record, and every record in any other home, is written directly.
 
 # Set by fm_backlog_transition_applies for a return-1 exemption.
 # shellcheck disable=SC2034 # Output global, read by the sourcing caller.
@@ -78,6 +86,10 @@ FM_BACKLOG_CLOSE_REPLAY_RESULT=
 # library does not source fm-tasks-axi-lib.sh does not apply.
 # shellcheck source=bin/fm-timeout-lib.sh disable=SC1091
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/fm-timeout-lib.sh"
+# The Privateer session's record writer routing is fm-privateer-lib.sh's alone;
+# it is stateless too.
+# shellcheck source=bin/fm-privateer-lib.sh disable=SC1091
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/fm-privateer-lib.sh"
 
 # Latched when a row read hits its bound. fm_backlog_row_show runs inside a
 # command substitution, so the subshell can READ this latch but cannot set it;
@@ -694,21 +706,88 @@ fm_backlog_record_present() {
   return 0
 }
 
+# fm_backlog_record_routed <path>: 0 when <path> is a task record in this home's
+# state directory that the Privateer session's record writer must write.
+fm_backlog_record_routed() {
+  local path=$1 dir state
+  case "$path" in */*.meta) ;; *) return 1 ;; esac
+  [ -n "${FM_HOME:-}" ] || return 1
+  fm_privateer_records_route "$FM_HOME" "${FM_CONFIG_OVERRIDE:-$FM_HOME/config}" || return 1
+  dir=$(fm_backlog_canonical_existing "${path%/*}") || return 1
+  state=$(fm_backlog_canonical_existing "$FM_HOME/state") || return 1
+  [ "$dir" = "$state" ]
+}
+
+# fm_backlog_record_via_writer <op> <path> <failure> [content]: hand one write of
+# the routed task record <path> to the record writer, setting
+# FM_BACKLOG_TRANSITION_ERROR to <failure> and the writer's answer when it fails.
+fm_backlog_record_via_writer() {
+  local op=$1 path=$2 failure=$3 id answer
+  id=${path##*/}
+  id=${id%.meta}
+  if [ "$#" -ge 4 ]; then
+    answer=$(printf '%s' "$4" | fm_privateer_records_request "$FM_HOME" "$op" "$id" 2>&1 >/dev/null) && return 0
+  else
+    answer=$(fm_privateer_records_request "$FM_HOME" "$op" "$id" 2>&1 </dev/null >/dev/null) && return 0
+  fi
+  FM_BACKLOG_TRANSITION_ERROR="$failure (${answer:-the record writer gave no answer})"
+  return 1
+}
+
 fm_backlog_record_remove() {
   local path=$1 label=$2 root=$3
   fm_backlog_record_parent_authorized "$path" "$label" "$root" || return 1
   if [ -e "$path" ] || [ -L "$path" ]; then
     fm_backlog_record_present "$path" "$label" "$root" || return 1
   fi
-  if ! rm -f "$path" 2>/dev/null || [ -e "$path" ] || [ -L "$path" ]; then
+  if fm_backlog_record_routed "$path"; then
+    fm_backlog_record_via_writer remove "$path" "$label could not be removed at $path" || return 1
+  elif ! rm -f "$path" 2>/dev/null; then
+    FM_BACKLOG_TRANSITION_ERROR="$label could not be removed at $path"
+    return 1
+  fi
+  if [ -e "$path" ] || [ -L "$path" ]; then
     FM_BACKLOG_TRANSITION_ERROR="$label could not be removed at $path"
     return 1
   fi
   return 0
 }
 
+# fm_backlog_record_publish_content <content> <target> <label> <root>: publish
+# <content> as the routed task record <target> through the record writer.
+fm_backlog_record_publish_content() {
+  local content=$1 target=$2 label=$3 root=$4
+  fm_backlog_record_parent_authorized "$target" "$label target" "$root" || return 1
+  if [ -e "$target" ] || [ -L "$target" ]; then
+    fm_backlog_record_present "$target" "$label target" "$root" || return 1
+  fi
+  if ! fm_backlog_record_routed "$target"; then
+    FM_BACKLOG_TRANSITION_ERROR="$label publication failed at $target (no Privateer record writer serves it)"
+    return 1
+  fi
+  fm_backlog_record_via_writer publish "$target" "$label publication failed at $target" "$content" || return 1
+  fm_backlog_record_present "$target" "$label" "$root"
+}
+
+# fm_backlog_record_append <path> <text> <label>: add <text> to the end of the
+# task record <path>, through the record writer when it is routed.
+fm_backlog_record_append() {
+  local path=$1 text=$2 label=$3
+  if fm_backlog_record_routed "$path"; then
+    fm_backlog_record_via_writer append "$path" "$label could not be updated at $path" "$text"
+    return
+  fi
+  printf '%s' "$text" >> "$path" && return 0
+  FM_BACKLOG_TRANSITION_ERROR="$label could not be updated at $path"
+  return 1
+}
+
 fm_backlog_record_publish() {
   local source=$1 target=$2 label=$3 root=$4
+  if fm_backlog_record_routed "$target"; then
+    FM_BACKLOG_TRANSITION_ERROR="$label publication failed at $target (the Privateer record writer publishes it only from memory, never from a staged file)"
+    return 1
+  fi
   fm_backlog_record_present "$source" "$label staged record" "$root" || return 1
   fm_backlog_record_parent_authorized "$target" "$label target" "$root" || return 1
   if [ -e "$target" ] || [ -L "$target" ]; then
@@ -836,6 +915,7 @@ fm_backlog_atomic_transition() {
   shift
   case "$operation" in
     publish) fm_backlog_record_publish "$@" ;;
+    publish-content) fm_backlog_record_publish_content "$@" ;;
     remove) fm_backlog_record_remove "$@" ;;
     dispatch) fm_backlog_dispatch_transition "$@" ;;
     rollback) fm_backlog_dispatch_rollback "$@" ;;

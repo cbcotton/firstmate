@@ -351,8 +351,11 @@
 #   not running, because the worker then runs inside that session's sandbox
 #   (bin/fm-privateer.sh owns it), in place of the sailor sandbox, which macOS
 #   cannot nest inside it; the
-#   record still gets sandbox=seatbelt. With the flag absent nothing here
-#   changes.
+#   record still gets sandbox=seatbelt. It is refused as well while the
+#   session's record writer (bin/fm-privateer-records.py) is not running or
+#   does not accept this process, because that sandbox denies the task record:
+#   the writer publishes it, composed in memory rather than staged in state/.
+#   With the flag absent nothing here changes.
 # Claude permission mode (config/claude-permission-mode):
 #   One token selecting the permission flag every claude launch (ship, scout,
 #   secondmate, and relaunch) carries. Absent or `bypass` keeps today's
@@ -1311,9 +1314,7 @@ spawn_abort_cleanup() {
   local status=$?
   if [ "$RELAUNCH_REPLACEMENT_PENDING" = 1 ] &&
     [ "$SPAWN_META_PUBLISH_STARTED" = 1 ] &&
-    [ -n "$SPAWN_META_TMP" ] &&
-    [ ! -e "$SPAWN_META_TMP" ] &&
-    [ ! -L "$SPAWN_META_TMP" ]; then
+    spawn_meta_publish_landed; then
     RELAUNCH_REPLACEMENT_PENDING=0
   fi
   if [ "$RELAUNCH_REPLACEMENT_PENDING" = 1 ]; then
@@ -2587,6 +2588,16 @@ if [ -e "$CONFIG/privateer" ] || [ -L "$CONFIG/privateer" ]; then
   while IFS= read -r privateer_assignment; do
     [ -z "$privateer_assignment" ] || export "${privateer_assignment?}"
   done <<< "$PRIVATEER_ENV"
+  # The session sandbox denies every task record, so its record writer must run
+  # and accept this process before anything exists.
+  if ! fm_privateer_records_route "$FM_HOME" "$CONFIG"; then
+    echo "error: the Privateer quarantine refuses this spawn: the Privateer record writer is not running; start the session with fm-privateer.sh start" >&2
+    exit 1
+  fi
+  if ! PRIVATEER_WRITER=$(fm_privateer_records_request "$FM_HOME" ping 2>&1 </dev/null); then
+    echo "error: the Privateer quarantine refuses this spawn: the Privateer record writer does not accept it: ${PRIVATEER_WRITER#refused: }" >&2
+    exit 1
+  fi
   SAILOR_SANDBOX=session
 fi
 # Worker account pin (header above): resolved before any endpoint, worktree, or
@@ -5165,7 +5176,7 @@ preserve_relaunch_meta() {
     !($1 in owned)
   ' "$RELAUNCH_META"
 }
-{
+spawn_compose_meta() {
   echo "window=$META_WINDOW"
   echo "endpoint_task_id=$ID"
   echo "worktree=$WT"
@@ -5224,15 +5235,47 @@ preserve_relaunch_meta() {
   if [ "$SPAWN_CONTROL_PARENT" = 1 ] && [ -n "${FM_CONTROL_RELAUNCH_TX:-}" ]; then
     echo "control_relaunch_tx=$FM_CONTROL_RELAUNCH_TX"
   fi
-} >"$SPAWN_META_PATH" || {
-  echo "error: task record for $ID could not be prepared at $SPAWN_META_PATH" >&2
+}
+# Inside a Privateer session the record writer publishes the record, and its
+# content stays in memory until then, so no worker can rewrite a staged copy.
+SPAWN_META_ROUTED=0
+SPAWN_META_CONTENT=
+if fm_backlog_record_routed "$STATE/$ID.meta"; then
+  SPAWN_META_ROUTED=1
+  SPAWN_META_TMP=
+  SPAWN_META_CONTENT=$(spawn_compose_meta && printf x) && [ "${SPAWN_META_CONTENT%x}" != "$SPAWN_META_CONTENT" ] || {
+    echo "error: task record for $ID could not be prepared" >&2
+    exit 1
+  }
+  SPAWN_META_CONTENT=${SPAWN_META_CONTENT%x}
+else
+  spawn_compose_meta >"$SPAWN_META_PATH" || {
+    echo "error: task record for $ID could not be prepared at $SPAWN_META_PATH" >&2
+    exit 1
+  }
+fi
+# spawn_publish_meta <failure-words>: publish the composed record, staged or
+# from memory, exiting with <failure-words> when that fails.
+spawn_publish_meta() {
+  if [ "$SPAWN_META_ROUTED" = 1 ]; then
+    fm_backlog_atomic_transition publish-content "$SPAWN_META_CONTENT" "$STATE/$ID.meta" "task record" "$STATE" && return 0
+  else
+    fm_backlog_atomic_transition publish "$SPAWN_META_TMP" "$STATE/$ID.meta" "task record" "$STATE" && return 0
+  fi
+  echo "error: $1 for $ID could not be published ($FM_BACKLOG_TRANSITION_ERROR)" >&2
   exit 1
 }
-if [ "$RELAUNCH" -eq 0 ]; then
-  if ! fm_backlog_atomic_transition publish "$SPAWN_META_TMP" "$STATE/$ID.meta" "task record" "$STATE"; then
-    echo "error: task record for $ID could not be published ($FM_BACKLOG_TRANSITION_ERROR)" >&2
-    exit 1
+# spawn_meta_publish_landed: the composed record is the published one, so an
+# interrupted publish is known to have completed.
+spawn_meta_publish_landed() {
+  if [ "$SPAWN_META_ROUTED" = 1 ]; then
+    [ "$(cat "$STATE/$ID.meta" 2>/dev/null && printf x)" = "${SPAWN_META_CONTENT}x" ]
+  else
+    [ -n "$SPAWN_META_TMP" ] && [ ! -e "$SPAWN_META_TMP" ] && [ ! -L "$SPAWN_META_TMP" ]
   fi
+}
+if [ "$RELAUNCH" -eq 0 ]; then
+  spawn_publish_meta "task record"
   SPAWN_META_TMP=
 fi
 
@@ -5286,10 +5329,7 @@ spawn_report_preserved_state() {
 
 if [ "$RELAUNCH" -eq 1 ]; then
   SPAWN_META_PUBLISH_STARTED=1
-  if ! fm_backlog_atomic_transition publish "$SPAWN_META_TMP" "$STATE/$ID.meta" "task record" "$STATE"; then
-    echo "error: replacement task record for $ID could not be published ($FM_BACKLOG_TRANSITION_ERROR)" >&2
-    exit 1
-  fi
+  spawn_publish_meta "replacement task record"
   RELAUNCH_REPLACEMENT_PENDING=0
   SPAWN_META_PUBLISH_STARTED=0
   SPAWN_META_TMP=
@@ -5527,7 +5567,7 @@ if [ -z "$SPAWN_TRACEPARENT" ] && [ "$RELAUNCH" -eq 1 ]; then
 fi
 
 spawn_record_traceparent() {
-  local meta="$STATE/$ID.meta" status=0 acquired=0
+  local meta="$STATE/$ID.meta" status=0 acquired=0 content
   # Fresh publication still owns the lock. Relaunch deliberately uses a short
   # independent critical section so other metadata interfaces can serialize.
   if [ "$SPAWN_META_LOCK_HELD" != 1 ]; then
@@ -5536,15 +5576,25 @@ spawn_record_traceparent() {
     SPAWN_META_LOCK_HELD=1
     acquired=1
   fi
-  SPAWN_META_TMP="$STATE/.$ID.meta.trace.${BASHPID:-$$}"
-  if [ ! -f "$meta" ] || [ ! -w "$meta" ] ||
-    ! awk -F= '$1 != "traceparent"' "$meta" >"$SPAWN_META_TMP" ||
-    ! printf 'traceparent=%s\n' "$SPAWN_TRACEPARENT" >>"$SPAWN_META_TMP" ||
-    ! fm_backlog_atomic_transition publish "$SPAWN_META_TMP" "$meta" "task record" "$STATE"; then
-    status=1
-    rm -f "$SPAWN_META_TMP" 2>/dev/null || true
+  if [ "$SPAWN_META_ROUTED" = 1 ]; then
+    # The record writer owns the record, which this sandbox denies, so the
+    # rewrite is composed in memory and published through it.
+    if [ ! -f "$meta" ] ||
+      ! content=$(awk -F= '$1 != "traceparent"' "$meta" && printf 'traceparent=%s\nx' "$SPAWN_TRACEPARENT") ||
+      ! fm_backlog_atomic_transition publish-content "${content%x}" "$meta" "task record" "$STATE"; then
+      status=1
+    fi
+  else
+    SPAWN_META_TMP="$STATE/.$ID.meta.trace.${BASHPID:-$$}"
+    if [ ! -f "$meta" ] || [ ! -w "$meta" ] ||
+      ! awk -F= '$1 != "traceparent"' "$meta" >"$SPAWN_META_TMP" ||
+      ! printf 'traceparent=%s\n' "$SPAWN_TRACEPARENT" >>"$SPAWN_META_TMP" ||
+      ! fm_backlog_atomic_transition publish "$SPAWN_META_TMP" "$meta" "task record" "$STATE"; then
+      status=1
+      rm -f "$SPAWN_META_TMP" 2>/dev/null || true
+    fi
+    SPAWN_META_TMP=
   fi
-  SPAWN_META_TMP=
   if [ "$acquired" = 1 ]; then
     fm_lock_release "$SPAWN_META_LOCK" || status=1
     SPAWN_META_LOCK_HELD=0

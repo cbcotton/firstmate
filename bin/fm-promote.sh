@@ -312,21 +312,35 @@ if ! mv "$BRIEF_REPLACEMENT" "$SCOUT_BRIEF"; then
 fi
 BRIEF_REPLACEMENT=
 
-TMP="$STATE/.$ID.meta.promote.${BASHPID:-$$}"
-grep -v -e '^kind=' -e '^mode=' -e '^yolo=' -e '^branch=' "$META" > "$TMP"
-{
-  echo "kind=ship"
-  echo "mode=$MODE"
-  echo "yolo=$YOLO"
-  echo "branch=$BRANCH"
-} >> "$TMP"
-if ! fm_backlog_atomic_transition publish "$TMP" "$META" "task record" "$STATE"; then
-  rm -f -- "$TMP"
+if fm_backlog_record_routed "$META"; then
+  # Inside a Privateer session the record writer publishes the record, composed
+  # in memory, so no worker can rewrite a staged copy.
+  CONTENT=$(grep -v -e '^kind=' -e '^mode=' -e '^yolo=' -e '^branch=' "$META" &&
+    printf 'kind=ship\nmode=%s\nyolo=%s\nbranch=%s\nx' "$MODE" "$YOLO" "$BRANCH") || {
+    echo "error: task record for $ID could not be prepared" >&2
+    exit 1
+  }
+  if ! fm_backlog_atomic_transition publish-content "${CONTENT%x}" "$META" "task record" "$STATE"; then
+    echo "error: task record for $ID could not be published ($FM_BACKLOG_TRANSITION_ERROR)" >&2
+    exit 1
+  fi
+else
+  TMP="$STATE/.$ID.meta.promote.${BASHPID:-$$}"
+  grep -v -e '^kind=' -e '^mode=' -e '^yolo=' -e '^branch=' "$META" > "$TMP"
+  {
+    echo "kind=ship"
+    echo "mode=$MODE"
+    echo "yolo=$YOLO"
+    echo "branch=$BRANCH"
+  } >> "$TMP"
+  if ! fm_backlog_atomic_transition publish "$TMP" "$META" "task record" "$STATE"; then
+    rm -f -- "$TMP"
+    TMP=
+    echo "error: task record for $ID could not be published ($FM_BACKLOG_TRANSITION_ERROR)" >&2
+    exit 1
+  fi
   TMP=
-  echo "error: task record for $ID could not be published ($FM_BACKLOG_TRANSITION_ERROR)" >&2
-  exit 1
 fi
-TMP=
 rm -f -- "$BRIEF_ORIGINAL" 2>/dev/null || true
 BRIEF_ORIGINAL=
 fm_lock_release "$META_LOCK"

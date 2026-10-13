@@ -3,7 +3,8 @@
 # verbs in a Privateer home, run from inside the home's session. scout and ship
 # file the backlog row, write the instructions with the ask as the captain's
 # intent, take the first sailor that can take the work, and start it through
-# the real bin/fm-spawn.sh against a fake tmux and treehouse; work no sailor
+# the real bin/fm-spawn.sh against a fake tmux and treehouse, its record
+# written by the session's real record writer; work no sailor
 # can take waits in the queue, named with the spawn call that starts it; a
 # home with dispatch rules is asked to choose one before anything is written;
 # the --stdin form the slash commands use, fed the text OpenCode writes, keeps
@@ -21,17 +22,29 @@ set -u
 
 command -v jq >/dev/null 2>&1 || { echo "skip: jq not found"; exit 0; }
 command -v tasks-axi >/dev/null 2>&1 || { echo "skip: tasks-axi not found"; exit 0; }
+command -v python3 >/dev/null 2>&1 || { echo "skip: python3 not found"; exit 0; }
 
 HELM="$ROOT/bin/fm-helm.sh"
 TMP_ROOT=$(fm_test_tmproot fm-helm)
+WRITER_PIDS=()
+
+# helm_test_cleanup: stop every case's record writer, then the shared fixture
+# cleanup.
+helm_test_cleanup() {
+  local pid
+  for pid in "${WRITER_PIDS[@]+"${WRITER_PIDS[@]}"}"; do kill "$pid" 2>/dev/null; done
+  fm_test_cleanup
+}
+trap helm_test_cleanup EXIT
 SEALED_REFUSAL='this is a sealed Privateer home; attach with bin/fm-privateer.sh attach, and never drive its session from outside'
 DISPATCH='{"sailors":{"tiller":{"endpoint":"http://127.0.0.1:11234/v1","status":"live","models":["coder"]},"bonsai":{"endpoint":"http://127.0.0.1:11235/v1","status":"live","models":["small"]}},"default":[{"harness":"opencode","sailor":"tiller","model":"coder"},{"harness":"opencode","sailor":"bonsai","model":"small"}]}'
 RULES_DISPATCH='{"sailors":{"tiller":{"endpoint":"http://127.0.0.1:11234/v1","status":"live","models":["coder"]},"bonsai":{"endpoint":"http://127.0.0.1:11235/v1","status":"live","models":["small"]}},"rules":[{"when":"reading and reporting only","use":{"harness":"opencode","sailor":"bonsai","model":"small"}}],"default":{"harness":"opencode","sailor":"tiller","model":"coder"}}'
 
 # make_case <name> [<dispatch-json>]: a Privateer home with one registered
-# project, app, whose ships take the pv/ prefix, a markdown backlog, and a
-# fake curl that answers for every sailor except those named in
-# <case-dir>/down; sets CASE_DIR, HOME_DIR, PROJ_DIR, WT_DIR, FAKEBIN_DIR.
+# project, app, whose ships take the pv/ prefix, a markdown backlog, the
+# session's record writer, and a fake curl that answers for every sailor
+# except those named in <case-dir>/down; sets CASE_DIR, HOME_DIR, PROJ_DIR,
+# WT_DIR, FAKEBIN_DIR.
 make_case() {
   CASE_DIR="$TMP_ROOT/$1"
   HOME_DIR="$CASE_DIR/home"
@@ -44,6 +57,7 @@ make_case() {
   printf '%s\n' "${2:-$DISPATCH}" > "$HOME_DIR/config/crew-dispatch.json"
   mkdir -p "$HOME_DIR/state/privateer/egress"
   printf '18080\n' > "$HOME_DIR/state/privateer/egress/port"
+  start_record_writer
   cp "$ROOT/.tasks.toml" "$HOME_DIR/.tasks.toml"
   printf '## In flight\n\n## Queued\n\n## Done\n' > "$HOME_DIR/data/backlog.md"
   printf -- '- app [local-only branch=pv/] - the test project (added 2026-09-30)\n' > "$HOME_DIR/data/projects.md"
@@ -65,6 +79,23 @@ SH
 
 session_socket() {
   (. "$ROOT/bin/fm-privateer-lib.sh" && fm_privateer_socket_name "$1")
+}
+
+# start_record_writer: the case home's record writer, as fm-privateer.sh start
+# runs it, serving this test's shell and so every front-door call it makes, as
+# the session's writer serves the first mate and the scripts it runs.
+start_record_writer() {
+  local sock egress="$HOME_DIR/state/privateer/egress" _
+  sock=$(. "$ROOT/bin/fm-privateer-lib.sh" && fm_privateer_records_socket "$HOME_DIR")
+  mkdir -p "${sock%/*}"
+  python3 -I "$ROOT/bin/fm-privateer-records.py" serve "$sock" "$(cd "$HOME_DIR/state" && pwd -P)" "$egress" \
+    "$$" "$(ps -o lstart= -p "$$")" 2>> "$CASE_DIR/writer.err" &
+  WRITER_PIDS+=("$!")
+  for _ in $(seq 100); do
+    [ ! -e "$egress/records.ready" ] || return 0
+    sleep 0.1
+  done
+  fail "the record writer never listened: $(cat "$CASE_DIR/writer.err" 2>/dev/null)"
 }
 
 # helm_env: the environment a front-door call runs in, as fm_test_run_spawn

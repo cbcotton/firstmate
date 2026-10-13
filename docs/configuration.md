@@ -982,13 +982,19 @@ It allows exactly the endpoint of every sailor in the sailor map and the forge o
 `bin/fm-privateer.sh reload` rewrites it from the current `config/crew-dispatch.json` and forge origins without restarting the session, so a new sailor is reachable at once and a removed one is refused from then on.
 It runs outside the session, refuses while the proxy is not running, prints what it added and removed, and the proxy logs each reload.
 A file the proxy cannot read leaves the last good list in force, never an open proxy.
-When the session has already ended, for example because the first mate's window closed, `stop` still stops the watcher and the proxy left behind and says so, so no proxy outlives its session.
+When the session has already ended, for example because the first mate's window closed, `stop` still stops the watcher, the proxy, and the record writer left behind and says so, so neither outlives its session.
 The first mate and every worker receive `HTTP_PROXY`, `HTTPS_PROXY`, and a `GIT_SSH_COMMAND` that tunnels Git over SSH through the proxy.
+
+The task records `state/<id>.meta` are written by the launcher's record writer, `bin/fm-privateer-records.py`, which `start` also runs as its own process outside the session and its sandbox.
+Right after the tmux server starts, before any worker can exist, `start` takes the first mate's pane process and its start time, and the writer serves only that process and the processes that descend from it; every worker is a pane the tmux server forks, so none descends from the first mate.
+The home's scripts inside the session hand it every write of a task record, with the record composed in memory rather than staged where a worker could rewrite it, and it logs each refusal to `state/privateer/egress/records.log`.
+`start` refuses, stopping the session and the proxy, if the writer cannot start, and `stop` stops it after the proxy.
+`bin/fm-privateer-records.py`'s header owns the identity check and the wire behavior.
 
 The sandbox holds the session's whole tmux server, so every pane and every command started in the session inherits it: the first mate, each worker and its pane shell, and anything the first mate asks tmux to run.
 Everything inside can write only to the home, the checkout's `.opencode/` scratch, the shared temporary namespaces named in the remaining limits below, and the server's own socket.
 Workers' copies live in the home's own Treehouse pool, `state/privateer/treehouse`, which the session names as `TREEHOUSE_ROOT`, so `treehouse` creates and hands out slots there and the shared pool under `~/.treehouse`, with every other home's slots, is out of reach.
-It can never write the home's egress directory, `config/`, or `bin/`, the [grant ledger](#permission-grants-statepermission-grantsjsonl) `state/permission-grants.jsonl`, the helm, or any directory entry between the home and the egress directory or the helm, or the Git config or hooks of the checkout, of any clone under `projects/`, or of any linked worktree or submodule of those.
+It can never write the home's egress directory, `config/`, or `bin/`, the [grant ledger](#permission-grants-statepermission-grantsjsonl) `state/permission-grants.jsonl`, any task record `state/<id>.meta` or the record writer's socket, the helm, or any directory entry between the home and the egress directory or the helm, or the Git config or hooks of the checkout, of any clone under `projects/`, or of any linked worktree or submodule of those.
 When the checkout is inside the home, it also cannot write the checkout's `bin/`, the scripts the captain runs outside the session, or any path in the checkout that an OpenCode first mate loads or the helm is rendered from: `AGENTS.md`, `CLAUDE.md`, `CONTEXT.md`, `opencode.json`, `opencode.jsonc`, `tui.json`, `tui.jsonc`, `.agents/`, `docs/`, the `.claude` entry and its `skills` link, the `.opencode` entry, and, under `.opencode/`, the `opencode.json`, `opencode.jsonc`, `tui.json`, and `tui.jsonc` files and the `agent`, `agents`, `command`, `commands`, `mode`, `modes`, `plugin`, `plugins`, `skill`, `skills`, `tool`, and `tools` directories.
 So no worker can rewrite the first mate's instructions, docs, config, skills, agents, commands, modes, plugins, or tools in its checkout; the rest of `.opencode/`, such as its `package.json` and `node_modules/`, stays OpenCode's scratch.
 It can neither rename, replace, or create the checkout's own `.git` or any `.git` entry in a clone, nor redirect or relabel the git dir, `commondir`, or `gitdir` of a linked worktree that lives outside the home's pool.
@@ -1000,22 +1006,24 @@ Inside the top-level git dir of the checkout and of each clone, it can neither m
 The same holds for the `modules` entries inside the git dir of a linked worktree outside the home's pool, whose submodules' Git config and hooks it cannot write either.
 The `worktrees` directory of the checkout's and each clone's git dir may still be created, by the session's first worktree in its own pool, but nothing inside may move it, remove it, or replace it with a symlink; the session still adds and removes its own pool worktrees.
 So no linked worktree's or submodule's Git config or hooks can be swapped in by moving a directory aside and back.
-It can connect only to the egress proxy, the DNS resolver, and that socket, so a client that ignores the proxy variables reaches nothing remote at all.
-It can signal only processes inside the same sandbox, so nothing in the session can stop the proxy, and the egress directory's port and process record are out of its reach.
+It can connect only to the egress proxy, the DNS resolver, that socket, and the record writer's socket, so a client that ignores the proxy variables reaches nothing remote at all.
+It can signal only processes inside the same sandbox, so nothing in the session can stop the proxy or the record writer, and the egress directory's port and process records are out of its reach.
 Process information stays readable, as the [sailor sandbox](#sailor-sandbox-configsailor-sandbox) describes, so the first mate's session start finds its own OpenCode process, names `opencode` as the primary harness, and owns the home's session lock, while a plain shell started in the session finds no harness and stays read-only.
 
 The home's own scripts act on it only from inside its session.
 `bin/fm-spawn.sh`, `bin/fm-tasks-axi.sh`, `bin/fm-brief.sh`, `bin/fm-send.sh`, `bin/fm-control.sh`, `bin/fm-captain-hold.sh`, `bin/fm-merge-local.sh`, `bin/fm-teardown.sh`, and `bin/fm-helm.sh` each refuse from anywhere else before reading or writing anything, with exit status 2 and `this is a sealed Privateer home; attach with bin/fm-privateer.sh attach, and never drive its session from outside`.
 The refusal names no socket, port, or path, so a session outside the quarantine, such as the captain's own OpenCode opened in the home's directory, can neither file backlog rows, write briefs, steer, stop, or spawn workers, record holds, land work, or clean up in the home, nor learn where the session is.
-A spawn inside the session is also refused while its egress proxy is not running, so a worker can never land in an unsandboxed tmux server.
+A spawn inside the session is also refused while its egress proxy is not running, so a worker can never land in an unsandboxed tmux server, and while its record writer is not running or does not accept the process that spawns.
 The captain's own commands stay usable outside the session: `bin/fm-privateer.sh` `check`, `start`, `stop`, `reload`, `attach`, and `project`, the [named sailor](#crew-dispatch-profiles-configcrew-dispatchjson) commands of `bin/fm-sailor.sh`, `bin/fm-permission-grant.sh`, whose `grant` and `revoke` run only there (see [permission grants](#permission-grants-statepermission-grantsjsonl)), and `bin/fm-update.sh`.
 `bin/fm-privateer-lib.sh` owns the inside-session test and the refusal.
 
 Version 1 has these remaining limits:
 
-- `sandbox-exec` is required, so Privateer runs on macOS only, and `python3` is required for the proxy.
+- `sandbox-exec` is required, so Privateer runs on macOS only, and `python3` is required for the proxy and the record writer.
 - macOS cannot apply one sandbox inside another, so one session sandbox covers the first mate and every worker alike, in place of the per-task [sailor sandbox](#sailor-sandbox-configsailor-sandbox).
-- A worker can therefore still write the task records `state/<id>.meta` that the first mate's own spawn writes from inside that sandbox.
+- A worker can therefore still write every other file under `state/` and `data/`, including the status lines the first mate reads as evidence, and hold a task record's lock, `state/.meta-<id>.lock`, so the first mate's spawn waits.
+- On the session's one tmux server a worker can also type into the first mate's pane, and so make the first mate write a task record for it.
+- A task record write from a script the first mate detaches, with `nohup` or `setsid`, is refused, because that script no longer descends from the first mate; and once the first mate's process ends, every record write is refused until the session is started again.
 - A grant or revoke `--words-file` is refused only inside the home, so one the captain keeps where the session can still write, such as the shared temporary namespaces below or the checkout's `.opencode/` scratch, is as open to a worker; typing the words on stdin avoids that.
 - The per-task temp roots under `/tmp/fm-`, the user's own temporary directory (`$TMPDIR`), and the flat here-document files stock macOS Bash writes directly in `/var/tmp` as `sh-thd*` are namespaces shared by every home on the machine.
   A checkout kept in one of them, such as a linked worktree, keeps its `.git` gitfile writable.
