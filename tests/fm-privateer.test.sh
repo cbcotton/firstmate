@@ -8,20 +8,26 @@
 # bin/fm-permission-grant.sh records a grant or revocation only from outside
 # the session, naming that exact command in its stdin form when refused
 # inside, takes the captain's words on stdin, prompting on a terminal, and
-# refuses a words file that resolves inside the home; and the
+# refuses a words file that resolves inside the home; inside the session
+# every task record write goes through the record writer
+# (bin/fm-privateer-records.py), a spawn is refused without it or when it does
+# not accept the spawn, and a spawn's record is the writer's; and the
 # launcher, run with a stub first mate that prints its environment, passes no
 # ANTHROPIC_*, CLAUDE_*, or CLAUDECODE variable, refuses without the flag or
 # with a forbidden file, starts the real egress proxy (bin/fm-privateer-proxy.py)
-# as its own process with exactly the sailors and the forge allowed and the
-# tmux server inside a sandbox that reaches only that proxy and keeps a checkout
-# inside the home from rewriting the first mate's instructions, refuses when
-# the proxy cannot bind, and refuses to stop while work is in flight. A fake tmux
+# as its own process with exactly the sailors and the forge allowed, the real
+# record writer for the first mate's pane process, and the tmux server inside
+# a sandbox that reaches only that proxy and that writer, denies the task
+# records, and keeps a checkout inside the home from rewriting the first mate's
+# instructions, refuses when the proxy cannot bind or the writer cannot start,
+# and refuses to stop while work is in flight. A fake tmux
 # runs each new session's command in the background and records every call,
 # and a fake sandbox-exec records the profile it was given and runs the
 # command, so the launch shape is pinned on every platform. Where sandbox-exec
 # and tmux really run, cases start the real session: one proves that a
 # command the first mate starts through tmux reaches nothing but the proxy,
-# cannot stop or rewrite it, and cannot forge a grant, one that a first mate
+# cannot stop or rewrite it, and cannot forge a grant or a task record while the
+# first mate's own script publishes and removes one, one that a first mate
 # running as opencode detects its harness and owns the fleet lock while a plain
 # shell in the same session stays read-only, one that such a command can move
 # aside, replace, link over, or plant no directory leading to a Git config or
@@ -38,6 +44,16 @@ set -u
 
 PRIVATEER="$ROOT/bin/fm-privateer.sh"
 TMP_ROOT=$(fm_test_tmproot fm-privateer)
+STARTED_PIDS=()
+
+# privateer_test_cleanup: stop every process a case started itself, then the
+# shared fixture cleanup.
+privateer_test_cleanup() {
+  local pid
+  for pid in "${STARTED_PIDS[@]+"${STARTED_PIDS[@]}"}"; do kill "$pid" 2>/dev/null; done
+  fm_test_cleanup
+}
+trap privateer_test_cleanup EXIT
 DISPATCH='{"sailors":{"tiller":{"title":"Tiller","endpoint":"http://127.0.0.1:11234/v1","status":"live","models":["coder"],"model_settings":{"coder":{"limit":{"context":131072,"output":16384},"options":{"reasoningEffort":"medium","temperature":0.6}}}}},"default":{"harness":"opencode","sailor":"tiller","model":"coder"}}'
 
 # make_home <name>: a clean Privateer home under TMP_ROOT/<name>; prints its path.
@@ -100,7 +116,7 @@ SH
 # make_launcher_fakebin <case-dir>: a tmux that runs each new session's or
 # window's command in the background and logs every call to <case-dir>/tmux.log,
 # keeping "running" as the file <case-dir>/tmux-running and the background pids
-# in <case-dir>/tmux-pids; a
+# in <case-dir>/tmux-pids, the first of which it names as the pane process; a
 # sandbox-exec that writes its profile to <case-dir>/profile.sb and runs the
 # command; and the sailor's curl. The launcher clears the environment, so the
 # paths are baked in. Prints the dir.
@@ -136,6 +152,7 @@ case "\${1:-}" in
     ( cd "\$wd" && exec env TMUX="/tmp/tmux-fake/\$sock,1,0" TMUX_PANE="%\$((pane))" /bin/sh -c "\$cmd" ) >/dev/null 2>&1 &
     echo \$! >> "\$pids"
     ;;
+  list-panes) head -1 "\$pids" 2>/dev/null ;;
   kill-server)
     [ ! -s "\$pids" ] || kill \$(cat "\$pids") 2>/dev/null
     rm -f "\$running" "\$pids"
@@ -159,8 +176,9 @@ SH
 
 # make_stub_primary <case-dir>: a first mate that records its environment,
 # arguments, working directory, the Git top level it sits in, and the first
-# line of the AGENTS.md it would load there, in <case-dir>/primary.env; prints
-# the stub's path.
+# line of the AGENTS.md it would load there, in <case-dir>/primary.env, then
+# stays running, as the record writer requires of the first mate; prints the
+# stub's path.
 make_stub_primary() {
   local dir=$1
   cat > "$dir/stub-primary" <<SH
@@ -171,6 +189,7 @@ printf 'CWD=%s\\n' "\$PWD" >> '$dir/primary.env.tmp'
 printf 'TOPLEVEL=%s\\n' "\$(git rev-parse --show-toplevel 2>/dev/null)" >> '$dir/primary.env.tmp'
 printf 'INSTRUCTIONS=%s\\n' "\$(head -1 AGENTS.md 2>/dev/null)" >> '$dir/primary.env.tmp'
 mv '$dir/primary.env.tmp' '$dir/primary.env'
+exec sleep 60
 SH
   chmod +x "$dir/stub-primary"
   printf '%s\n' "$dir/stub-primary"
@@ -341,6 +360,13 @@ test_endpoint_rule() {
 # session_socket <home>: the tmux socket name of <home>'s Privateer session.
 session_socket() {
   ( . "$ROOT/bin/fm-privateer-lib.sh" && fm_privateer_socket_name "$1" )
+}
+
+# records_socket <home>: the physical path of <home>'s record writer socket.
+records_socket() {
+  local name
+  name=$(session_socket "$1")
+  printf '%s/tmux-%s/fm-records-%s\n' "$(cd "${TMUX_TMPDIR:-/tmp}" && pwd -P)" "$(id -u)" "${name#fm-privateer-}"
 }
 
 SEALED_REFUSAL='this is a sealed Privateer home; attach with bin/fm-privateer.sh attach, and never drive its session from outside'
@@ -747,7 +773,7 @@ test_start_refuses_without_a_first_mate_line() {
 }
 
 test_start_passes_only_the_allowlist() {
-  local dir home root out status envlog profile home_real root_real helm_real port tmp_real
+  local dir home root out status envlog profile home_real root_real helm_real port tmp_real records writer
   dir="$TMP_ROOT/start"
   home=$(make_home start)
   root="$dir/root"
@@ -761,6 +787,7 @@ test_start_passes_only_the_allowlist() {
   expect_code 0 "$status" "start must succeed in a clean home: $out"
   home_real=$(cd "$home" && pwd -P)
   root_real=$(cd "$root" && pwd -P)
+  records=$(records_socket "$home")
   port=$(cat "$home/state/privateer/egress/port" 2>/dev/null)
   [ -n "$port" ] || fail "start must record the egress proxy's port: $out"
   assert_contains "$out" "privateer: started session privateer on tmux socket fm-privateer-" "start must report the session and its socket"
@@ -808,7 +835,9 @@ test_start_passes_only_the_allowlist() {
   (subpath \"$home_real/config\")
   (subpath \"$home_real/bin\")
   (subpath \"$home_real/state/permission-grants.jsonl\")
+  (subpath \"$records\")
   (subpath \"$helm_real\")
+  (regex #\"^$(rq "$home_real")/state/[^/]+\\.meta\$\")
   (regex #\"^$(rq "$helm_real")\$\")
   (regex #\"^$(rq "$home_real")/state/privateer\$\")
   (regex #\"^$(rq "$home_real")/state\$\")
@@ -821,7 +850,7 @@ test_start_passes_only_the_allowlist() {
   (regex #\"^$(rq "$home_real")/projects\$\")
   (regex #\"^$(rq "$root_real")/\\.git/worktrees/side(\$|/(commondir|gitdir)\$|/modules(\$|/[^/]+\$|/.+/(hooks(/|\$)|config|commondir\$)))\")
 )" "$(sed -n '/^(deny file-write\*$/,/^)$/p' "$profile")" \
-    "the sandbox must take back only the egress record and the directories leading to it, the home's config and scripts, the grant ledger, the helm and the directories leading to it, and every Git config and hook and the directories leading to them, so every worker's OpenCode directories stay writable"
+    "the sandbox must take back only the egress record and the directories leading to it, the home's config and scripts, the grant ledger, the task records and the record writer's socket, the helm and the directories leading to it, and every Git config and hook and the directories leading to them, so every worker's OpenCode directories stay writable"
   assert_equals "(deny file-write-unlink (regex #\"^$(rq "$root_real")/\\.git/worktrees\$\"))
 (deny file-write-create (require-all (regex #\"^$(rq "$root_real")/\\.git/worktrees\$\") (vnode-type SYMLINK)))
 (deny file-write-unlink (regex #\"^$(rq "$home_real")/projects/[^/]+/(.+/)?\\.git/worktrees\$\"))
@@ -834,6 +863,13 @@ test_start_passes_only_the_allowlist() {
   tmp_real=$(cd /tmp && pwd -P)
   assert_grep "(regex #\"^$(rq "$tmp_real")/fm-\")" "$profile" "the sandbox must allow firstmate's per-task temp roots"
   assert_grep "(allow network-outbound (remote unix-socket (path-literal \"$(cd "${TMUX_TMPDIR:-/tmp}" && pwd -P)/tmux-" "$profile" "the sandbox must allow the session's own tmux socket"
+  assert_grep "(allow network-outbound (remote unix-socket (path-literal \"$records\")))" "$profile" "the sandbox must allow the record writer's socket"
+  [ -S "$records" ] || fail "start must leave the record writer listening on its socket"
+  writer=$(cat "$home/state/privateer/egress/records.pid" 2>/dev/null)
+  case "$(ps -p "$writer" -o command= 2>/dev/null)" in
+    *fm-privateer-records.py*serve*" $(head -1 "$dir/tmux-pids") "*) ;;
+    *) fail "start must run the record writer for the first mate's pane process: $(ps -p "$writer" -o command= 2>/dev/null)" ;;
+  esac
   assert_grep 'new-session -d -s privateer -n firstmate -c '"$helm_real" "$dir/tmux.log" "tmux must start the first mate in the helm"
   assert_grep "set-option -g update-environment " "$dir/tmux.log" "the server must copy no variable from an attaching client"
   # The proxy start launched allows exactly the sailor and the forge.
@@ -851,7 +887,9 @@ refused CONNECT forge.example.test:443' "$(jq -r '"\(.verdict) \(.method) \(.des
   [ ! -e "$home/state/privateer/egress/port" ] || fail "stop must retire the proxy's port"
   [ ! -e "$home/state/privateer/egress/pid" ] || fail "stop must retire the proxy's process id"
   ! proxy_request "$port" 'CONNECT 127.0.0.1:11234 HTTP/1.1' | grep -q HTTP || fail "stop must stop the egress proxy"
-  pass "start runs the egress proxy with the sailor and forge allowed, and the first mate with only the allowlist and isolated OpenCode directories in a tmux server whose sandbox reaches only that proxy"
+  ! kill -0 "$writer" 2>/dev/null || fail "stop must stop the record writer"
+  [ ! -e "$records" ] && [ ! -e "$home/state/privateer/egress/records.pid" ] || fail "stop must retire the record writer's socket and process id"
+  pass "start runs the egress proxy with the sailor and forge allowed, the record writer for the first mate's process, and the first mate with only the allowlist and isolated OpenCode directories in a tmux server whose sandbox reaches only that proxy and that writer"
 }
 
 test_start_denies_the_instructions_of_a_checkout_that_is_the_home() {
@@ -1040,6 +1078,32 @@ test_start_refuses_when_the_proxy_cannot_bind() {
   [ ! -e "$home/state/privateer/egress/pid" ] || fail "a refused start must leave no proxy record"
   [ ! -e "$dir/primary.env" ] || fail "no first mate may start without the proxy"
   pass "start refuses, and leaves nothing running, when the egress proxy cannot bind"
+}
+
+test_start_refuses_when_the_record_writer_cannot_start() {
+  local dir home root out status fakebin real
+  dir="$TMP_ROOT/start-no-writer"
+  home=$(make_home start-no-writer)
+  root="$dir/root"
+  make_checkout "$root"
+  fakebin=$(make_launcher_fakebin "$dir")
+  real=$(command -v python3)
+  cat > "$fakebin/python3" <<SH
+#!/bin/sh
+case " \$* " in *fm-privateer-records.py*) echo "cannot listen" >&2; exit 1 ;; esac
+exec '$real' "\$@"
+SH
+  chmod +x "$fakebin/python3"
+  make_stub_primary "$dir" >/dev/null
+  out=$(run_launcher "$dir" "$home" "$root" start)
+  status=$?
+  expect_code 1 "$status" "start must refuse when the record writer cannot start: $out"
+  assert_contains "$out" "the Privateer record writer could not start for the first mate's process; nothing was left running" "the refusal must name the record writer"
+  assert_grep "kill-server" "$dir/tmux.log" "the session must be stopped again"
+  [ ! -e "$dir/tmux-running" ] || fail "no session may be left running"
+  [ ! -e "$home/state/privateer/egress/pid" ] && [ ! -e "$home/state/privateer/egress/port" ] || fail "the egress proxy must be stopped again"
+  [ ! -e "$home/state/privateer/egress/records.pid" ] && [ ! -e "$(records_socket "$home")" ] || fail "a writer that did not start must leave no trace"
+  pass "start refuses, and leaves nothing running, when the record writer cannot start"
 }
 
 # proxy_request <port> <request-line>: the proxy's status line for one request.
@@ -1385,7 +1449,7 @@ test_stop_stow_refuses_when_the_stow_never_starts() {
 }
 
 test_stop_cleans_up_after_a_session_that_ended() {
-  local dir home root out status port
+  local dir home root out status port writer
   dir="$TMP_ROOT/stop-ended"
   home=$(make_home stop-ended)
   root="$dir/root"
@@ -1395,19 +1459,22 @@ test_stop_cleans_up_after_a_session_that_ended() {
   out=$(run_launcher "$dir" "$home" "$root" start)
   expect_code 0 "$?" "start must succeed: $out"
   port=$(cat "$home/state/privateer/egress/port")
+  writer=$(cat "$home/state/privateer/egress/records.pid")
   # The first mate's window closed and took the server with it.
   xargs kill < "$dir/tmux-pids" 2>/dev/null
   rm -f "$dir/tmux-running" "$dir/tmux-pids"
   out=$(run_launcher "$dir" "$home" "$root" stop)
   status=$?
   expect_code 0 "$status" "stop must clean up after an ended session: $out"
-  assert_contains "$out" "had already ended; stopped its watcher and its egress proxy" "stop must say what it stopped"
+  assert_contains "$out" "had already ended; stopped its watcher, its egress proxy, and its record writer" "stop must say what it stopped"
   [ ! -e "$home/state/privateer/egress/pid" ] && [ ! -e "$home/state/privateer/egress/port" ] || fail "stop must retire the proxy's record"
   ! proxy_request "$port" 'CONNECT 127.0.0.1:11234 HTTP/1.1' | grep -q HTTP || fail "no egress proxy may outlive its session"
+  ! kill -0 "$writer" 2>/dev/null || fail "no record writer may outlive its session"
+  [ ! -e "$(records_socket "$home")" ] && [ ! -e "$home/state/privateer/egress/records.pid" ] || fail "stop must retire the record writer's socket and process id"
   out=$(run_launcher "$dir" "$home" "$root" stop)
   expect_code 1 "$?" "a second stop has nothing left to stop"
-  assert_contains "$out" "the Privateer session is not running, and no egress proxy was left behind" "the refusal must say nothing was left"
-  pass "stop still stops the watcher and the egress proxy when the session has already ended"
+  assert_contains "$out" "the Privateer session is not running, and no egress proxy or record writer was left behind" "the refusal must say nothing was left"
+  pass "stop still stops the watcher, the egress proxy, and the record writer when the session has already ended"
 }
 
 test_attach_refuses_without_a_session() {
@@ -1440,6 +1507,7 @@ serve_dir() {
 
 test_session_sandbox_holds_every_command() {
   local dir home root out status spid opid sport oport port pid socket probe alive wtbase wtgit proj shared treehouse_line captain helm ledger first during
+  local records writer refused refused_status stopped stopped_status
   if ! "$ROOT/bin/fm-sandbox-exec.sh" available || ! command -v tmux >/dev/null 2>&1; then
     pass "session sandbox checks not run: sandbox-exec or tmux is not available on this machine"
     return 0
@@ -1494,6 +1562,17 @@ test_session_sandbox_holds_every_command() {
   run_grant "$home" /tmp/tmux-501/default,1,0 grant --scope standing --permission bash --pattern 'curl *' --action deny \
     --words-file "$dir/words" --channel chat >/dev/null || fail "the captain's grant must be recorded before the session starts"
   first=$(cat "$ledger")
+  records=$(records_socket "$home")
+  # One task record write as the first mate's own scripts make it.
+  cat > "$dir/record" <<SH
+#!/usr/bin/env bash
+. '$ROOT/bin/fm-backlog-transition-lib.sh'
+case "\$1" in
+  publish) fm_backlog_atomic_transition publish-content "kind=ship"\$'\\n' "\$FM_HOME/state/\$2.meta" "task record" "\$FM_HOME/state" ;;
+  remove) fm_backlog_atomic_transition remove "\$FM_HOME/state/\$2.meta" "task record" "\$FM_HOME/state" ;;
+esac || { echo "\$FM_BACKLOG_TRANSITION_ERROR"; exit 1; }
+SH
+  chmod +x "$dir/record"
   # A command the first mate starts through tmux, as a worker's pane is: it
   # tries the other server directly and through the proxy, writes where a
   # worker's OpenCode keeps its data and in OpenCode's scratch, tries to plant
@@ -1522,6 +1601,18 @@ for t in '$proj/.git/hooks/post-checkout' '$proj/.git/config' '$wtgit/config.wor
   ( : >> "\$t" ) 2>/dev/null && planted="\$planted \$t"
 done
 ( mkdir -p '$helm/.opencode/skills/new' && : >> '$helm/.opencode/skills/new/SKILL.md' ) 2>/dev/null && planted="\$planted $helm/.opencode/skills/new"
+( : > '$home/state/pv-forged.meta' ) 2>/dev/null && planted="\$planted create:pv-forged.meta"
+( printf 'kind=secondmate\\n' >> '$home/state/pv-rec.meta' ) 2>/dev/null && planted="\$planted append:pv-rec.meta"
+printf 'kind=secondmate\\n' > '$home/state/forged.next' && mv -f '$home/state/forged.next' '$home/state/pv-rec.meta' 2>/dev/null &&
+  planted="\$planted replace:pv-rec.meta"
+mv '$home/state/pv-rec.meta' '$home/state/pv-rec.aside' 2>/dev/null && planted="\$planted rename:pv-rec.meta"
+rm -f '$home/state/pv-rec.meta' 2>/dev/null
+[ -e '$home/state/pv-rec.meta' ] || planted="\$planted unlink:pv-rec.meta"
+ln -s '$home/state/probe' '$home/state/pv-link.meta' 2>/dev/null && planted="\$planted symlink:pv-link.meta"
+ln '$home/state/pv-rec.meta' '$home/state/pv-rec.link' 2>/dev/null && planted="\$planted hardlink:pv-rec.meta"
+'$dir/record' publish pv-forged >/dev/null 2>&1 && planted="\$planted writer:pv-forged"
+rm -f '$records' 2>/dev/null
+[ -S '$records' ] || planted="\$planted rm:$records"
 ( printf '%s\\n' '{"v":1,"op":"grant","id":"gforged","ts":1,"scope":"standing","permission":"bash","pattern":"*","action":"allow"}' >> '$ledger' ) 2>/dev/null &&
   planted="\$planted grant:$ledger"
 if mv '$home/state' '$home/state.moved' 2>/dev/null; then
@@ -1574,14 +1665,23 @@ mv '$probe.window.tmp' '$probe.window'
 SH
   # The first mate: it starts that window, then tries to stop the proxy and to
   # rewrite the port every worker is sent to.
+  # It publishes a task record through the record writer first, so the window
+  # meets an existing one, and removes it once the test has seen stop refuse.
   cat > "$dir/primary" <<SH
 #!/bin/sh
+'$dir/record' publish pv-rec > '$probe.published.tmp' 2>&1
+echo "published=\$?" >> '$probe.published.tmp'
+mv '$probe.published.tmp' '$probe.published'
 tmux new-window -d '$dir/window'
 kill "\$(cat "\$FM_HOME/state/privateer/egress/pid")" 2>/dev/null
 echo "kill=\$?" > '$probe.primary.tmp'
 ( echo 1 > "\$FM_HOME/state/privateer/egress/port" ) 2>/dev/null
 echo "rewrite=\$?" >> '$probe.primary.tmp'
 mv '$probe.primary.tmp' '$probe.primary'
+for _ in \$(seq 300); do [ -e '$probe.release' ] && break; sleep 0.1; done
+'$dir/record' remove pv-rec > '$probe.removed.tmp' 2>&1
+echo "removed=\$?" >> '$probe.removed.tmp'
+mv '$probe.removed.tmp' '$probe.removed'
 exec sleep 60
 SH
   chmod +x "$dir/window" "$dir/primary"
@@ -1594,7 +1694,17 @@ SH
   alive=$(proxy_request "$port" "GET http://127.0.0.1:$sport/v1/models HTTP/1.1")
   during=$(run_grant "$home" /tmp/tmux-501/default,1,0 grant --scope standing --permission bash --pattern 'wget *' --action deny \
     --words-file "$dir/words" --channel chat)
-  FM_HOME="$home" FM_ROOT_OVERRIDE="$root" "$PRIVATEER" stop >/dev/null 2>&1 || { [ -z "$socket" ] || tmux -L "$socket" kill-server 2>/dev/null; }
+  writer=$(cat "$home/state/privateer/egress/records.pid" 2>/dev/null)
+  refused=$(FM_HOME="$home" FM_ROOT_OVERRIDE="$root" "$PRIVATEER" stop 2>&1)
+  refused_status=$?
+  : > "$probe.release"
+  wait_for_file "$probe.removed"
+  stopped=$(FM_HOME="$home" FM_ROOT_OVERRIDE="$root" "$PRIVATEER" stop 2>&1)
+  stopped_status=$?
+  if [ "$stopped_status" != 0 ]; then
+    [ -z "$socket" ] || tmux -L "$socket" kill-server 2>/dev/null
+    kill "$pid" "$writer" 2>/dev/null
+  fi
   kill "$spid" "$opid" 2>/dev/null
   git -C "$proj" worktree remove --force "$wtbase/wt" 2>/dev/null
   rm -rf "$wtbase" "$captain"
@@ -1609,7 +1719,7 @@ status=0
 commit=0
 slot=0
 $treehouse_line" "$(cat "$probe.window" 2>/dev/null)" \
-    "a command started through tmux must reach nothing directly, be refused by the proxy for an unlisted host, write the worker's OpenCode data and OpenCode's scratch, plant no Git config, hook, home config, script, grant, or shared-pool slot, rewrite or move none of the first mate's instructions, skills, docs, or plugins in the checkout or the helm, nor move aside the helm or the directories leading to it, still write its status and commit in its own copy, and create and commit in a slot of the home's own pool"
+    "a command started through tmux must reach nothing directly, be refused by the proxy for an unlisted host, write the worker's OpenCode data and OpenCode's scratch, plant no Git config, hook, home config, script, grant, task record or link to one, or shared-pool slot, have the record writer refuse it, rewrite or move none of the first mate's instructions, skills, docs, or plugins in the checkout or the helm, nor move aside the helm or the directories leading to it or the writer's socket, still write its status and commit in its own copy, and create and commit in a slot of the home's own pool"
   case "$(cat "$probe.primary" 2>/dev/null)" in
     "kill=0"* | *"rewrite=0") fail "the first mate stopped or rewrote the egress proxy: $(cat "$probe.primary" 2>/dev/null)" ;;
     "kill="*) ;;
@@ -1617,6 +1727,16 @@ $treehouse_line" "$(cat "$probe.window" 2>/dev/null)" \
   esac
   cmp -s "$helm/AGENTS.md" "$ROOT/docs/privateer/AGENTS.md" ||
     fail "the helm's rulebook must exist and be unchanged after the session, so its write probes were real"
+  assert_equals "published=0" "$(cat "$probe.published" 2>/dev/null)" "the first mate's own script must publish its task record through the record writer"
+  expect_code 1 "$refused_status" "stop must refuse while the first mate's task record exists: $refused"
+  assert_contains "$refused" "work is in flight (pv-rec)" "stop must name only the record the first mate published"
+  assert_equals "removed=0" "$(cat "$probe.removed" 2>/dev/null)" "the first mate's own script must remove its task record through the record writer"
+  expect_code 0 "$stopped_status" "stop must end the session once that record is gone: $stopped"
+  assert_equals "publish pv-forged" "$(jq -r 'select(.verdict == "refused") | "\(.op) \(.id)"' "$home/state/privateer/egress/records.log" 2>/dev/null)" \
+    "the record writer must refuse and log the worker's request, and only that"
+  if [ -z "$writer" ] || kill -0 "$writer" 2>/dev/null; then
+    fail "stop must stop the record writer"
+  fi
   assert_contains "$during" "deny bash \"wget *\" for standing" "the captain's own shell must record a grant while the session runs"
   assert_equals "$first" "$(head -1 "$ledger")" "a worker's append must leave the captain's grant untouched"
   assert_equals 2 "$(wc -l < "$ledger" | tr -d ' ')" "the ledger must hold exactly the captain's two grants"
@@ -1628,7 +1748,7 @@ allowed GET 127.0.0.1:$sport" "$(jq -r --arg o "127.0.0.1:$oport" --arg s "127.0
     fail "stop must stop the egress proxy"
   fi
   [ "$port" != 1 ] || fail "the first mate rewrote the proxy's port"
-  pass "in the real sandboxed session, a command started through tmux reaches nothing but the proxy, plants nothing that runs outside, forges no grant while the captain's own shell still records one, and cannot rewrite the first mate's instructions, skills, docs, or plugins in the checkout or the helm, a worker still commits in its own copy and in a new slot of the home's own pool, and the first mate cannot stop or rewrite the proxy"
+  pass "in the real sandboxed session, a command started through tmux reaches nothing but the proxy, plants nothing that runs outside, forges no grant while the captain's own shell still records one, forges no task record while the first mate's own scripts still publish and remove one through the record writer, and cannot rewrite the first mate's instructions, skills, docs, or plugins in the checkout or the helm, a worker still commits in its own copy and in a new slot of the home's own pool, and the first mate cannot stop or rewrite the proxy"
 }
 
 test_session_first_mate_owns_the_lock_and_a_plain_shell_does_not() {
@@ -1981,6 +2101,32 @@ run_spawn() {
     fm_test_run_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$@"
 }
 
+# start_spawn_writer <anchor-pid>: the case home's record writer, as start runs
+# it, for that process and its descendants, under umask 077, so a record it
+# writes reads 0600 where a file the spawn staged itself would read 0644; sets
+# SPAWN_WRITER.
+start_spawn_writer() {
+  local sock egress="$HOME_DIR/state/privateer/egress"
+  sock=$(records_socket "$HOME_DIR")
+  mkdir -p "${sock%/*}"
+  ( umask 077 && exec python3 -I "$ROOT/bin/fm-privateer-records.py" serve "$sock" "$(cd "$HOME_DIR/state" && pwd -P)" \
+    "$egress" "$1" "$(ps -o lstart= -p "$1")" ) 2>> "$CASE_DIR/writer.err" &
+  SPAWN_WRITER=$!
+  STARTED_PIDS+=("$SPAWN_WRITER")
+  wait_for_file "$egress/records.ready" || fail "the record writer never listened: $(cat "$CASE_DIR/writer.err" 2>/dev/null)"
+}
+
+# stop_spawn_writer: stop the case's record writer and wait until it has gone.
+stop_spawn_writer() {
+  kill "$SPAWN_WRITER" 2>/dev/null
+  wait "$SPAWN_WRITER" 2>/dev/null
+}
+
+# file_mode <path>: the permission bits of <path>, in octal.
+file_mode() {
+  perl -e 'printf "%o", (stat($ARGV[0]))[2] & 07777' "$1"
+}
+
 # sq <text>: <text> single-quoted as it appears inside the launch's `sh -c` string.
 sq() {
   printf "'\\\\''%s'\\\\''" "$1"
@@ -2064,12 +2210,17 @@ test_spawn_refuses_while_a_forbidden_file_exists() {
 test_spawn_allows_a_local_only_sailor_with_a_cleared_environment() {
   local id=pv-ok out status launch
   make_spawn_case ok "$id"
-  out=$(run_spawn "$id" "$PROJ_DIR" --mode local-only --yolo off --harness opencode --model coder --sailor tiller)
+  # The spawn descends from this shell, as the first mate's scripts descend from it.
+  start_spawn_writer "$$"
+  out=$(umask 022 && run_spawn "$id" "$PROJ_DIR" --mode local-only --yolo off --harness opencode --model coder --sailor tiller)
   status=$?
+  stop_spawn_writer
   expect_code 0 "$status" "a local-only sailor spawn must succeed in a Privateer home"$'\n'"$out"
   assert_contains "$out" "spawned $id harness=opencode kind=ship mode=local-only yolo=off sailor=tiller sandbox=seatbelt" "the spawn must report the sailor and the sandbox"
   assert_grep "sailor=tiller" "$HOME_DIR/state/$id.meta" "the record must name the sailor"
   assert_grep "sandbox=seatbelt" "$HOME_DIR/state/$id.meta" "the record must name the sandbox"
+  assert_equals 600 "$(file_mode "$HOME_DIR/state/$id.meta")" "the record writer, not the spawn, must have written the record"
+  [ ! -e "$HOME_DIR/state/privateer/egress/records.log" ] || fail "the writer must refuse nothing of the first mate's spawn: $(cat "$HOME_DIR/state/privateer/egress/records.log")"
   launch=$(cat "$LAUNCH_LOG")
   # The floor's expansions are the pane shell's to make, so the literal is meant.
   # shellcheck disable=SC2016
@@ -2085,7 +2236,7 @@ test_spawn_allows_a_local_only_sailor_with_a_cleared_environment() {
     "the worker's OpenCode config must turn auto-update off and disable sharing"
   assert_not_contains "$launch" "fm-sandbox-exec.sh" "the worker must run in the session's sandbox, which macOS cannot nest a sailor sandbox inside"
   assert_not_contains "$launch" "no-mistakes/socket" "a local-only ship must not reach the shared pipeline socket"
-  pass "a Privateer home launches a local-only sailor with a cleared environment and isolated OpenCode directories inside the session's sandbox"
+  pass "a Privateer home launches a local-only sailor with a cleared environment and isolated OpenCode directories inside the session's sandbox, its record written by the session's record writer"
 }
 
 test_spawn_refuses_outside_the_session() {
@@ -2375,6 +2526,73 @@ test_spawn_refuses_while_no_egress_proxy_runs() {
   pass "a Privateer home refuses every spawn while its egress proxy is not running"
 }
 
+test_spawn_refuses_while_no_record_writer_runs() {
+  local id=pv-nowriter out status
+  make_spawn_case nowriter "$id"
+  out=$(run_spawn "$id" "$PROJ_DIR" --mode local-only --yolo off --harness opencode --model coder --sailor tiller)
+  status=$?
+  assert_refused_spawn "$id" "$status" "$out" "error: the Privateer quarantine refuses this spawn: the Privateer record writer is not running; start the session with fm-privateer.sh start" "a spawn without the record writer"
+  pass "a Privateer home refuses every spawn while its record writer is not running"
+}
+
+test_spawn_refuses_when_the_record_writer_does_not_accept_it() {
+  local id=pv-stranger out status other
+  make_spawn_case stranger "$id"
+  # A first mate this spawn does not descend from.
+  sleep 60 &
+  other=$!
+  STARTED_PIDS+=("$other")
+  start_spawn_writer "$other"
+  out=$(run_spawn "$id" "$PROJ_DIR" --mode local-only --yolo off --harness opencode --model coder --sailor tiller)
+  status=$?
+  stop_spawn_writer
+  kill "$other" 2>/dev/null
+  assert_refused_spawn "$id" "$status" "$out" "error: the Privateer quarantine refuses this spawn: the Privateer record writer does not accept it: only the first mate and the processes it starts may write task records" "a spawn the record writer does not accept"
+  pass "a Privateer home refuses a spawn from a process that does not descend from its first mate"
+}
+
+test_task_record_writes_go_through_the_writer_inside_the_session() {
+  local id=pv-route out inside lib other
+  make_spawn_case route "$id"
+  inside="/tmp/tmux-fake/$(session_socket "$HOME_DIR"),1,0"
+  # shellcheck disable=SC2016 # expanded by the inner bash
+  lib='. "$1/bin/fm-backlog-transition-lib.sh"; shift; "$@" || { echo "error: $FM_BACKLOG_TRANSITION_ERROR"; exit 1; }'
+  printf 'kind=ship\n' > "$HOME_DIR/state/.$id.meta.staged"
+  start_spawn_writer "$$"
+  out=$(TMUX=$inside FM_HOME="$HOME_DIR" bash -c "$lib" _ "$ROOT" fm_backlog_atomic_transition publish "$HOME_DIR/state/.$id.meta.staged" "$HOME_DIR/state/$id.meta" "task record" "$HOME_DIR/state")
+  expect_code 1 "$?" "a staged file must never be published as a task record inside the session: $out"
+  assert_contains "$out" "the Privateer record writer publishes it only from memory, never from a staged file" "the refusal must say why"
+  [ ! -e "$HOME_DIR/state/$id.meta" ] || fail "a refused staged publish must write nothing"
+  out=$(TMUX=$inside FM_HOME="$HOME_DIR" bash -c "$lib" _ "$ROOT" fm_backlog_atomic_transition publish-content $'kind=ship\n' "$HOME_DIR/state/$id.meta" "task record" "$HOME_DIR/state")
+  expect_code 0 "$?" "the first mate's content must be published through the writer: $out"
+  out=$(TMUX=$inside FM_HOME="$HOME_DIR" bash -c "$lib" _ "$ROOT" fm_backlog_record_append "$HOME_DIR/state/$id.meta" $'decisions_reviewed=1\n' "task record")
+  expect_code 0 "$?" "an append must go through the writer: $out"
+  assert_equals $'kind=ship\ndecisions_reviewed=1' "$(cat "$HOME_DIR/state/$id.meta")" "the record must hold the published content and the appended line"
+  assert_equals 600 "$(file_mode "$HOME_DIR/state/$id.meta")" "the record writer must have written the record"
+  # Any other record in the state directory is written directly as before.
+  out=$(TMUX=$inside FM_HOME="$HOME_DIR" bash -c "$lib" _ "$ROOT" fm_backlog_atomic_transition publish "$HOME_DIR/state/.$id.meta.staged" "$HOME_DIR/state/$id.backlog-close" "pending-close record" "$HOME_DIR/state")
+  expect_code 0 "$?" "a record that is not a task record must still be published directly: $out"
+  stop_spawn_writer
+  out=$(TMUX=$inside FM_HOME="$HOME_DIR" bash -c "$lib" _ "$ROOT" fm_backlog_atomic_transition remove "$HOME_DIR/state/$id.meta" "task record" "$HOME_DIR/state")
+  expect_code 0 "$?" "with no writer socket the record must be removed directly, as before the writer existed: $out"
+  [ ! -e "$HOME_DIR/state/$id.meta" ] || fail "the record must be gone"
+  printf 'kind=ship\n' > "$HOME_DIR/state/$id.meta"
+  # A first mate these writes do not descend from.
+  sleep 60 &
+  other=$!
+  STARTED_PIDS+=("$other")
+  start_spawn_writer "$other"
+  out=$(TMUX=$inside FM_HOME="$HOME_DIR" bash -c "$lib" _ "$ROOT" fm_backlog_atomic_transition remove "$HOME_DIR/state/$id.meta" "task record" "$HOME_DIR/state")
+  expect_code 1 "$?" "a removal the writer refuses must fail: $out"
+  assert_contains "$out" "only the first mate and the processes it starts may write task records" "the failure must carry the writer's refusal"
+  [ -e "$HOME_DIR/state/$id.meta" ] || fail "a refused removal must leave the record, never fall back to a direct write"
+  out=$(TMUX=/tmp/tmux-501/default,1,0 FM_HOME="$HOME_DIR" bash -c "$lib" _ "$ROOT" fm_backlog_atomic_transition remove "$HOME_DIR/state/$id.meta" "task record" "$HOME_DIR/state")
+  expect_code 0 "$?" "outside the session the record must be removed directly: $out"
+  stop_spawn_writer
+  kill "$other" 2>/dev/null
+  pass "inside a Privateer session every task record write goes through the record writer, from memory, and fails with its refusal, while other records, a session without the writer, and the captain's side write directly"
+}
+
 test_check_is_silent_without_the_flag
 test_check_passes_a_clean_home
 test_check_names_every_violation
@@ -2399,6 +2617,7 @@ test_start_denies_the_gitfiles_of_submodules_and_outside_worktrees
 test_start_renders_the_helm_afresh
 test_start_refuses_without_the_rulebook
 test_start_refuses_when_the_proxy_cannot_bind
+test_start_refuses_when_the_record_writer_cannot_start
 test_proxy_forwards_only_allowed_destinations
 test_session_sandbox_holds_every_command
 test_session_first_mate_owns_the_lock_and_a_plain_shell_does_not
@@ -2425,6 +2644,9 @@ test_spawn_refuses_a_secondmate
 test_spawn_refuses_while_a_forbidden_file_exists
 test_spawn_allows_a_local_only_sailor_with_a_cleared_environment
 test_spawn_refuses_while_no_egress_proxy_runs
+test_spawn_refuses_while_no_record_writer_runs
+test_spawn_refuses_when_the_record_writer_does_not_accept_it
+test_task_record_writes_go_through_the_writer_inside_the_session
 test_spawn_refuses_outside_the_session
 test_gated_scripts_refuse_outside_the_session
 test_gated_scripts_run_inside_the_session

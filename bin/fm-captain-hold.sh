@@ -1773,7 +1773,8 @@ EOF
 
   if [ "$has_meta" = 1 ]; then
     if [ "$(meta_value "$meta" decisions_reviewed)" != 1 ] || [ "$previous" != "$keys" ]; then
-      printf 'decisions_reviewed=1\ndecision_keys=%s\n' "$keys" >> "$meta"
+      fm_backlog_record_append "$meta" "decisions_reviewed=1"$'\n'"decision_keys=$keys"$'\n' "task record" ||
+        fail "could not record the reviewed decisions on $origin ($FM_BACKLOG_TRANSITION_ERROR)"
     fi
     fm_lock_release "$CAPTAIN_META_LOCK"
     CAPTAIN_META_LOCK_HELD=0
