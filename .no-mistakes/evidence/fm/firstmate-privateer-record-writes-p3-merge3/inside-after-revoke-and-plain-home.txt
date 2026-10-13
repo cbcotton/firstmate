@@ -1,0 +1,5 @@
+bash-3.2$ /Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M4THNGBE1TTTY6M63QWN94WC/bin/fm-permission-grant.sh active --task pv-1; FM_HOME=/tmp/fml.hqBg/plain /Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M4THNGBE1TTTY6M63QWN94WC/bin/fm-permission-grant.sh grant --scope task --task t1 --permission bash --pattern 'ls' --action allow --words-file /tmp/fml.hqBg/plain/data/w --channel chat; echo plain_exit=$?
+[]
+g1791892578-99554-31324: allow bash "ls" for task t1; it applies at each OpenCode worker's next launch (bin/fm-control.sh <task> relaunch to apply now)
+plain_exit=0
+bash-3.2$ 

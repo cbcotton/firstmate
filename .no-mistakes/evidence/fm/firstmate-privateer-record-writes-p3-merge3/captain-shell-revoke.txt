@@ -1,0 +1,5 @@
+## captain revokes from own shell
+g1791892566-94153-30218: revoked; it no longer applies from each OpenCode worker's next launch
+exit=0
+## active outside after revoke:
+[]

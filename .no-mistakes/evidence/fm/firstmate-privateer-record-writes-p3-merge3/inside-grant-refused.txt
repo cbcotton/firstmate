@@ -1,0 +1,9 @@
+The default interactive shell is now zsh.
+To update your account to use zsh, please run `chsh -s /bin/zsh`.
+For more details, please visit https://support.apple.com/kb/HT208050.
+bash-3.2$ echo TMUX=$TMUX; /Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M4THNGBE1TTTY6M63QWN94WC/bin/fm-permission-grant.sh grant --scope task --task pv-1 --permission bash --pattern 'npm test' --action allow --words-file /tmp/fml.hqBg/home/data/pv-1/words.txt --channel chat 2>/tmp/fml.hqBg/err; echo exit=$?; cat /tmp/fml.hqBg/err; ls /tmp/fml.hqBg/home/state
+TMUX=/private/tmp/fml.hqBg/t/tmux-501/fm-privateer-1d37a8b78f46,91629,0
+exit=2
+error: fm-permission-grant.sh refused: in a Privateer home only the captain records a grant or revocation, from their own shell outside this session; ask the captain to run it there, then relaunch the worker once the captain says it is recorded: FM_HOME=/tmp/fml.hqBg/home /Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M4THNGBE1TTTY6M63QWN94WC/bin/fm-permission-grant.sh grant --scope task --task pv-1 --permission bash --pattern 'npm test' --action allow --words-file /tmp/fml.hqBg/home/data/pv-1/words.txt --channel chat
+pv-1.meta
+bash-3.2$ 

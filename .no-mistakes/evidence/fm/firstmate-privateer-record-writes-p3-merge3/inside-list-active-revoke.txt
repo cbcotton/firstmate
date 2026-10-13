@@ -1,0 +1,9 @@
+bash-3.2$ /Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M4THNGBE1TTTY6M63QWN94WC/bin/fm-permission-grant.sh list --task pv-1; echo list_exit=$?; /Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M4THNGBE1TTTY6M63QWN94WC/bin/fm-permission-grant.sh active --task pv-1; echo active_exit=$?; ID=$(jq -r .id /tmp/fml.hqBg/home/state/permission-grants.jsonl); /Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M4THNGBE1TTTY6M63QWN94WC/bin/fm-permission-grant.sh revoke $ID --words-file /tmp/fml.hqBg/home/data/pv-1/words.txt --channel chat; echo revoke_exit=$?; wc -l < /tmp/fml.hqBg/home/state/permission-grants.jsonl
+g1791892566-94153-30218 task pv-1 allow bash "npm test" via chat: yes, let it run npm test 
+list_exit=0
+[{"bash":{"npm test":"allow"}}]
+active_exit=0
+error: fm-permission-grant.sh refused: in a Privateer home only the captain records a grant or revocation, from their own shell outside this session; ask the captain to run it there, then relaunch the worker once the captain says it is recorded: FM_HOME=/tmp/fml.hqBg/home /Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M4THNGBE1TTTY6M63QWN94WC/bin/fm-permission-grant.sh revoke g1791892566-94153-30218 --words-file /tmp/fml.hqBg/home/data/pv-1/words.txt --channel chat
+revoke_exit=2
+       1
+bash-3.2$ 

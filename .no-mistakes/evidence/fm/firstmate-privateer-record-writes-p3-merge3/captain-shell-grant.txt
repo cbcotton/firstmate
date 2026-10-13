@@ -1,0 +1,9 @@
+## captain's own shell (TMUX unset), running the printed command verbatim
+$ FM_HOME=/tmp/fml.hqBg/home /Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M4THNGBE1TTTY6M63QWN94WC/bin/fm-permission-grant.sh grant --scope task --task pv-1 --permission bash --pattern 'npm test' --action allow --words-file /tmp/fml.hqBg/home/data/pv-1/words.txt --channel chat
+g1791892566-94153-30218: allow bash "npm test" for task pv-1; it applies at each OpenCode worker's next launch (bin/fm-control.sh <task> relaunch to apply now)
+exit=0
+## ledger
+{"v":1,"op":"grant","id":"g1791892566-94153-30218","ts":1791892566,"scope":"task","task":"pv-1","task_dispatched_at":"1000","session":null,"permission":"bash","pattern":"npm test","action":"allow","words":"yes, let it run npm test\n","channel":"chat","ref":null}
+## outside: list / active
+g1791892566-94153-30218 task pv-1 allow bash "npm test" via chat: yes, let it run npm test 
+[{"bash":{"npm test":"allow"}}]
