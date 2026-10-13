@@ -1528,12 +1528,13 @@ families_for_changed_path() {
     bin/fm-dispatch-resolve.sh)
       printf '%s\n' "__script__:fm-dispatch-resolve.test.sh"
       ;;
-    bin/fm-privateer.sh|bin/fm-privateer-proxy.py|bin/fm-privateer-seal-policy.mjs|\
+    bin/fm-privateer.sh|bin/fm-privateer-proxy.py|bin/fm-privateer-records.py|bin/fm-privateer-seal-policy.mjs|\
     .opencode/plugins/fm-privateer-seal.js)
-      # The quarantine's one owner, its egress proxy, and its OpenCode seal: its
-      # own suite, the bootstrap report, the spawn refusals, and the live egress
-      # audit and seal guard.
+      # The quarantine's one owner, its egress proxy, its record writer, and its
+      # OpenCode seal: its own suites, the bootstrap report, the spawn refusals,
+      # and the live egress audit and seal guard.
       printf '%s\n' "__script__:fm-privateer.test.sh"
+      printf '%s\n' "__script__:fm-privateer-records.test.sh"
       printf '%s\n' "__script__:fm-bootstrap.test.sh"
       printf '%s\n' backend-dispatch
       printf '%s\n' live-harness-optin
