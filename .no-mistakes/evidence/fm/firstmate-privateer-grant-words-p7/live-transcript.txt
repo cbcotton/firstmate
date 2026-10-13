@@ -1,0 +1,72 @@
+== lab home: /private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-lab.YPaoCo (config/privateer present), Privateer socket: fm-privateer-d31450a5dcfc
+
+== S1: first mate inside the real Privateer tmux session asks for a grant (with a forged in-home words file)
+exit: 2
+error: fm-permission-grant.sh refused: in a Privateer home only the captain records a grant or revocation, from their own shell outside this session, typing their own words when it asks; ask the captain to run it there, then relaunch the worker once the captain says it is recorded: FM_HOME=/private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-lab.YPaoCo /Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M4TKHWQ62VXP550ZZV7E9G7S/bin/fm-permission-grant.sh grant --scope task --task pv-grant --permission bash --pattern 'npm test' --action allow --channel chat
+ledger exists after refusal? no
+printed captain command: FM_HOME=/private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-lab.YPaoCo /Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M4TKHWQ62VXP550ZZV7E9G7S/bin/fm-permission-grant.sh grant --scope task --task pv-grant --permission bash --pattern 'npm test' --action allow --channel chat
+OK: captain command carries no --words-file
+
+== S2: captain runs the printed command at a real terminal (tmux pty), sees the prompt, types words + Ctrl-D
+--- captain terminal ---
+cd / && FM_HOME=/private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-lab.YPaoCo /Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M4TKHWQ62VXP550ZZV7E9G7S/bin/fm-permission-grant.sh grant --s
+cope task --task pv-grant --permission bash --pattern 'npm test' --action allow --channel chat; echo RC=$?
+The default interactive shell is now zsh.
+To update your account to use zsh, please run `chsh -s /bin/zsh`.
+For more details, please visit https://support.apple.com/kb/HT208050.
+bash-3.2$ cd / && FM_HOME=/private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-lab.YPaoCo /Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M4TKHWQ62VXP550ZZV7E9G7S/bin/fm-permission-grant.sh
+ grant --scope task --task pv-grant --permission bash --pattern 'npm test' --action allow --channel chat; echo RC=$?
+This records: allow bash "npm test" for task pv-grant
+Type your own words for the record, then press Ctrl-D on a new line:
+yes, let it run npm test -- the captain
+g1791895966-74402-2425: allow bash "npm test" for task pv-grant; it applies at each OpenCode worker's next launch (bin/fm-control.sh <task> relaunch to apply now)
+RC=0
+bash-3.2$
+------------------------
+ledger:
+{"v":1,"op":"grant","id":"g1791895966-74402-2425","ts":1791895966,"scope":"task","task":"pv-grant","task_dispatched_at":"1000","session":null,"permission":"bash","pattern":"npm test","action":"allow","words":"yes, let it run npm test -- the captain\n","channel":"chat","ref":null}
+words recorded: "yes, let it run npm test -- the captain\n"
+OK: forged worker file never reached the ledger
+
+== S3: captain pipes words on stdin (verbatim, incl. whitespace) to revoke
+g1791895966-74402-2425: revoked; it no longer applies from each OpenCode worker's next launch
+exit: 0
+{"op":"revoke","id":"g1791895966-74402-2425","words":"  withdraw it, please\n\n"}
+
+== S4: captain passes --words-file in the home (direct, symlink from outside, and other letter case)
+(filesystem is case-insensitive: /PRIVATE/VAR/FOLDERS/3C/4W5D0NF515L_HW4ZG0PCVQ880000GN/T/FM-LAB.YPAOCO/DATA/PV-GRANT/PERM-WORDS.TXT resolves to the same file)
+-- --words-file /private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-lab.YPaoCo/data/pv-grant/perm-words.txt
+fm-permission-grant: --words-file is in this Privateer home, where any worker can rewrite it; run the command without it and type the captain's words on stdin: FM_HOME=/private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-lab.YPaoCo /Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M4TKHWQ62VXP550ZZV7E9G7S/bin/fm-permission-grant.sh grant --scope task --task pv-grant --permission bash --pattern 'npm test' --action allow --channel chat
+exit: 2
+OK: ledger unchanged
+-- --words-file /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/tmp.xrfulcUoBw/link
+fm-permission-grant: --words-file is in this Privateer home, where any worker can rewrite it; run the command without it and type the captain's words on stdin: FM_HOME=/private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-lab.YPaoCo /Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M4TKHWQ62VXP550ZZV7E9G7S/bin/fm-permission-grant.sh grant --scope task --task pv-grant --permission bash --pattern 'npm test' --action allow --channel chat
+exit: 2
+OK: ledger unchanged
+-- --words-file /PRIVATE/VAR/FOLDERS/3C/4W5D0NF515L_HW4ZG0PCVQ880000GN/T/FM-LAB.YPAOCO/DATA/PV-GRANT/PERM-WORDS.TXT
+fm-permission-grant: --words-file is in this Privateer home, where any worker can rewrite it; run the command without it and type the captain's words on stdin: FM_HOME=/private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-lab.YPaoCo /Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M4TKHWQ62VXP550ZZV7E9G7S/bin/fm-permission-grant.sh grant --scope task --task pv-grant --permission bash --pattern 'npm test' --action allow --channel chat
+exit: 2
+OK: ledger unchanged
+
+== S5: captain-side file outside the home is accepted
+g1791896005-92938-6132: allow bash "npm test" for task pv-grant; it applies at each OpenCode worker's next launch (bin/fm-control.sh <task> relaunch to apply now)
+exit: 0
+{"op":"grant","words":"the captain's own file\n"}
+
+== S6: empty / whitespace stdin is refused
+fm-permission-grant: no words on stdin; record the captain's actual words
+exit: 2
+== S6b: oversize stdin (8193 bytes) is refused
+fm-permission-grant: the words on stdin are larger than 8192 bytes
+exit: 2
+== S6c: refused-list allow fails before reading stdin
+refused: web access reaches arbitrary hosts; the captain approves that one action in the moment and firstmate performs it
+exit: 1
+
+== S7: ordinary (non-Privateer) home keeps --words-file in the home and requires it
+g1791896026-99922-25527: allow bash "npm test" for task pv-grant; it applies at each OpenCode worker's next launch (bin/fm-control.sh <task> relaunch to apply now)
+exit: 0
+{"op":"grant","words":"FORGED by a worker\n"}
+-- no --words-file in ordinary home:
+fm-permission-grant: --words-file must be a readable file
+exit: 2
