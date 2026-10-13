@@ -2699,9 +2699,25 @@ SH
   assert_contains "$out" "tiller live answering" "the PRIVATEER section did not carry the sailor status line"
   assert_not_contains "$out" "active project:" "with no config/active-project the section must not print an active project"
 
+  printf -- '- constellation [local-only] - the test project (added 2026-09-30)\n' > "$home/data/projects.md"
+  mkdir -p "$home/projects/constellation"
   printf '%s\n' 'constellation' > "$home/config/active-project"
   out=$(run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
   assert_contains "$out" "active project: constellation" "the PRIVATEER section did not print the active project"
+
+  printf '%s\n' 'constellation' 'other' > "$home/config/active-project"
+  out=$(run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+  assert_contains "$out" "active project: not used - config/active-project must hold one project name on one line, not 2 lines" "several lines must be reported"
+  printf '%s\n' 'nosuch' > "$home/config/active-project"
+  out=$(run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+  assert_contains "$out" "active project: not used - config/active-project names 'nosuch', which data/projects.md does not register" "an unregistered name must be reported"
+  assert_not_contains "$out" "active project: nosuch" "a malformed value must not print as the active project"
+  printf '%s\n' 'constellation' > "$home/config/active-project"
+  rm -rf "$home/projects/constellation"
+  out=$(run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+  assert_contains "$out" "which has no clone under projects/" "a missing clone must be reported"
+  mkdir -p "$home/projects/constellation"
+  printf '%s\n' 'constellation' > "$home/config/active-project"
   priv_line=$(printf '%s\n' "$out" | grep -n '^PRIVATEER$' | head -1 | cut -d: -f1)
   ctx_line=$(printf '%s\n' "$out" | grep -n '^CONTEXT$' | head -1 | cut -d: -f1)
   [ -n "$priv_line" ] && [ -n "$ctx_line" ] && [ "$priv_line" -lt "$ctx_line" ] \

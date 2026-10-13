@@ -398,6 +398,59 @@ test_inside_answers_for_the_session() {
   pass "inside answers yes only for the session's own socket, refuses outside it with a step back to the captain that names no socket, and answers 3 in a home with no quarantine"
 }
 
+test_project_sets_clears_and_prints_the_active_project() {
+  local home out status socket
+  home=$(make_home project)
+  socket=$(session_socket "$home")
+  mkdir -p "$home/projects/app" "$home/projects/other" "$home/projects/unregistered"
+  printf -- '- app [local-only] - one (added 2026-09-30)\n- other [local-only] - two (added 2026-09-30)\n- ghost [local-only] - no clone (added 2026-09-30)\n' > "$home/data/projects.md"
+  out=$(FM_HOME="$home" TMUX='' "$PRIVATEER" project 2>&1)
+  assert_contains "$out" "  app" "the view must list a registered project with a clone"
+  assert_not_contains "$out" "unregistered" "the view must leave out an unregistered clone"
+  assert_not_contains "$out" "ghost" "the view must leave out a registered project with no clone"
+  assert_contains "$out" "active project: none" "the view must say none is active"
+
+  out=$(FM_HOME="$home" TMUX='' "$PRIVATEER" project app 2>&1)
+  status=$?
+  expect_code 0 "$status" "project <name> must set the project outside the session: $out"
+  assert_equals app "$(cat "$home/config/active-project")" "the file must hold the name"
+  assert_equals 0 "$(find "$home/config" -name 'active-project.tmp*' | wc -l | tr -d ' ')" "no temporary file may be left behind"
+  out=$(FM_HOME="$home" TMUX='' "$PRIVATEER" project 2>&1)
+  assert_contains "$out" "* app" "the view must mark the active project"
+  assert_contains "$out" "active project: app" "the view must name it"
+  out=$(FM_HOME="$home" TMUX="/tmp/tmux-501/$socket,1,0" "$PRIVATEER" project 2>&1)
+  assert_contains "$out" "* app" "the bare form must work inside the session"
+
+  for arg in nosuch ghost unregistered ../app --clearx; do
+    out=$(FM_HOME="$home" TMUX='' "$PRIVATEER" project "$arg" 2>&1)
+    status=$?
+    expect_code 1 "$status" "project $arg must be refused: $out"
+    assert_equals app "$(cat "$home/config/active-project")" "a refusal must leave the file as it was"
+  done
+  assert_contains "$(FM_HOME="$home" TMUX='' "$PRIVATEER" project nosuch 2>&1)" "not registered in data/projects.md" "the unregistered refusal must say why"
+  assert_contains "$(FM_HOME="$home" TMUX='' "$PRIVATEER" project ghost 2>&1)" "no clone under projects/" "the missing-clone refusal must say why"
+
+  out=$(FM_HOME="$home" TMUX="/tmp/tmux-501/$socket,1,0" "$PRIVATEER" project other 2>&1)
+  status=$?
+  expect_code 1 "$status" "setting must be refused inside the session: $out"
+  assert_contains "$out" "outside" "the refusal must send the captain outside the session"
+  out=$(FM_HOME="$home" TMUX="/tmp/tmux-501/$socket,1,0" "$PRIVATEER" project --clear 2>&1)
+  expect_code 1 "$?" "clearing must be refused inside the session: $out"
+  assert_equals app "$(cat "$home/config/active-project")" "the session must not change the file"
+
+  out=$(FM_HOME="$home" TMUX='' "$PRIVATEER" project --clear 2>&1)
+  expect_code 0 "$?" "project --clear must clear it: $out"
+  [ ! -e "$home/config/active-project" ] || fail "--clear must remove the file"
+
+  rm "$home/config/privateer"
+  out=$(FM_HOME="$home" TMUX='' "$PRIVATEER" project app 2>&1)
+  status=$?
+  expect_code 1 "$status" "a home without config/privateer must refuse: $out"
+  assert_contains "$out" "config/privateer is absent" "the refusal must say the home is not a Privateer home"
+  [ ! -e "$home/config/active-project" ] || fail "a home without the quarantine must not gain the file"
+  pass "project sets, clears, and prints the active project outside the session, and refuses unregistered or clone-less names, the session, and a home without the quarantine"
+}
+
 # --- seal plugin -------------------------------------------------------------
 
 SEAL_PLUGIN="$ROOT/.opencode/plugins/fm-privateer-seal.js"
@@ -2269,5 +2322,6 @@ test_gated_scripts_run_inside_the_session
 test_the_gate_is_keyed_to_the_home
 test_captain_side_commands_stay_usable_outside
 test_grants_are_recorded_only_from_the_captains_shell
+test_project_sets_clears_and_prints_the_active_project
 
 echo "# all fm-privateer tests passed"

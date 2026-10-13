@@ -14,6 +14,7 @@
 #   fm-privateer.sh start
 #   fm-privateer.sh attach
 #   fm-privateer.sh stop [--stow]
+#   fm-privateer.sh project [<name> | --clear]
 #   fm-privateer.sh reload
 #
 # The quarantine is on while config/privateer exists. Its content is optional:
@@ -241,6 +242,17 @@
 # running. Its output names no socket or port. When the session has already
 # ended there is nothing to stow, and it cleans up as stop does.
 #
+# project is the captain's way to set the home's active project, the default
+# referent for a request that names none (docs/configuration.md owns the
+# contract). `project <name>` refuses unless data/projects.md registers <name>
+# and a clone of it exists under projects/, then writes config/active-project
+# atomically (a temporary file renamed over it); `project --clear` removes the
+# file; `project` alone prints every registered project that has a clone, the
+# active one marked `*`. The session sandbox denies writes to config/, so the
+# set and clear forms also refuse inside the session; every form refuses in a
+# home without config/privateer, so the main home never sets an active project.
+# The bare form only reads, so it also works inside the session.
+#
 # Environment: FM_HOME, FM_STATE_OVERRIDE, FM_CONFIG_OVERRIDE, and
 # FM_PROJECTS_OVERRIDE resolve the home exactly as the other bin/ scripts do. With FM_TEST_SEAM=1, FM_PRIVATEER_PRIMARY names a command to launch in
 # place of opencode, with the same arguments, so a test can prove the launch
@@ -272,7 +284,7 @@ STOW_IDLE_READS=3
 FORBIDDEN_NAME_RE='^(ANTHROPIC_[A-Za-z0-9_]*|CLAUDE_[A-Za-z0-9_]*|CLAUDECODE)$'
 
 usage() {
-  echo "usage: fm-privateer.sh check | inside | launch-env | start | attach | stop [--stow] | reload" >&2
+  echo "usage: fm-privateer.sh check | inside | launch-env | start | attach | stop [--stow] | reload | project [<name>|--clear]" >&2
   exit 2
 }
 
@@ -971,6 +983,37 @@ cmd_stop() {  # [--stow]
   fi
 }
 
+cmd_project() {  # [<name> | --clear]
+  local name target tmp
+  active || refuse "config/privateer is absent; the active project is set only in a Privateer home"
+  if [ "$#" -eq 0 ]; then
+    fm_privateer_projects_view "$CONFIG" "${FM_DATA_OVERRIDE:-$FM_HOME/data}" "$PROJECTS" "$SCRIPT_DIR"
+    return 0
+  fi
+  if fm_privateer_inside_session "$FM_HOME"; then
+    refuse "the session cannot write config/, so the active project is set by the captain outside it: run bin/fm-privateer.sh project <name> from a terminal outside the session"
+  fi
+  target="$CONFIG/active-project"
+  if [ "$1" = --clear ]; then
+    rm -f "$target" || refuse "config/active-project could not be removed"
+    echo "privateer: no active project"
+    return 0
+  fi
+  name=$1
+  case "$name" in
+    --* | */* | .* | -* | *[!A-Za-z0-9._-]*) refuse "'$name' is not a project name; give the name of a project under projects/" ;;
+  esac
+  FM_DATA_OVERRIDE="${FM_DATA_OVERRIDE:-$FM_HOME/data}" "$SCRIPT_DIR/fm-project-mode.sh" --registered "$name" ||
+    refuse "'$name' is not registered in data/projects.md"
+  [ -d "$PROJECTS/$name" ] || refuse "'$name' has no clone under projects/"
+  tmp="$target.tmp.$$"
+  { printf '%s\n' "$name" > "$tmp" && mv -f "$tmp" "$target"; } || {
+    rm -f "$tmp"
+    refuse "config/active-project could not be written"
+  }
+  echo "privateer: the active project is now $name"
+}
+
 cmd_reload() {
   local old new
   active || refuse "config/privateer is absent; this launcher reloads only a Privateer home"
@@ -1017,6 +1060,10 @@ case "$cmd" in
       *) usage ;;
     esac
     cmd_stop "$@"
+    ;;
+  project)
+    [ "$#" -le 1 ] || usage
+    cmd_project "$@"
     ;;
   reload)
     [ "$#" -eq 0 ] || usage

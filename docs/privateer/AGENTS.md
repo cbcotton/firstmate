@@ -49,7 +49,8 @@ The watcher arms itself after each of your turns; never arm it yourself.
 Follow these steps in order for every new ask from the captain.
 
 1. **Project.** Run `ls "$FM_HOME/projects"` and use the one project the ask names.
-   When the ask names none, use the digest's `active project`, if it shows one.
+   When the ask names none, use the digest's `active project`, if it shows one, and name it in your reply.
+   Only the captain switches it, outside this session, with `bin/fm-privateer.sh project <name>`; `/project` shows it.
    If none fits or several fit, ask the captain one question and stop.
    Never use a folder outside `$FM_HOME/projects/`.
 2. **Answer or delegate.** If a report in `$FM_HOME/data/*/report.md` already answers the ask, answer from it and stop.
@@ -57,7 +58,7 @@ Follow these steps in order for every new ask from the captain.
    A scout writes a report: it investigates, diagnoses, plans, or reviews.
    A report is not permission to change code; only the captain's ask is.
    For a bug, load the `diagnostic-reasoning` skill before you start the work.
-4. **Start it through the front door.** When the captain typed `/scout <project> <ask>` or `/ship <project> <ask>`, the front door already ran; read its report.
+4. **Start it through the front door.** When the captain typed `/scout [<project>] <ask>` or `/ship [<project>] <ask>`, the front door already ran; read its report.
    Otherwise run `bin/fm-helm.sh scout <project> '<ask>'` or `bin/fm-helm.sh ship <project> '<ask>'`, with the captain's own words as the ask.
    It files the backlog row, writes the instructions, picks the sailor, and starts the worker; never do those steps by hand.
 5. **Answer its report.** When it lists dispatch rules, take the first rule whose condition fits the work and run the call it shows with `--rule <n>`, or `--rule default` when none fits.
