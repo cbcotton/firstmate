@@ -330,7 +330,7 @@ test_helm_runs_the_session_start() {
   out=$(cat "$CASE_DIR/helm.out")
   expect_code 0 "$status" "helm must run the session start"$'\n'"$out"
   assert_contains "$out" "NEXT STEP" "helm must print the whole session-start digest"
-  assert_equals "front door: /scout <project> <ask>, /ship <project> <ask>, /queue, /sailors, /steer <task-id> <text>, /land <task-id>, /wake, /stow" \
+  assert_equals "front door: /scout [<project>] <ask>, /ship [<project>] <ask>, /project, /queue, /sailors, /steer <task-id> <text>, /land <task-id>, /wake, /stow" \
     "$(printf '%s\n' "$out" | tail -1)" "helm must end by naming the front door's commands"
   pass "helm runs the session start and then names the front door's commands"
 }
@@ -358,8 +358,8 @@ test_malformed_calls_are_refused() {
     [ "$status" -ne 0 ] || fail "'fm-helm.sh $call' must be refused, got: $out"
     assert_contains "$out" "$needle" "'fm-helm.sh $call' refusal"
   done <<'EOF'
-|refused: no verb given; the verbs are helm, scout, ship, queue, sailors, steer, land, wake
-launch app go|refused: unknown verb 'launch'; the verbs are helm, scout, ship, queue, sailors, steer, land, wake
+|refused: no verb given; the verbs are helm, scout, ship, project, queue, sailors, steer, land, wake
+launch app go|refused: unknown verb 'launch'; the verbs are helm, scout, ship, project, queue, sailors, steer, land, wake
 scout|refused: scout needs a project and the ask
 scout app|refused: scout needs a project and the ask
 scout nosuch go|refused: 'nosuch' is not a registered project with a clone under projects/; the projects here are: app
@@ -379,6 +379,104 @@ scout --stdin extra|refused: --stdin takes the arguments on standard input, and 
 EOF
   assert_nothing_filed "a malformed call"
   pass "every malformed call is refused with what was wrong and the accepted forms, before anything is written"
+}
+
+test_active_project_is_the_default_project() {
+  local out status id rows
+  make_case active
+  fm_git_init_commit "$HOME_DIR/projects/other" >/dev/null 2>&1 || mkdir -p "$HOME_DIR/projects/other"
+  printf -- '- other [local-only branch=ot/] - a second project (added 2026-09-30)\n' >> "$HOME_DIR/data/projects.md"
+  printf 'app\n' > "$HOME_DIR/config/active-project"
+
+  out=$(run_helm scout look "into the build")
+  status=$?
+  expect_code 0 "$status" "a scout with no project word must use the active project"$'\n'"$out"
+  track "$out"; id=$ID
+  assert_equals "project: app, the active project, because the ask names no project" "$(printf '%s\n' "$out" | head -1)" \
+    "the first output line must say the active project is used"
+  assert_equals "look into the build" "$(intent_of "$id")" "the whole ask must be the intent"
+  assert_equals app "$(row "$id" repo)" "the row must record the active project"
+
+  out=$(opencode_text $'look into\nthe build' $'look into\nthe build' $'look into the build' | run_helm scout --stdin)
+  status=$?
+  track "$out"
+  expect_code 0 "$status" "the slash-command form must use the active project"$'\n'"$out"
+  assert_equals $'look into\nthe build' "$(intent_of "$ID")" "the stdin ask must keep its lines when the project is the active one"
+
+  out=$(run_helm ship other "add a flag")
+  status=$?
+  track "$out"
+  expect_code 0 "$status" "an explicit registered project must still work"$'\n'"$out"
+  assert_not_contains "$out" "the active project" "an explicit project must not be reported as the active one"
+  assert_equals other "$(row "$ID" repo)" "an explicit registered project must win over the active one"
+
+  printf -- '- ghost [local-only branch=gh/] - registered without a clone (added 2026-09-30)\n' >> "$HOME_DIR/data/projects.md"
+  out=$(run_helm ship ghost "add a flag")
+  status=$?
+  expect_code 1 "$status" "a registered project without a clone must be refused, not replaced by the active one"$'\n'"$out"
+  assert_contains "$out" "'ghost' is not a registered project with a clone" "the refusal must name the uncloned project"
+  assert_contains "$out" "the projects here are:" "the refusal must list the projects"
+  assert_not_contains "$out" "the active project" "an uncloned project must not fall back to the active one"
+  out=$(opencode_text 'ghost add a flag' 'ghost add a flag' 'ghost add a flag' | run_helm ship --stdin)
+  status=$?
+  expect_code 1 "$status" "the slash-command form must refuse a registered project without a clone"$'\n'"$out"
+  assert_contains "$out" "'ghost' is not a registered project with a clone" "the stdin refusal must name the uncloned project"
+  assert_not_contains "$out" "the active project" "the stdin form must not fall back to the active one"
+
+  rows=$(backlog_rows)
+  out=$(run_helm ship otehr "add a flag")
+  status=$?
+  expect_code 1 "$status" "a typo of a registered project must be refused, not replaced by the active one"$'\n'"$out"
+  assert_contains "$out" "'otehr' is not a registered project with a clone" "the refusal must name the typo"
+  assert_contains "$out" "did you mean other?" "the refusal must name the close project"
+  assert_not_contains "$out" "the active project" "a typo must not fall back to the active one"
+  out=$(opencode_text 'otehr add a flag' 'otehr add a flag' 'otehr add a flag' | run_helm ship --stdin)
+  status=$?
+  expect_code 1 "$status" "the slash-command form must refuse a typo of a registered project"$'\n'"$out"
+  assert_contains "$out" "did you mean other?" "the stdin refusal must name the close project"
+  mkdir -p "$HOME_DIR/projects/scratch"
+  out=$(run_helm ship scratch "add a flag")
+  status=$?
+  expect_code 1 "$status" "an unregistered clone directory must be refused, not replaced by the active one"$'\n'"$out"
+  assert_contains "$out" "'scratch' is not a registered project with a clone" "the refusal must name the unregistered clone"
+  assert_not_contains "$out" "the active project" "an unregistered clone must not fall back to the active one"
+  assert_equals "$rows" "$(backlog_rows)" "a refused project word must file nothing"
+  rm -rf "$HOME_DIR/projects/scratch"
+
+  out=$(run_helm ship add "a flag")
+  status=$?
+  track "$out"
+  expect_code 0 "$status" "a short ask word near a short project name must use the active project"$'\n'"$out"
+  assert_equals "project: app, the active project, because the ask names no project" "$(printf '%s\n' "$out" | head -1)" \
+    "'add' must not be read as a typo of 'app'"
+  assert_equals "add a flag" "$(intent_of "$ID")" "the whole ask must be the intent"
+  mkdir -p "$HOME_DIR/projects/ui"
+  printf -- '- ui [local-only branch=ui/] - a two-letter project (added 2026-09-30)\n' >> "$HOME_DIR/data/projects.md"
+  out=$(run_helm ship fix "the build")
+  status=$?
+  track "$out"
+  expect_code 0 "$status" "a two-letter project must not swallow the ask word 'fix'"$'\n'"$out"
+  assert_equals app "$(row "$ID" repo)" "'fix' must leave the ask on the active project"
+  assert_equals "fix the build" "$(intent_of "$ID")" "the whole ask must be the intent"
+
+  out=$(run_helm project)
+  assert_contains "$out" "* app" "the project view must mark the active project"
+  assert_contains "$out" "  other" "the project view must list the other projects"
+  assert_contains "$out" "active project: app" "the project view must name the active project"
+
+  rm -f "$HOME_DIR/config/active-project"
+  out=$(run_helm scout look "into the build")
+  status=$?
+  expect_code 1 "$status" "no active project and no project word must be refused"$'\n'"$out"
+  assert_contains "$out" "is not a registered project" "the refusal must be the unregistered-project one"
+  assert_contains "$(run_helm project)" "active project: none" "the project view must say when none is active"
+
+  printf 'nosuch\n' > "$HOME_DIR/config/active-project"
+  out=$(run_helm scout look "into the build")
+  status=$?
+  expect_code 1 "$status" "a malformed active project must not be used"$'\n'"$out"
+  assert_contains "$(run_helm project)" "which data/projects.md does not register" "the project view must say why the value is unused"
+  pass "scout and ship default to the active project, an explicit project wins, and a malformed value is not used"
 }
 
 test_only_a_privateer_home_inside_its_session() {
@@ -410,6 +508,7 @@ test_steer_queue_and_sailors_reach_their_scripts
 test_helm_runs_the_session_start
 test_land_reaches_the_guarded_local_merge
 test_malformed_calls_are_refused
+test_active_project_is_the_default_project
 test_only_a_privateer_home_inside_its_session
 
 echo "# all fm-helm tests passed"

@@ -17,6 +17,10 @@
 #                            inside a --write directory or $TMPDIR
 #   --deny-write-regex <re>  deny writes to every path the Seatbelt regex <re>
 #                            matches, as --deny-write does
+#   --deny-move-regex <re>   deny removing, renaming away, or renaming over every
+#                            path the Seatbelt regex <re> matches, and creating
+#                            or moving a symlink there, while a directory or
+#                            file may still be created there and written
 #   --write-prefix <prefix>  allow writes to every path that starts with <prefix>,
 #                            even inside a --deny-write path
 #   --connect <endpoint>     allow outbound TCP to <endpoint>, a URL or host:port
@@ -34,7 +38,9 @@
 #      and otherwise in /tmp or the current directory, so the /var/tmp entry
 #      itself and entries with those names directly in it are allowed, and
 #      nothing else in /var/tmp is, not even anything beneath such an entry;
-#   2. every --deny-write path and --deny-write-regex match is denied again;
+#   2. every --deny-write path and --deny-write-regex match is denied again,
+#      and every --deny-move-regex match is denied the unlink a removal or
+#      either end of a rename needs and the creation of a symlink;
 #   3. every --write-prefix path is allowed again, so a caller can deny a whole
 #      directory and still expose the exact files it names.
 # Outbound connections are allowed back only to each --connect endpoint, the
@@ -132,6 +138,7 @@ WRITES=()
 PREFIXES=()
 DENIES=()
 DENY_REGEXES=()
+DENY_MOVES=()
 CONNECTS=()
 SOCKETS=()
 CONFINE_SIGNALS=0
@@ -139,17 +146,17 @@ CONFINE_SIGNALS=0
 parse_options() {
   while [ "$#" -gt 0 ]; do
     case "$1" in
-      --write | --write-prefix | --deny-write | --deny-write-regex | --connect | --unix-socket)
+      --write | --write-prefix | --deny-write | --deny-write-regex | --deny-move-regex | --connect | --unix-socket)
         [ "$#" -ge 2 ] || die "$1 requires a value"
         case "$1" in
           --write) safe_path "$2" "$1"; WRITES+=("$(physical "$2")") ;;
           --write-prefix) safe_path "$2" "$1"; PREFIXES+=("$(physical "$2")") ;;
           --deny-write) safe_path "$2" "$1"; DENIES+=("$(physical "$2")") ;;
-          --deny-write-regex)
+          --deny-write-regex | --deny-move-regex)
             case "$2" in
               '' | *\"* | *[[:cntrl:]]*) die "$1 must be a non-empty regex without quotes or control characters: '$2'" ;;
             esac
-            DENY_REGEXES+=("$2")
+            if [ "$1" = --deny-write-regex ]; then DENY_REGEXES+=("$2"); else DENY_MOVES+=("$2"); fi
             ;;
           --connect) endpoint_rule "$2" >/dev/null; CONNECTS+=("$2") ;;
           --unix-socket) safe_path "$2" "$1"; SOCKETS+=("$(physical "$2")") ;;
@@ -186,6 +193,10 @@ render_profile() {
     for p in "${DENY_REGEXES[@]+"${DENY_REGEXES[@]}"}"; do printf '  (regex #"%s")\n' "$p"; done
     printf '%s\n' ')'
   fi
+  for p in "${DENY_MOVES[@]+"${DENY_MOVES[@]}"}"; do
+    printf '(deny file-write-unlink (regex #"%s"))\n' "$p"
+    printf '(deny file-write-create (require-all (regex #"%s") (vnode-type SYMLINK)))\n' "$p"
+  done
   if [ "${#PREFIXES[@]}" -gt 0 ]; then
     printf '%s\n' '(allow file-write*'
     for p in "${PREFIXES[@]}"; do printf '  (regex #"^%s")\n' "$(regex_quote "$p")"; done

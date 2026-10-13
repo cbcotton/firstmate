@@ -934,7 +934,7 @@ Its one optional line, `<sailor>/<model>`, names the sailor and model the first 
 
 ### What a Privateer session sees at start
 
-In a Privateer home the session-start digest prints a `PRIVATEER` section before the curated context: the first mate's `<sailor>/<model>`, the delivery mode (`local-only`), each sailor's `bin/fm-sailor.sh status --all` line, the front door `bin/fm-helm.sh helm`, and the active project when `config/active-project` exists.
+In a Privateer home the session-start digest prints a `PRIVATEER` section before the curated context: the first mate's `<sailor>/<model>`, the delivery mode (`local-only`), each sailor's `bin/fm-sailor.sh status --all` line, the front door `bin/fm-helm.sh helm`, and the active project when `config/active-project` holds a valid one, or a line saying why a malformed value is not used.
 `bin/fm-fleet-snapshot.sh --json` carries the live sailors (placeholders left out) as `sailors[]`, and the first mate and active project as `privateer`.
 `bin/fm-session-start.sh`'s header owns the section's ordering and `bin/fm-fleet-snapshot.sh`'s header owns the snapshot fields.
 
@@ -989,10 +989,17 @@ The sandbox holds the session's whole tmux server, so every pane and every comma
 Everything inside can write only to the home, the checkout's `.opencode/` scratch, the shared temporary namespaces named in the remaining limits below, and the server's own socket.
 Workers' copies live in the home's own Treehouse pool, `state/privateer/treehouse`, which the session names as `TREEHOUSE_ROOT`, so `treehouse` creates and hands out slots there and the shared pool under `~/.treehouse`, with every other home's slots, is out of reach.
 It can never write the home's egress directory, `config/`, or `bin/`, the [grant ledger](#permission-grants-statepermission-grantsjsonl) `state/permission-grants.jsonl`, the helm, or any directory entry between the home and the egress directory or the helm, or the Git config or hooks of the checkout, of any clone under `projects/`, or of any linked worktree or submodule of those.
-When the checkout is inside the home, it also cannot write any path in the checkout that an OpenCode first mate loads or the helm is rendered from: `AGENTS.md`, `CLAUDE.md`, `CONTEXT.md`, `opencode.json`, `opencode.jsonc`, `tui.json`, `tui.jsonc`, `.agents/`, `docs/`, the `.claude` entry and its `skills` link, the `.opencode` entry, and, under `.opencode/`, the `opencode.json`, `opencode.jsonc`, `tui.json`, and `tui.jsonc` files and the `agent`, `agents`, `command`, `commands`, `mode`, `modes`, `plugin`, `plugins`, `skill`, `skills`, `tool`, and `tools` directories.
+When the checkout is inside the home, it also cannot write the checkout's `bin/`, the scripts the captain runs outside the session, or any path in the checkout that an OpenCode first mate loads or the helm is rendered from: `AGENTS.md`, `CLAUDE.md`, `CONTEXT.md`, `opencode.json`, `opencode.jsonc`, `tui.json`, `tui.jsonc`, `.agents/`, `docs/`, the `.claude` entry and its `skills` link, the `.opencode` entry, and, under `.opencode/`, the `opencode.json`, `opencode.jsonc`, `tui.json`, and `tui.jsonc` files and the `agent`, `agents`, `command`, `commands`, `mode`, `modes`, `plugin`, `plugins`, `skill`, `skills`, `tool`, and `tools` directories.
 So no worker can rewrite the first mate's instructions, docs, config, skills, agents, commands, modes, plugins, or tools in its checkout; the rest of `.opencode/`, such as its `package.json` and `node_modules/`, stays OpenCode's scratch.
-It can neither rename, replace, or create any `.git` entry in the checkout or in a clone, nor redirect or relabel the git dir, `commondir`, or `gitdir` of a linked worktree that lives outside the home's pool.
+It can neither rename, replace, or create the checkout's own `.git` or any `.git` entry in a clone, nor redirect or relabel the git dir, `commondir`, or `gitdir` of a linked worktree that lives outside the home's pool.
+Nor can it rewrite the `.git` gitfile of any submodule checkout or linked worktree outside the home's pool that lies in the home, or move aside a directory between the home and one.
+It cannot write a `commondir` into the top-level git dir of the checkout or of any clone, or into any submodule git dir under those or under a linked worktree outside the home's pool.
+Git reads a git dir's `commondir` and a checkout's `.git` gitfile to find the config and hooks it uses, while a linked worktree's `gitdir` file only points back at its checkout and redirects neither.
 It also cannot write the `projects/` directory entry, any clone's directory entry, the entry of the top-level git dir of the checkout or of any clone, or any directory between the home and the checkout's git dir, so none of those can be moved aside, changed, and moved back.
+Inside the top-level git dir of the checkout and of each clone, it can neither move aside, replace, link over, nor create the `modules` directory, each submodule git dir under it and every directory leading to one, or a submodule git dir's own `modules` and `worktrees` entries.
+The same holds for the `modules` entries inside the git dir of a linked worktree outside the home's pool, whose submodules' Git config and hooks it cannot write either.
+The `worktrees` directory of the checkout's and each clone's git dir may still be created, by the session's first worktree in its own pool, but nothing inside may move it, remove it, or replace it with a symlink; the session still adds and removes its own pool worktrees.
+So no linked worktree's or submodule's Git config or hooks can be swapped in by moving a directory aside and back.
 It can connect only to the egress proxy, the DNS resolver, and that socket, so a client that ignores the proxy variables reaches nothing remote at all.
 It can signal only processes inside the same sandbox, so nothing in the session can stop the proxy, and the egress directory's port and process record are out of its reach.
 Process information stays readable, as the [sailor sandbox](#sailor-sandbox-configsailor-sandbox) describes, so the first mate's session start finds its own OpenCode process, names `opencode` as the primary harness, and owns the home's session lock, while a plain shell started in the session finds no harness and stays read-only.
@@ -1001,7 +1008,7 @@ The home's own scripts act on it only from inside its session.
 `bin/fm-spawn.sh`, `bin/fm-tasks-axi.sh`, `bin/fm-brief.sh`, `bin/fm-send.sh`, `bin/fm-control.sh`, `bin/fm-captain-hold.sh`, `bin/fm-merge-local.sh`, `bin/fm-teardown.sh`, and `bin/fm-helm.sh` each refuse from anywhere else before reading or writing anything, with exit status 2 and `this is a sealed Privateer home; attach with bin/fm-privateer.sh attach, and never drive its session from outside`.
 The refusal names no socket, port, or path, so a session outside the quarantine, such as the captain's own OpenCode opened in the home's directory, can neither file backlog rows, write briefs, steer, stop, or spawn workers, record holds, land work, or clean up in the home, nor learn where the session is.
 A spawn inside the session is also refused while its egress proxy is not running, so a worker can never land in an unsandboxed tmux server.
-The captain's own commands stay usable outside the session: `bin/fm-privateer.sh` `check`, `start`, `stop`, `reload`, and `attach`, the [named sailor](#crew-dispatch-profiles-configcrew-dispatchjson) commands of `bin/fm-sailor.sh`, `bin/fm-permission-grant.sh`, whose `grant` and `revoke` run only there (see [permission grants](#permission-grants-statepermission-grantsjsonl)), and `bin/fm-update.sh`.
+The captain's own commands stay usable outside the session: `bin/fm-privateer.sh` `check`, `start`, `stop`, `reload`, `attach`, and `project`, the [named sailor](#crew-dispatch-profiles-configcrew-dispatchjson) commands of `bin/fm-sailor.sh`, `bin/fm-permission-grant.sh`, whose `grant` and `revoke` run only there (see [permission grants](#permission-grants-statepermission-grantsjsonl)), and `bin/fm-update.sh`.
 `bin/fm-privateer-lib.sh` owns the inside-session test and the refusal.
 
 Version 1 has these remaining limits:
@@ -1011,11 +1018,11 @@ Version 1 has these remaining limits:
 - A worker can therefore still write the task records `state/<id>.meta` that the first mate's own spawn writes from inside that sandbox.
 - A grant or revoke `--words-file` is refused only inside the home, so one the captain keeps where the session can still write, such as the shared temporary namespaces below or the checkout's `.opencode/` scratch, is as open to a worker; typing the words on stdin avoids that.
 - The per-task temp roots under `/tmp/fm-`, the user's own temporary directory (`$TMPDIR`), and the flat here-document files stock macOS Bash writes directly in `/var/tmp` as `sh-thd*` are namespaces shared by every home on the machine.
+  A checkout kept in one of them, such as a linked worktree, keeps its `.git` gitfile writable.
 - Clones under `projects/` are added, moved, and removed from outside the session, and a worktree the session creates in its own pool is meant for use only inside it.
-- The directory entries denied are the `projects/` directory, each clone's directory, the top-level git dir of the checkout and of each clone, and the directories between the home and the checkout's git dir.
-- The `worktrees` and `modules` directories inside a git dir, a submodule's own git dir (`modules/<path>`), the intermediate directories under `modules`, and a symlink placed over any of them can still be moved aside and back from inside the session, so a linked worktree's or submodule's Git config or hooks can be planted that way; closing that class is follow-up work.
+- `start` finds the linked worktrees, submodule git dirs, and submodule checkouts that exist when it runs, so for one added from outside while the session runs, only its Git config and hooks, a submodule git dir's `commondir`, any `.git` entry inside a clone, and the `worktrees` and `modules` entries of the checkout's or clone's git dir with the entries directly in that `modules` directory, are covered until the next start.
+  Until then a linked worktree added that way can still be redirected through its `commondir`, because the session's own pool worktrees write the same file and a path rule cannot tell the two apart.
 - OpenCode also loads plugins and configuration from its own directories under `state/privateer/opencode/`, which stay writable, so a worker can still add one there that the first mate loads at its next start.
-- A checkout nested below the home, rather than being the home, keeps its own `bin/` writable from inside the session.
 - The sandbox is not a boundary against same-user system services that start programs outside it, as `bin/fm-sandbox-exec.sh` states.
 - The session gate on the home's scripts prevents mistakes; it is not a security boundary: it reads the `TMUX` variable, which any same-user process can set, and tmux lets any same-user process drive the session's socket directly.
 - No first mate can update its own checkout's instructions, docs, config, skills, agents, commands, modes, plugins, or tools from inside its session; update the checkout from outside, as [setting up a home](#setting-up-a-home) describes, and start the session again, which renders the helm from it.
@@ -1040,8 +1047,9 @@ Each slash command in `.opencode/commands/` runs one verb and hands its report t
 | Command | What it does |
 | --- | --- |
 | `/helm` | Runs the session start |
-| `/scout <project> <ask>` | Files the backlog row, writes the worker's instructions with the ask as the captain's intent, and starts a scout on the first sailor that can take it |
-| `/ship <project> <ask>` | The same for a local-only ship, on the project's registered branch prefix and merge authority |
+| `/scout [<project>] <ask>` | Files the backlog row, writes the worker's instructions with the ask as the captain's intent, and starts a scout on the first sailor that can take it |
+| `/ship [<project>] <ask>` | The same for a local-only ship, on the project's registered branch prefix and merge authority |
+| `/project` | Shows the registered projects and marks the active one; only the captain switches it, outside the session |
 | `/queue` | Shows the backlog |
 | `/sailors` | Shows each sailor's status |
 | `/steer <task-id> <text>` | Sends the text to the worker |
@@ -1054,6 +1062,16 @@ While the dispatch file declares rules, the front door refuses before writing an
 Every verb runs only in a Privateer home and only inside its session.
 The captain's words reach the front door exactly, or not at all: OpenCode ends a command's shell step at the first backtick and reads `$$`, `$&`, `` $` ``, and `$'` in the words as its own substitution patterns, so each command passes the words three ways, and the front door refuses, before writing anything, words holding a backtick or a `$` followed by `$`, `&`, `'`, or a backtick, and asks for them again without those.
 `bin/fm-helm.sh --help` owns each verb's exact steps, and [`verification/local-sailors.md`](verification/local-sailors.md) records the OpenCode behavior the commands rely on, which `tests/fm-helm-live-e2e.test.sh` refreshes.
+
+### Active project (config/active-project)
+
+`config/active-project` holds one project name: the default project for a request that names none.
+The captain sets it outside the session with `bin/fm-privateer.sh project <name>`, which refuses unless `data/projects.md` registers the name and a clone exists under `projects/`, and writes the file atomically; `project --clear` removes it, and `project` alone lists the registered projects that have a clone, with the active one marked.
+The session sandbox denies writes to `config/`, so setting or clearing it also refuses inside the session; every form refuses in a home without `config/privateer`, so the main home never sets one.
+The first mate only reads it: `/project` (`bin/fm-helm.sh project`) shows the same list, and when the captain asks to switch, the first mate gives the outside command.
+While the file names a valid project, `bin/fm-helm.sh scout` and `ship` accept the ask without a project word, use that project, and say so on their first output line; a first word that `data/projects.md` registers, that is a directory under `projects/`, or that is a likely typo of a registered name (one insertion, deletion, substitution, or adjacent swap away, both words at least 4 characters long) is still taken as the project, and is refused unless it is a registered project with a clone, the refusal naming the close project as a did-you-mean line.
+A malformed value, meaning several lines, a name that is not a plain project name, an unregistered name, or a name with no clone, is never used: the digest prints `active project: not used` with the reason, and the snapshot reports `privateer.active_project` as null.
+The rulebook's intake ladder tells the first mate to name the active project in its reply.
 
 ### Egress audit
 
@@ -1079,7 +1097,7 @@ It fails unless the session-start digest reaches the model's first answering req
 
 Create the home with `config/privateer` naming the first mate's sailor and model, `config/crew-harness` holding `opencode`, `config/sailor-sandbox`, and a `config/crew-dispatch.json` naming only local sailors and no `sailor_fallback`; `config/opencode-permission-profile` set to `restricted` is the agreed posture for its sailors.
 Make the home a clone of firstmate that is itself the home, at `forks/<name>` inside the Claude-orchestrated home's checkout, and start it with `FM_HOME=<that clone> <that clone>/bin/fm-privateer.sh start`.
-Its `bin/` is then the home's own, so no worker can rewrite the scripts that govern it; a checkout nested below the home keeps its `bin/` writable, and pointing `FM_HOME` at the home from a checkout outside it also works.
+Its `bin/` is then the home's own, so no worker can rewrite the scripts that govern it; a checkout nested below the home works too, since the session denies its `bin/` as well, and so does pointing `FM_HOME` at the home from a checkout outside it.
 Before creating `forks/`, add a `forks/` line to the Claude-orchestrated checkout's `.git/info/exclude`.
 The tracked `.gitignore` excludes `forks/` too, but only once that checkout carries the entry, and until then the untracked directory makes the checkout dirty, so its self-update skips it.
 Add `"Read(./forks/**)"` to the `permissions.deny` list in that checkout's `.claude/settings.local.json`, so its Claude first mate never reads the Privateer home's private projects.

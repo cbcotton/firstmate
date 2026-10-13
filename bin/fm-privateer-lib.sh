@@ -91,3 +91,66 @@ fm_privateer_refuse_outside() {
   echo "error: ${0##*/} refused: $FM_PRIVATEER_SEALED_REFUSAL" >&2
   exit "$FM_PRIVATEER_SEALED_EXIT"
 }
+
+# fm_privateer_active_project <config-dir> <data-dir> <projects-dir> <bin-dir>:
+# the home's active project, from <config-dir>/active-project. Exit 0 with the
+# name on stdout when the file holds one registered project name that has a
+# clone; exit 2, silently, when the file is absent; exit 1 with one line on
+# stdout saying what is wrong with it otherwise (several lines, a path or odd
+# characters, an unregistered name, or no clone under <projects-dir>).
+fm_privateer_active_project() {
+  local file="$1/active-project" lines name
+  [ -e "$file" ] || [ -L "$file" ] || return 2
+  if [ ! -f "$file" ]; then
+    echo "config/active-project is not a file"
+    return 1
+  fi
+  lines=$(awk 'NF { n++ } END { print n + 0 }' "$file" 2>/dev/null)
+  if [ "$lines" -ne 1 ]; then
+    echo "config/active-project must hold one project name on one line, not ${lines} lines"
+    return 1
+  fi
+  name=$(awk 'NF { gsub(/^[[:space:]]+|[[:space:]]+$/, ""); print; exit }' "$file")
+  case "$name" in
+    *[!A-Za-z0-9._-]* | .* | -*)
+      echo "config/active-project holds '$name', which is not a project name"
+      return 1
+      ;;
+  esac
+  if ! FM_DATA_OVERRIDE="$2" "$4/fm-project-mode.sh" --registered "$name" 2>/dev/null; then
+    echo "config/active-project names '$name', which data/projects.md does not register"
+    return 1
+  fi
+  if [ ! -d "$3/$name" ]; then
+    echo "config/active-project names '$name', which has no clone under projects/"
+    return 1
+  fi
+  printf '%s\n' "$name"
+}
+
+# fm_privateer_projects_view <config-dir> <data-dir> <projects-dir> <bin-dir>:
+# the registry as the captain reads it: every project data/projects.md
+# registers that has a clone, one per line, the active one marked `*`, then a
+# line saying which is active (or that none is, or why the value is unused).
+fm_privateer_projects_view() {
+  local name active reason rc=0 listed=0
+  active=$(fm_privateer_active_project "$1" "$2" "$3" "$4") || rc=$?
+  [ "$rc" -ne 1 ] || { reason=$active; active=''; }
+  if [ -f "$2/projects.md" ]; then
+    while IFS= read -r name; do
+      [ -n "$name" ] && [ -d "$3/$name" ] || continue
+      listed=1
+      if [ "$name" = "$active" ]; then printf '* %s\n' "$name"; else printf '  %s\n' "$name"; fi
+    done <<EOF2
+$(awk '/^- / { print $2 }' "$2/projects.md")
+EOF2
+  fi
+  [ "$listed" -eq 1 ] || echo "no registered project has a clone under projects/"
+  if [ -n "$active" ]; then
+    echo "active project: $active"
+  elif [ -n "${reason:-}" ]; then
+    echo "active project: none - $reason"
+  else
+    echo "active project: none"
+  fi
+}

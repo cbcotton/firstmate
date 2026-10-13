@@ -4572,12 +4572,16 @@ test_wedge_escalation_resets_when_pane_becomes_active() {
 # cleanup at any point of a poll. A TERM trap body cannot promise that: bash
 # defers it until the blocked command returns, and bash 5.2 can drop it outright
 # when it is pending as a command substitution is parsed, which left CI watchers
-# polling after reap until the job timed out. The pane capture here blocks on a
+# polling after reap until the job timed out. Stock macOS bash 3.2 also defers a
+# TERM while its main shell reads a command substitution, so the poll's reads
+# run as waited children (watcher_read). The pane capture here blocks on a
 # FIFO whose writer never writes, so only a TERM honored mid-poll stops the
 # watcher inside the bound; the released lock and acknowledgeable stop record
-# prove its cleanup still ran.
+# prove its cleanup still ran, and the gone read child and read file prove that
+# cleanup also stopped the in-flight read. CI's stock macOS Bash lane runs this
+# case under /bin/bash 3.2.
 test_term_stops_a_watcher_blocked_inside_a_poll() {
-  local dir state fakebin out fifo window sig pid holder i rc
+  local dir state fakebin out fifo window sig pid holder i rc capture reader reader_left read_files
   dir=$(make_case term-blocked-poll); state="$dir/state"; fakebin="$dir/fakebin"
   out="$dir/watch.out"; fifo="$dir/pane.fifo"; window="test:fm-blocked-capture"
   mkfifo "$fifo"
@@ -4601,14 +4605,32 @@ test_term_stops_a_watcher_blocked_inside_a_poll() {
     kill "$holder" 2>/dev/null || true; reap "$pid"
     fail "the watcher never blocked inside its pane capture: $(cat "$out")"
   fi
+  # The blocked capture's parent is the watcher's in-flight read child.
+  capture=$(pgrep -f "capture-pane -p -t $window" | head -1)
+  reader=$(ps -o ppid= -p "${capture:-0}" 2>/dev/null | tr -d '[:space:]')
+  read_files=$(find "$state" -maxdepth 1 -name '.fm-watch-read.*' -print)
   kill "$pid" 2>/dev/null || true
   wait_for_exit "$pid" 100
   rc=$?
+  # Sample the read child before releasing the FIFO, which would end it anyway.
+  i=0
+  while [ -n "$reader" ] && is_live_non_zombie "$reader" && [ "$i" -lt 20 ]; do
+    sleep 0.1
+    i=$((i + 1))
+  done
+  reader_left=0
+  [ -z "$reader" ] || ! is_live_non_zombie "$reader" || reader_left=1
   kill "$holder" 2>/dev/null || true
   wait "$holder" 2>/dev/null || true
   [ "$rc" -ne 124 ] || fail "TERM did not stop a watcher blocked inside a poll"
   [ ! -e "$state/.watch.lock" ] || fail "a watcher stopped mid-poll kept its singleton lock, so its cleanup did not run"
   ack_stopped_cycle "$state" || fail "could not acknowledge the stop of a watcher blocked inside a poll"
+  [ -n "$reader" ] && [ "$reader" != "$pid" ] \
+    || fail "the blocked capture did not run under a read child of the watcher (capture=${capture:-none} parent=${reader:-none})"
+  [ "$reader_left" -eq 0 ] || fail "the watcher's cleanup left its in-flight read child $reader running"
+  [ -n "$read_files" ] || fail "the blocked read wrote no read file under the watcher's state dir"
+  ! find "$state" -maxdepth 1 -name '.fm-watch-read.*' -print | grep . >/dev/null \
+    || fail "the watcher's cleanup left its read file behind"
   pass "TERM stops a watcher blocked inside a poll and still runs its cleanup"
 }
 

@@ -482,6 +482,17 @@ jobs:
             exit 1
           }
 
+          # Stock Bash defers a TERM while its main shell reads a command
+          # substitution, so the watcher's poll reads must stay stoppable here.
+          term_output=$(FM_TEST_ONLY=test_term_stops_a_watcher_blocked_inside_a_poll \
+            /bin/bash tests/fm-watch-triage.test.sh)
+          printf '%s\n' "$term_output"
+          term_count=$(printf '%s\n' "$term_output" | grep -c '^ok - ')
+          [ "$term_count" -eq 1 ] || {
+            echo "::error::expected 1 watcher TERM-mid-poll bash 3.2 regression, got $term_count"
+            exit 1
+          }
+
           # The fork-free hot-path helpers must stay byte-identical to the
           # commands they replace under stock Bash 3.2, which lacks the
           # printf %(...)T clock and falls back to date.

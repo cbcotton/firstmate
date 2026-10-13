@@ -801,6 +801,8 @@ test_snapshot_reports_sailors_and_privateer() {
   printf '%s\n' '{"sailors":{"tiller":{"endpoint":"http://127.0.0.1:9/v1","status":"live","models":["qwen-coder"]},"stoker":{"endpoint":"http://127.0.0.1:9/v1","status":"placeholder","models":["qwen-coder"]}}}' \
     > "$home/config/crew-dispatch.json"
   printf '%s\n' '# first mate' '' 'tiller/qwen-coder  # the Heretic' > "$home/config/privateer"
+  printf -- '- constellation [local-only] - the test project (added 2026-09-30)\n' > "$home/data/projects.md"
+  mkdir -p "$home/projects/constellation"
   printf '%s\n' 'constellation' > "$home/config/active-project"
   cat > "$fakebin/curl" <<'SH'
 #!/usr/bin/env bash
@@ -814,6 +816,10 @@ SH
   assert_equals '{"active":true,"first_mate":"tiller/qwen-coder","active_project":"constellation"}' \
     "$(printf '%s' "$out" | jq -c '.privateer')" \
     "the snapshot must name the first mate and the active project in a Privateer home"
+  printf '%s\n' 'nosuch' > "$home/config/active-project"
+  out=$(PATH="$fakebin:$PATH" FM_HOME="$home" "$SNAPSHOT" --json)
+  assert_equals null "$(printf '%s' "$out" | jq -c '.privateer.active_project')" \
+    "the snapshot must report a malformed active project as null"
   pass "the snapshot reports live sailors and the Privateer first mate and active project"
 }
 
