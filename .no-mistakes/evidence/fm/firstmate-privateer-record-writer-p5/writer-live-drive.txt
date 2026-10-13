@@ -1,0 +1,31 @@
+== umask $(umask)
+anchor pid=78819 start='Tue Oct 13 17:08:34 2026    '
+writer ready: /tmp/pvlive.6PWNmP/s
+--- first mate's child:
+child publish rc=0
+child append rc=0
+mode -rw-------@
+kind=ship
+status=running
+pr=https://example/pr/1
+child publish 0644 rc=0
+refused: '../evil' is not a task id
+child publish ../evil rc=1
+--- bystander (test shell, not a descendant):
+refused: only the first mate and the processes it starts may write task records
+bystander publish rc=1
+refused: only the first mate and the processes it starts may write task records
+bystander remove rc=1
+x
+--- anchor killed:
+refused: the first mate's process has ended; the captain must stop and start the session again
+ping after anchor end rc=1
+--- refusal log:
+{"time": "2026-10-13T17:08:34+0200", "verdict": "refused", "op": "publish", "id": "../evil", "pid": 78965, "why": "'../evil' is not a task id"}
+{"time": "2026-10-13T17:08:34+0200", "verdict": "refused", "op": "publish", "id": "task-1", "pid": 78970, "why": "only the first mate and the processes it starts may write task records"}
+{"time": "2026-10-13T17:08:34+0200", "verdict": "refused", "op": "remove", "id": "task-1", "pid": 78973, "why": "only the first mate and the processes it starts may write task records"}
+{"time": "2026-10-13T17:08:35+0200", "verdict": "refused", "op": "ping", "id": "", "pid": 78988, "why": "the first mate's process has ended; the captain must stop and start the session again"}
+--- reused/mismatched start time:
+fm-privateer-records: the first mate's process 79011 is not running with start time 'Mon Jan 1 00:00:00 2001'
+serve with wrong start rc=1
+writer stopped; socket exists? no

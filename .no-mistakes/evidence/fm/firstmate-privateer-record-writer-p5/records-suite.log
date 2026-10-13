@@ -1,0 +1,9 @@
+ok - the first mate and every process it starts publish, append to, and remove task records through the writer
+ok - the writer refuses and logs the first mate's parent, a sibling, and a child the first mate detached
+ok - once the first mate's process ends every write is refused, and a reused process id never starts a writer
+ok - the writer reads the first mate's start time under LC_ALL=C, as the launcher does, whatever LC_TIME the captain sets
+ok - a publish may ask for 0600 or a mode no wider than the default, an append keeps the mode, and a wider mode is refused
+ok - the writer refuses ids that name nothing in the state directory, oversized content, and an append to a missing record
+ok - a publish replaces the record whole, and nothing a bystander writes in state/ reaches it
+# all fm-privateer-records tests passed
+bash tests/fm-privateer-records.test.sh  5.70s user 6.12s system 78% cpu 15.062 total
