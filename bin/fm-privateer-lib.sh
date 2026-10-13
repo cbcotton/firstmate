@@ -87,10 +87,10 @@ fm_privateer_records_route() {
   [ -S "$(fm_privateer_records_socket "$1")" ]
 }
 
-# fm_privateer_records_request <home> <op> [<id>]: one request to <home>'s
-# record writer (ping, or publish, append, or remove of <id>, with the content
-# on stdin); exits as bin/fm-privateer-records.py request does, the refusal on
-# stderr.
+# fm_privateer_records_request <home> <op> [<id> [<mode>]]: one request to
+# <home>'s record writer (ping, or publish, append, or remove of <id>, with the
+# content on stdin, and a publish's octal file mode); exits as
+# bin/fm-privateer-records.py request does, the refusal on stderr.
 fm_privateer_records_request() {
   local home=$1 dir
   shift

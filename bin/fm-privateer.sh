@@ -967,7 +967,7 @@ cmd_start() {
   anchor_start=
   case "$anchor" in
     '' | *[!0-9]*) ;;
-    *) anchor_start=$(ps -o lstart= -p "$anchor" 2>/dev/null) || anchor_start= ;;
+    *) anchor_start=$(LC_ALL=C ps -o lstart= -p "$anchor" 2>/dev/null) || anchor_start= ;;
   esac
   if [ -z "$anchor_start" ] || ! start_record_writer "$anchor" "$anchor_start"; then
     tmux -L "$socket" kill-server 2>/dev/null || true

@@ -37,6 +37,8 @@ STATE="${FM_STATE_OVERRIDE:-$FM_HOME/state}"
 . "$SCRIPT_DIR/fm-parent-channel-lib.sh"
 # shellcheck source=bin/fm-dod-lib.sh
 . "$SCRIPT_DIR/fm-dod-lib.sh"
+# shellcheck source=bin/fm-backlog-transition-lib.sh
+. "$SCRIPT_DIR/fm-backlog-transition-lib.sh"
 
 if [ "$#" -ne 2 ]; then
   echo "error: invalid PR check request" >&2
@@ -215,24 +217,45 @@ META_LOCK_HELD=1
 META_DEVICE=$(fm_pr_file_device "$META") || exit 1
 STATE_DEVICE=$(fm_pr_file_device "$STATE") || exit 1
 [ "$META_DEVICE" = "$STATE_DEVICE" ] || { echo "error: task metadata is unavailable" >&2; exit 1; }
-META_TMP=$(mktemp "$STATE/.fm-pr-meta.XXXXXX") || exit 1
-while IFS= read -r line || [ -n "$line" ]; do
-  case "$line" in
-    pr=*|pr_head=*) ;;
-    *) printf '%s\n' "$line" >> "$META_TMP" || exit 1 ;;
-  esac
-done < "$META"
-printf 'pr=%s\n' "$URL" >> "$META_TMP" || exit 1
-[ -z "$PR_HEAD" ] || printf 'pr_head=%s\n' "$PR_HEAD" >> "$META_TMP" || exit 1
-chmod 0600 "$META_TMP" || exit 1
-fm_pr_private_file_valid "$META_TMP" 600 "$STATE_DEVICE" || exit 1
-fm_pr_metadata_identity_parse "$META_TMP" || exit 1
-[ "$FM_PR_META_PROVIDER" = "$PROVIDER" ] && [ "$FM_PR_META_URL" = "$URL" ] \
-  && [ "$FM_PR_META_HOST" = "$HOST" ] && [ "$FM_PR_META_PATH" = "$PROJECT_PATH" ] \
-  && [ "$FM_PR_META_NUMBER" = "$NUMBER" ] || exit 1
-fm_pr_regular_destination_on_device_or_absent "$META" "$STATE_DEVICE" || exit 1
-mv -f -- "$META_TMP" "$META" || exit 1
-META_TMP=
+if fm_backlog_record_routed "$META"; then
+  # Inside a Privateer session the record writer publishes the record, composed
+  # in memory, so no worker can rewrite a staged copy.
+  META_CONTENT=$(
+    while IFS= read -r line || [ -n "$line" ]; do
+      case "$line" in
+        (pr=*|pr_head=*) ;;
+        (*) printf '%s\n' "$line" ;;
+      esac
+    done < "$META"
+    printf 'pr=%s\n' "$URL"
+    [ -z "$PR_HEAD" ] || printf 'pr_head=%s\n' "$PR_HEAD"
+    printf x
+  ) || exit 1
+  fm_pr_regular_destination_on_device_or_absent "$META" "$STATE_DEVICE" || exit 1
+  printf '%s' "${META_CONTENT%x}" | fm_privateer_records_request "$FM_HOME" publish "$ID" 0600 || {
+    echo "error: task metadata could not be published through the Privateer record writer" >&2
+    exit 1
+  }
+else
+  META_TMP=$(mktemp "$STATE/.fm-pr-meta.XXXXXX") || exit 1
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in
+      pr=*|pr_head=*) ;;
+      *) printf '%s\n' "$line" >> "$META_TMP" || exit 1 ;;
+    esac
+  done < "$META"
+  printf 'pr=%s\n' "$URL" >> "$META_TMP" || exit 1
+  [ -z "$PR_HEAD" ] || printf 'pr_head=%s\n' "$PR_HEAD" >> "$META_TMP" || exit 1
+  chmod 0600 "$META_TMP" || exit 1
+  fm_pr_private_file_valid "$META_TMP" 600 "$STATE_DEVICE" || exit 1
+  fm_pr_metadata_identity_parse "$META_TMP" || exit 1
+  [ "$FM_PR_META_PROVIDER" = "$PROVIDER" ] && [ "$FM_PR_META_URL" = "$URL" ] \
+    && [ "$FM_PR_META_HOST" = "$HOST" ] && [ "$FM_PR_META_PATH" = "$PROJECT_PATH" ] \
+    && [ "$FM_PR_META_NUMBER" = "$NUMBER" ] || exit 1
+  fm_pr_regular_destination_on_device_or_absent "$META" "$STATE_DEVICE" || exit 1
+  mv -f -- "$META_TMP" "$META" || exit 1
+  META_TMP=
+fi
 fm_pr_private_file_valid "$META" 600 "$STATE_DEVICE" || exit 1
 fm_pr_metadata_identity_parse "$META" || exit 1
 [ "$FM_PR_META_PROVIDER" = "$PROVIDER" ] && [ "$FM_PR_META_URL" = "$URL" ] \

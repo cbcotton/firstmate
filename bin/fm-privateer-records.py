@@ -10,10 +10,12 @@ contract. This header owns the wire behavior and the identity check.
 Usage:
   fm-privateer-records.py serve <socket> <state-dir> <dir> <anchor-pid> <anchor-start>
   fm-privateer-records.py request <socket> ping
-  fm-privateer-records.py request <socket> publish|append|remove <id>
+  fm-privateer-records.py request <socket> publish <id> [<mode>]
+  fm-privateer-records.py request <socket> append|remove <id>
 
 serve runs outside the session's sandbox. <anchor-pid> is the first mate's
-pane process and <anchor-start> its start time as `ps -o lstart=` prints it.
+pane process and <anchor-start> its start time as `ps -o lstart=` prints it
+under LC_ALL=C, the locale the writer reads it in too.
 It refuses to start (exit 1) unless the anchor runs with that start time, then
 binds the Unix socket <socket>, replacing only a stale socket there, makes it
 owner-only, and once it listens writes <socket> to <dir>/records.ready. It
@@ -21,7 +23,8 @@ stages every write in <dir>/records.tmp/, which must be on the same file
 system as <state-dir>, appends one JSON line per refusal to <dir>/records.log,
 and on SIGTERM removes its socket and ready file and exits.
 
-Each connection carries one request, a JSON object {"op", "id", "content"}
+Each connection carries one request, a JSON object {"op", "id", "content"},
+with an optional "mode" on a publish,
 that ends when the caller shuts down its side, and gets one reply line: `ok`
 or `refused: <why>`. A request is served only when the caller's user id,
 which the socket reports, is the writer's own, the anchor still runs with its
@@ -37,18 +40,19 @@ detaches with nohup or setsid reparents to init and is refused too.
            new file in <dir>/records.tmp/ and renamed over the record, so the
            record never exists half-written and nothing a worker can write is
            ever staged.
-  append   adds "content" to the end of the record the same way, and refuses
-           when there is no record.
+  append   adds "content" to the end of the record the same way, keeping the
+           record's mode, and refuses when there is no record.
   remove   deletes the record; one that is already gone is fine.
 
 <id> must match [A-Za-z0-9._-]+, the class bin/fm-wake-lib.sh's
 fm_meta_lock_path accepts, so a request can name nothing outside <state-dir>.
-"content" is at most 65536 bytes. A new record gets the mode a shell
-redirection would give it under the writer's umask. Each refusal is logged as
+"content" is at most 65536 bytes. A published record gets the mode a shell
+redirection would give it under the writer's umask, or the publish's "mode",
+an integer that must be 0600 or grant nothing that default does not. Each refusal is logged as
 {"time", "verdict": "refused", "op", "id", "pid", "why"}.
 
 request sends one request, reading the content from stdin for publish and
-append, and exits 0 on ok, 1 on a refusal (printed on stderr), 2 on a usage
+append and taking a publish's <mode> in octal, and exits 0 on ok, 1 on a refusal (printed on stderr), 2 on a usage
 error, and 3 when the writer cannot be reached.
 """
 import json
@@ -79,7 +83,7 @@ SOL_LOCAL, LOCAL_PEERCRED, LOCAL_PEERPID = 0, 1, 2
 def usage():
     sys.stderr.write(
         "usage: fm-privateer-records.py serve <socket> <state-dir> <dir> <anchor-pid> <anchor-start>\n"
-        "       fm-privateer-records.py request <socket> ping | publish|append|remove <id>\n")
+        "       fm-privateer-records.py request <socket> ping | publish <id> [<mode>] | append|remove <id>\n")
     sys.exit(2)
 
 
@@ -88,7 +92,8 @@ def start_time(pid):
     or "" when it does not run."""
     try:
         r = subprocess.run([PS, "-o", "lstart=", "-p", str(pid)], stdout=subprocess.PIPE,
-                           stderr=subprocess.DEVNULL, universal_newlines=True, timeout=10)
+                           stderr=subprocess.DEVNULL, universal_newlines=True, timeout=10,
+                           env=dict(os.environ, LC_ALL="C"))
     except (OSError, subprocess.SubprocessError):
         return ""
     return " ".join(r.stdout.split()) if r.returncode == 0 else ""
@@ -155,10 +160,13 @@ class Writer:
             except OSError:
                 pass
 
-    def replace(self, path, data):
+    def mode_allowed(self, mode):
+        return mode == 0o600 or (0 <= mode <= 0o777 and not mode & ~self.mode)
+
+    def replace(self, path, data, mode):
         fd, tmp = tempfile.mkstemp(prefix=".record.", dir=self.work)
         try:
-            os.fchmod(fd, self.mode)
+            os.fchmod(fd, mode)
             view = memoryview(data)
             while view:
                 view = view[os.write(fd, view):]
@@ -174,12 +182,12 @@ class Writer:
                 pass
             raise
 
-    def apply(self, op, ident, data):
+    def apply(self, op, ident, data, mode):
         """Do one accepted write; None on success, else why it failed."""
         path = os.path.join(self.state, ident + ".meta")
         try:
             if op == "publish":
-                self.replace(path, data)
+                self.replace(path, data, self.mode if mode is None else mode)
             elif op == "append":
                 try:
                     st = os.lstat(path)
@@ -190,7 +198,7 @@ class Writer:
                 fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
                 with os.fdopen(fd, "rb") as f:
                     old = f.read()
-                self.replace(path, old + data)
+                self.replace(path, old + data, stat.S_IMODE(st.st_mode))
             elif op == "remove":
                 try:
                     st = os.lstat(path)
@@ -233,15 +241,22 @@ class Handler(socketserver.BaseRequestHandler):
         try:
             req = json.loads(raw.decode("utf-8"))
             op, ident, content = req.get("op"), req.get("id", ""), req.get("content", "")
+            mode = req.get("mode")
             if not isinstance(op, str) or not isinstance(ident, str) or not isinstance(content, str):
+                raise ValueError
+            if mode is not None and (not isinstance(mode, int) or isinstance(mode, bool)):
                 raise ValueError
             data = content.encode("utf-8", "surrogateescape")
         except (ValueError, AttributeError, UnicodeError):
-            return self.refuse("?", "", pid, "the request is not a JSON object with op, id, and content")
+            return self.refuse("?", "", pid, "the request is not a JSON object with op, id, content, and an integer mode")
         if op not in ("ping", "publish", "append", "remove"):
             return self.refuse(op, ident, pid, "unknown request %r" % op)
         if op != "ping" and not ID_RE.match(ident):
             return self.refuse(op, ident, pid, "%r is not a task id" % ident)
+        if mode is not None and op != "publish":
+            return self.refuse(op, ident, pid, "only a publish takes a mode")
+        if mode is not None and not writer.mode_allowed(mode):
+            return self.refuse(op, ident, pid, "mode %o is wider than the writer's default %o" % (mode, writer.mode))
         if len(data) > MAX_CONTENT:
             return self.refuse(op, ident, pid, "the content is larger than %d bytes" % MAX_CONTENT)
         with WRITE_LOCK:
@@ -250,7 +265,7 @@ class Handler(socketserver.BaseRequestHandler):
             except (OSError, subprocess.SubprocessError):
                 why = "the process table could not be read"
             if why is None and op != "ping":
-                why = writer.apply(op, ident, data)
+                why = writer.apply(op, ident, data, mode)
         if why is not None:
             return self.refuse(op, ident, pid, why)
         self.reply("ok")
@@ -321,18 +336,24 @@ def request(args):
     if len(args) < 2:
         usage()
     sock_path, op = args[0], args[1]
+    req = {"op": op}
     if op == "ping":
         if len(args) != 2:
             usage()
         ident, content = "", b""
     elif op in ("publish", "append", "remove"):
-        if len(args) != 3:
+        if len(args) != 3 and not (op == "publish" and len(args) == 4):
             usage()
         ident = args[2]
+        if len(args) == 4:
+            if not re.match(r"[0-7]{1,4}\Z", args[3]):
+                usage()
+            req["mode"] = int(args[3], 8)
         content = sys.stdin.buffer.read(MAX_CONTENT + 1) if op != "remove" else b""
     else:
         usage()
-    body = json.dumps({"op": op, "id": ident, "content": content.decode("utf-8", "surrogateescape")})
+    req.update(id=ident, content=content.decode("utf-8", "surrogateescape"))
+    body = json.dumps(req)
     try:
         conn = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         conn.settimeout(30)

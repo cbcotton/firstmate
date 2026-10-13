@@ -1507,7 +1507,7 @@ serve_dir() {
 
 test_session_sandbox_holds_every_command() {
   local dir home root out status spid opid sport oport port pid socket probe alive wtbase wtgit proj shared treehouse_line captain helm ledger first during
-  local records writer refused refused_status stopped stopped_status
+  local records writer refused refused_status stopped stopped_status pr_mode pr_lines
   if ! "$ROOT/bin/fm-sandbox-exec.sh" available || ! command -v tmux >/dev/null 2>&1; then
     pass "session sandbox checks not run: sandbox-exec or tmux is not available on this machine"
     return 0
@@ -1568,11 +1568,24 @@ test_session_sandbox_holds_every_command() {
 #!/usr/bin/env bash
 . '$ROOT/bin/fm-backlog-transition-lib.sh'
 case "\$1" in
-  publish) fm_backlog_atomic_transition publish-content "kind=ship"\$'\\n' "\$FM_HOME/state/\$2.meta" "task record" "\$FM_HOME/state" ;;
+  publish) fm_backlog_atomic_transition publish-content "kind=ship"\$'\\n'"worktree=$dir/prwt"\$'\\n' "\$FM_HOME/state/\$2.meta" "task record" "\$FM_HOME/state" ;;
   remove) fm_backlog_atomic_transition remove "\$FM_HOME/state/\$2.meta" "task record" "\$FM_HOME/state" ;;
 esac || { echo "\$FM_BACKLOG_TRANSITION_ERROR"; exit 1; }
 SH
   chmod +x "$dir/record"
+  # A forge that reports the pull request ready with a known head, and a root
+  # whose guard does nothing, as tests/fm-pr-check-security.test.sh fakes them.
+  mkdir -p "$dir/prwt" "$dir/prbin" "$dir/prroot/bin"
+  cat > "$dir/prbin/gh" <<'SH'
+#!/bin/sh
+case " $* " in
+  *" --json isDraft "*) echo '{"isDraft":false}' ;;
+  *" headRefOid "*) echo 0123456789abcdef0123456789abcdef01234567 ;;
+  *) exit 1 ;;
+esac
+SH
+  printf '#!/bin/sh\nexit 0\n' > "$dir/prroot/bin/fm-guard.sh"
+  chmod +x "$dir/prbin/gh" "$dir/prroot/bin/fm-guard.sh"
   # A command the first mate starts through tmux, as a worker's pane is: it
   # tries the other server directly and through the proxy, writes where a
   # worker's OpenCode keeps its data and in OpenCode's scratch, tries to plant
@@ -1666,12 +1679,19 @@ SH
   # The first mate: it starts that window, then tries to stop the proxy and to
   # rewrite the port every worker is sent to.
   # It publishes a task record through the record writer first, so the window
-  # meets an existing one, and removes it once the test has seen stop refuse.
+  # meets an existing one, registers its pull request with fm-pr-check.sh,
+  # tries to rename a record of its own onto it, and removes it once the test
+  # has seen stop refuse.
   cat > "$dir/primary" <<SH
 #!/bin/sh
 '$dir/record' publish pv-rec > '$probe.published.tmp' 2>&1
 echo "published=\$?" >> '$probe.published.tmp'
 mv '$probe.published.tmp' '$probe.published'
+PATH='$dir/prbin':"\$PATH" FM_ROOT_OVERRIDE='$dir/prroot' '$ROOT/bin/fm-pr-check.sh' pv-rec https://github.com/o/r/pull/7 > '$probe.prcheck.out' 2>&1
+echo "prcheck=\$?" > '$probe.prcheck.tmp'
+printf 'kind=secondmate\\n' > '$home/state/mate.next' && mv -f '$home/state/mate.next' '$home/state/pv-rec.meta' 2>/dev/null
+echo "mv=\$?" >> '$probe.prcheck.tmp'
+mv '$probe.prcheck.tmp' '$probe.prcheck'
 tmux new-window -d '$dir/window'
 kill "\$(cat "\$FM_HOME/state/privateer/egress/pid")" 2>/dev/null
 echo "kill=\$?" > '$probe.primary.tmp'
@@ -1691,6 +1711,8 @@ SH
   port=$(cat "$home/state/privateer/egress/port" 2>/dev/null)
   pid=$(cat "$home/state/privateer/egress/pid" 2>/dev/null)
   wait_for_file "$probe.primary" && wait_for_file "$probe.window"
+  pr_mode=$(file_mode "$home/state/pv-rec.meta" 2>/dev/null)
+  pr_lines=$(grep -c '^pr=https://github.com/o/r/pull/7$' "$home/state/pv-rec.meta" 2>/dev/null)
   alive=$(proxy_request "$port" "GET http://127.0.0.1:$sport/v1/models HTTP/1.1")
   during=$(run_grant "$home" /tmp/tmux-501/default,1,0 grant --scope standing --permission bash --pattern 'wget *' --action deny \
     --words-file "$dir/words" --channel chat)
@@ -1728,6 +1750,11 @@ $treehouse_line" "$(cat "$probe.window" 2>/dev/null)" \
   cmp -s "$helm/AGENTS.md" "$ROOT/docs/privateer/AGENTS.md" ||
     fail "the helm's rulebook must exist and be unchanged after the session, so its write probes were real"
   assert_equals "published=0" "$(cat "$probe.published" 2>/dev/null)" "the first mate's own script must publish its task record through the record writer"
+  assert_equals "prcheck=0
+mv=1" "$(cat "$probe.prcheck" 2>/dev/null)" \
+    "the first mate's fm-pr-check.sh must register its pull request while a direct rename onto the record is still denied: $(cat "$probe.prcheck.out" 2>/dev/null)"
+  assert_equals "600" "$pr_mode" "the record fm-pr-check.sh publishes through the writer must stay private"
+  assert_equals "1" "$pr_lines" "the record must hold the registered pull request"
   expect_code 1 "$refused_status" "stop must refuse while the first mate's task record exists: $refused"
   assert_contains "$refused" "work is in flight (pv-rec)" "stop must name only the record the first mate published"
   assert_equals "removed=0" "$(cat "$probe.removed" 2>/dev/null)" "the first mate's own script must remove its task record through the record writer"
@@ -1748,7 +1775,7 @@ allowed GET 127.0.0.1:$sport" "$(jq -r --arg o "127.0.0.1:$oport" --arg s "127.0
     fail "stop must stop the egress proxy"
   fi
   [ "$port" != 1 ] || fail "the first mate rewrote the proxy's port"
-  pass "in the real sandboxed session, a command started through tmux reaches nothing but the proxy, plants nothing that runs outside, forges no grant while the captain's own shell still records one, forges no task record while the first mate's own scripts still publish and remove one through the record writer, and cannot rewrite the first mate's instructions, skills, docs, or plugins in the checkout or the helm, a worker still commits in its own copy and in a new slot of the home's own pool, and the first mate cannot stop or rewrite the proxy"
+  pass "in the real sandboxed session, a command started through tmux reaches nothing but the proxy, plants nothing that runs outside, forges no grant while the captain's own shell still records one, forges no task record while the first mate's own scripts still publish, register a pull request on, and remove one through the record writer, and cannot rewrite the first mate's instructions, skills, docs, or plugins in the checkout or the helm, a worker still commits in its own copy and in a new slot of the home's own pool, and the first mate cannot stop or rewrite the proxy"
 }
 
 test_session_first_mate_owns_the_lock_and_a_plain_shell_does_not() {

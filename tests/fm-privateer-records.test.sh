@@ -6,8 +6,11 @@
 # while the test's own shell, a sibling process, and an orphan of the first
 # mate are refused and logged; once the first mate's process ends everything is
 # refused, and a writer whose first mate does not run with the recorded start
-# time never starts; ids that name nothing in the state directory, oversized
-# content, and an append to a missing record are refused; and a publish is
+# time never starts, whatever LC_TIME the captain's shell sets; a publish may
+# ask for 0600 or a mode no wider than the writer's default, an append keeps the
+# record's mode, and a wider mode is refused; ids that name nothing in the state
+# directory, oversized content, and an append to a missing record are refused;
+# and a publish is
 # whole, so a reader never sees half a record and a bystander rewriting
 # everything else in state/ changes nothing, because nothing is staged there.
 # bin/fm-privateer-records.py's header owns the contract.
@@ -80,9 +83,10 @@ as_first_mate() {
 }
 
 # start_writer <anchor-pid> [<anchor-start>]: the record writer for that
-# process on SOCK; sets WRITER_PID.
+# process on SOCK, its start time read under LC_ALL=C as the launcher reads it;
+# sets WRITER_PID.
 start_writer() {
-  local start=${2:-$(ps -o lstart= -p "$1")}
+  local start=${2:-$(LC_ALL=C ps -o lstart= -p "$1")}
   python3 -I "$WRITER" serve "$SOCK" "$STATE" "$EGRESS" "$1" "$start" 2>> "$DIR/writer.err" &
   WRITER_PID=$!
   STARTED+=("$WRITER_PID")
@@ -185,6 +189,58 @@ test_without_the_first_mate_everything_is_refused() {
   pass "once the first mate's process ends every write is refused, and a reused process id never starts a writer"
 }
 
+test_the_anchor_start_time_is_read_in_one_locale_whatever_lc_time_says() {
+  local out
+  make_case locale
+  start_first_mate
+  (
+    export LC_TIME=nl_NL.UTF-8
+    start_writer "$MATE_PID"
+    out=$(as_first_mate ping "$(client ping)")
+    assert_equals "rc=0" "$out" "a writer started under another LC_TIME must still accept the first mate"
+    kill "$WRITER_PID"
+    wait "$WRITER_PID" 2>/dev/null
+  ) || exit 1
+  pass "the writer reads the first mate's start time under LC_ALL=C, as the launcher does, whatever LC_TIME the captain sets"
+}
+
+test_a_publish_takes_a_mode_no_wider_than_the_default() {
+  local out old_umask
+  make_case mode
+  start_first_mate
+  old_umask=$(umask)
+  umask 022
+  start_writer "$MATE_PID"
+  umask "$old_umask"
+  out=$(as_first_mate private "printf 'window=w
+' | $(client publish pv-m 0600)")
+  assert_equals "rc=0" "$out" "the first mate must publish a record with mode 0600"
+  assert_equals "600" "$(perl -e 'printf "%o", (stat($ARGV[0]))[2] & 07777' "$STATE/pv-m.meta")" \
+    "a publish asking for 0600 must land as 0600"
+  out=$(as_first_mate keep "printf 'pr=x
+' | $(client append pv-m)")
+  assert_equals "rc=0" "$out" "the first mate must append to its private record"
+  assert_equals "600" "$(perl -e 'printf "%o", (stat($ARGV[0]))[2] & 07777' "$STATE/pv-m.meta")" \
+    "an append must keep the record's mode"
+  out=$(as_first_mate narrow "printf 'window=w
+' | $(client publish pv-n 0640)")
+  assert_equals "rc=0" "$out" "a mode no wider than the default must be accepted"
+  assert_equals "640" "$(perl -e 'printf "%o", (stat($ARGV[0]))[2] & 07777' "$STATE/pv-n.meta")" \
+    "a publish asking for 0640 must land as 0640"
+  out=$(as_first_mate wide "printf 'window=forged
+' | $(client publish pv-m 0666)")
+  assert_contains "$out" "mode 666 is wider than the writer's default 644" "a mode wider than the default must be refused"
+  assert_contains "$out" "rc=1" "a mode wider than the default must be refused with status 1"
+  out=$(as_first_mate append-mode "printf 'x=1
+' | python3 -I '$WRITER' request '$SOCK' append pv-m 0600")
+  assert_contains "$out" "rc=2" "only a publish takes a mode"
+  assert_equals $'window=w
+pr=x' "$(cat "$STATE/pv-m.meta")" "a refused publish must leave the record"
+  assert_equals "600" "$(perl -e 'printf "%o", (stat($ARGV[0]))[2] & 07777' "$STATE/pv-m.meta")" \
+    "a refused publish must leave the record's mode"
+  pass "a publish may ask for 0600 or a mode no wider than the default, an append keeps the mode, and a wider mode is refused"
+}
+
 test_requests_are_validated() {
   local out id n=0
   make_case validate
@@ -252,6 +308,8 @@ pv-e.status" "$(cd "$STATE" && find . -mindepth 1 -maxdepth 1 | sed 's|^\./||' |
 test_the_first_mate_publishes_appends_and_removes
 test_a_process_outside_the_first_mates_lineage_is_refused
 test_without_the_first_mate_everything_is_refused
+test_the_anchor_start_time_is_read_in_one_locale_whatever_lc_time_says
+test_a_publish_takes_a_mode_no_wider_than_the_default
 test_requests_are_validated
 test_a_publish_is_whole_and_staged_nowhere_in_state
 
