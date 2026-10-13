@@ -281,6 +281,10 @@
       "audience": "agent-runtime"
     },
     {
+      "path": ".opencode/commands/project.md",
+      "audience": "agent-runtime"
+    },
+    {
       "path": ".opencode/commands/queue.md",
       "audience": "agent-runtime"
     },

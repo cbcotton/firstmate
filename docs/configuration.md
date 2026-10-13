@@ -929,7 +929,7 @@ Its one optional line, `<sailor>/<model>`, names the sailor and model the first 
 
 ### What a Privateer session sees at start
 
-In a Privateer home the session-start digest prints a `PRIVATEER` section before the curated context: the first mate's `<sailor>/<model>`, the delivery mode (`local-only`), each sailor's `bin/fm-sailor.sh status --all` line, the front door `bin/fm-helm.sh helm`, and the active project when `config/active-project` exists.
+In a Privateer home the session-start digest prints a `PRIVATEER` section before the curated context: the first mate's `<sailor>/<model>`, the delivery mode (`local-only`), each sailor's `bin/fm-sailor.sh status --all` line, the front door `bin/fm-helm.sh helm`, and the active project when `config/active-project` holds a valid one, or a line saying why a malformed value is not used.
 `bin/fm-fleet-snapshot.sh --json` carries the live sailors (placeholders left out) as `sailors[]`, and the first mate and active project as `privateer`.
 `bin/fm-session-start.sh`'s header owns the section's ordering and `bin/fm-fleet-snapshot.sh`'s header owns the snapshot fields.
 
@@ -1003,7 +1003,7 @@ The home's own scripts act on it only from inside its session.
 `bin/fm-spawn.sh`, `bin/fm-tasks-axi.sh`, `bin/fm-brief.sh`, `bin/fm-send.sh`, `bin/fm-control.sh`, `bin/fm-captain-hold.sh`, `bin/fm-permission-grant.sh`, `bin/fm-merge-local.sh`, `bin/fm-teardown.sh`, and `bin/fm-helm.sh` each refuse from anywhere else before reading or writing anything, with exit status 2 and `this is a sealed Privateer home; attach with bin/fm-privateer.sh attach, and never drive its session from outside`.
 The refusal names no socket, port, or path, so a session outside the quarantine, such as the captain's own OpenCode opened in the home's directory, can neither file backlog rows, write briefs, steer, stop, or spawn workers, record holds or grants, land work, or clean up in the home, nor learn where the session is.
 A spawn inside the session is also refused while its egress proxy is not running, so a worker can never land in an unsandboxed tmux server.
-The captain's own commands stay usable outside the session: `bin/fm-privateer.sh` `check`, `start`, `stop`, `reload`, and `attach`, the [named sailor](#crew-dispatch-profiles-configcrew-dispatchjson) commands of `bin/fm-sailor.sh`, and `bin/fm-update.sh`.
+The captain's own commands stay usable outside the session: `bin/fm-privateer.sh` `check`, `start`, `stop`, `reload`, `attach`, and `project`, the [named sailor](#crew-dispatch-profiles-configcrew-dispatchjson) commands of `bin/fm-sailor.sh`, and `bin/fm-update.sh`.
 `bin/fm-privateer-lib.sh` owns the inside-session test and the refusal.
 
 Version 1 has these remaining limits:
@@ -1042,8 +1042,9 @@ Each slash command in `.opencode/commands/` runs one verb and hands its report t
 | Command | What it does |
 | --- | --- |
 | `/helm` | Runs the session start |
-| `/scout <project> <ask>` | Files the backlog row, writes the worker's instructions with the ask as the captain's intent, and starts a scout on the first sailor that can take it |
-| `/ship <project> <ask>` | The same for a local-only ship, on the project's registered branch prefix and merge authority |
+| `/scout [<project>] <ask>` | Files the backlog row, writes the worker's instructions with the ask as the captain's intent, and starts a scout on the first sailor that can take it |
+| `/ship [<project>] <ask>` | The same for a local-only ship, on the project's registered branch prefix and merge authority |
+| `/project` | Shows the registered projects and marks the active one; only the captain switches it, outside the session |
 | `/queue` | Shows the backlog |
 | `/sailors` | Shows each sailor's status |
 | `/steer <task-id> <text>` | Sends the text to the worker |
@@ -1056,6 +1057,16 @@ While the dispatch file declares rules, the front door refuses before writing an
 Every verb runs only in a Privateer home and only inside its session.
 The captain's words reach the front door exactly, or not at all: OpenCode ends a command's shell step at the first backtick and reads `$$`, `$&`, `` $` ``, and `$'` in the words as its own substitution patterns, so each command passes the words three ways, and the front door refuses, before writing anything, words holding a backtick or a `$` followed by `$`, `&`, `'`, or a backtick, and asks for them again without those.
 `bin/fm-helm.sh --help` owns each verb's exact steps, and [`verification/local-sailors.md`](verification/local-sailors.md) records the OpenCode behavior the commands rely on, which `tests/fm-helm-live-e2e.test.sh` refreshes.
+
+### Active project (config/active-project)
+
+`config/active-project` holds one project name: the default project for a request that names none.
+The captain sets it outside the session with `bin/fm-privateer.sh project <name>`, which refuses unless `data/projects.md` registers the name and a clone exists under `projects/`, and writes the file atomically; `project --clear` removes it, and `project` alone lists the registered projects that have a clone, with the active one marked.
+The session sandbox denies writes to `config/`, so setting or clearing it also refuses inside the session; every form refuses in a home without `config/privateer`, so the main home never sets one.
+The first mate only reads it: `/project` (`bin/fm-helm.sh project`) shows the same list, and when the captain asks to switch, the first mate gives the outside command.
+While the file names a valid project, `bin/fm-helm.sh scout` and `ship` accept the ask without a project word, use that project, and say so on their first output line; a first word that `data/projects.md` registers, that is a directory under `projects/`, or that is a likely typo of a registered name (one insertion, deletion, substitution, or adjacent swap away, both words at least 4 characters long) is still taken as the project, and is refused unless it is a registered project with a clone, the refusal naming the close project as a did-you-mean line.
+A malformed value, meaning several lines, a name that is not a plain project name, an unregistered name, or a name with no clone, is never used: the digest prints `active project: not used` with the reason, and the snapshot reports `privateer.active_project` as null.
+The rulebook's intake ladder tells the first mate to name the active project in its reply.
 
 ### Egress audit
 
