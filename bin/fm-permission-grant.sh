@@ -53,12 +53,18 @@
 # task grant for another dispatch, and a session grant from an earlier session
 # are never in force.
 #
-# Environment: FM_HOME and FM_STATE_OVERRIDE resolve the home exactly as the
-# other bin/ scripts do.
+# In a Privateer home (bin/fm-privateer-lib.sh) only the captain records a
+# grant or revocation, from their own shell outside the home's session, whose
+# sandbox denies the ledger to the first mate and every worker alike. Inside
+# the session grant and revoke refuse before reading anything, naming the same
+# call as a command the captain can run; list and active run on both sides.
+#
+# Environment: FM_HOME, FM_STATE_OVERRIDE, and FM_CONFIG_OVERRIDE resolve the
+# home exactly as the other bin/ scripts do.
 #
 # Exit status: 0 success, 1 refused (a grant from the refusal list, an unknown
 # grant id, or a scope that cannot bind), 2 usage or configuration error, or a
-# sealed Privateer home called from outside its session (bin/fm-privateer-lib.sh).
+# grant or revoke called from inside a Privateer home's session.
 set -u
 export LC_ALL=C
 
@@ -68,7 +74,6 @@ FM_HOME="${FM_HOME:-${FM_ROOT_OVERRIDE:-$FM_ROOT}}"
 STATE="${FM_STATE_OVERRIDE:-$FM_HOME/state}"
 # shellcheck source=bin/fm-privateer-lib.sh
 . "$SCRIPT_DIR/fm-privateer-lib.sh"
-fm_privateer_refuse_outside "$FM_HOME" "${FM_CONFIG_OVERRIDE:-$FM_HOME/config}"
 LOG="$STATE/permission-grants.jsonl"
 LOCK_FILE="$STATE/.lock"
 WORDS_MAX=8192
@@ -86,6 +91,26 @@ die() {
 refuse() {
   echo "refused: $*"
   exit 1
+}
+
+# shell_word <text>: <text> as one shell word, quoted only when it needs it.
+shell_word() {
+  case "$1" in
+    '' | *[!A-Za-z0-9_./:@%+,-]*) printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")" ;;
+    *) printf '%s' "$1" ;;
+  esac
+}
+
+# captain_side_only <verb> [args...]: inside a Privateer home's session, refuse
+# with the call as the command the captain runs from their own shell.
+captain_side_only() {
+  local call arg
+  fm_privateer_home "${FM_CONFIG_OVERRIDE:-$FM_HOME/config}" || return 0
+  fm_privateer_inside_session "$FM_HOME" || return 0
+  call="FM_HOME=$(shell_word "$FM_HOME") $(shell_word "$SCRIPT_DIR/fm-permission-grant.sh")"
+  for arg in "$@"; do call="$call $(shell_word "$arg")"; done
+  echo "error: fm-permission-grant.sh refused: in a Privateer home only the captain records a grant or revocation, from their own shell outside this session; ask the captain to run it there, then relaunch the worker once the captain says it is recorded: $call" >&2
+  exit "$FM_PRIVATEER_SEALED_EXIT"
 }
 
 task_ok() {
@@ -336,8 +361,8 @@ command -v jq >/dev/null 2>&1 || die "jq is required"
 cmd=$1
 shift
 case "$cmd" in
-  grant) cmd_grant "$@" ;;
-  revoke) cmd_revoke "$@" ;;
+  grant) captain_side_only grant "$@"; cmd_grant "$@" ;;
+  revoke) captain_side_only revoke "$@"; cmd_revoke "$@" ;;
   list) cmd_list "$@" ;;
   active) cmd_active "$@" ;;
   -h | --help) sed -n '2,/^set -u/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//' ;;

@@ -148,8 +148,11 @@
 # which launch-env names as TREEHOUSE_ROOT, so treehouse creates and hands out
 # slots there; the shared pool under ~/.treehouse, and every other home's
 # slots, are out of reach. Nothing inside may write this home's egress
-# directory, config/, or bin/; the helm, or any directory entry between this
-# home and it; when this checkout is inside this home, any path in it an
+# directory, config/, or bin/; the grant ledger state/permission-grants.jsonl,
+# which the captain writes from outside (bin/fm-permission-grant.sh); the
+# helm, or any directory entry between this home and it; when this checkout
+# is inside this home, its bin/, the scripts the captain runs outside the
+# session, and any path in it an
 # OpenCode first mate loads or the helm is rendered from: its AGENTS.md, CLAUDE.md,
 # CONTEXT.md, opencode.json(c), tui.json(c), .agents/, docs/, the .claude
 # entry and its skills link, the .opencode entry, and, under .opencode/, the
@@ -193,8 +196,7 @@
 #     sandbox covers the first mate and every worker alike, in place of a
 #     per-task sailor sandbox;
 #   - a worker can therefore still write what the first mate's own fm-spawn
-#     and fm-permission-grant write from inside it: the task records
-#     state/<id>.meta and the grant ledger state/permission-grants.jsonl;
+#     writes from inside it: the task records state/<id>.meta;
 #   - the per-task temp roots under /tmp/fm-*, the user's own temporary
 #     directory ($TMPDIR), and the flat here-document files stock macOS
 #     Bash writes directly in /var/tmp as sh-thd* are namespaces shared by
@@ -214,9 +216,7 @@
 #     and a path rule cannot tell the two apart;
 #   - OpenCode also loads plugins and configuration from its own directories
 #     under state/privateer/opencode/, which stay writable, so a worker can
-#     still add one there that the first mate loads at its next start; and a
-#     checkout nested below this home, rather than being it, keeps its own
-#     bin/ writable;
+#     still add one there that the first mate loads at its next start;
 #   - as bin/fm-sandbox-exec.sh states, the sandbox is not a boundary against
 #     same-user system services that start programs outside it.
 #
@@ -786,6 +786,9 @@ cmd_start() {
   # sandbox: this home's config and scripts, or any Git config or hook of this
   # checkout, of a clone under projects/, or of a worker's worktree.
   sandbox_args+=(--deny-write "$home_real/config" --deny-write "$home_real/bin")
+  # The grant ledger widens a worker's permissions at its next launch, so only
+  # the captain's own shell outside the session writes it.
+  sandbox_args+=(--deny-write "$home_real/state/permission-grants.jsonl")
   # The helm is the first mate's whole instruction surface, so nothing inside
   # may write it or move aside any directory that leads to it.
   sandbox_args+=(--deny-write "$helm_real")
@@ -839,9 +842,10 @@ cmd_start() {
         ;;
     esac
   done
-  # A checkout inside the home is writable, so everything its first mate's
-  # OpenCode loads from it is taken back: instructions, docs, config, skills,
-  # agents, commands, modes, plugins, and tools, with the .opencode and .claude
+  # A checkout inside the home is writable, so its scripts, which the captain
+  # runs outside the session, and everything its first mate's OpenCode loads
+  # from it are taken back: instructions, docs, config, skills, agents,
+  # commands, modes, plugins, and tools, with the .opencode and .claude
   # entries above them and the .claude/skills link itself, which --deny-write
   # would resolve; the rest of .opencode stays OpenCode's scratch.
   case "$root_real" in
@@ -850,6 +854,7 @@ cmd_start() {
         .opencode/{opencode,tui}.{json,jsonc} .opencode/{agent,command,mode,plugin,skill,tool}{,s}; do
         sandbox_args+=(--deny-write "$root_real/$name")
       done
+      sandbox_args+=(--deny-write "$root_real/bin")
       sandbox_args+=(--deny-write-regex "^$(regex_quote "$root_real/.opencode")\$"
         --deny-write-regex "^$(regex_quote "$root_real/.claude")(/skills)?\$")
       ;;

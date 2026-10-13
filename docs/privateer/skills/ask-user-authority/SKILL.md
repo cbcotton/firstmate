@@ -44,3 +44,17 @@ Hold the task (load `captain-hold-lifecycle`) and tell the captain, in one short
 With a key: `bin/fm-send.sh <id> --resolve-key <key> '<decision>'`.
 Without a key: `bin/fm-send.sh <id> '<decision>'`.
 Send a decision, not a question; the worker applies it.
+
+## A permission request
+
+A `needs-decision` whose key starts with `perm-` asks for something the worker's permissions deny.
+It always goes to the captain, and only the captain records a grant, from their own terminal outside this session.
+
+1. Ask the captain as above: what the worker needs, why, and whether to allow it for this task only.
+2. When the captain says yes, write the captain's exact words to `$FM_HOME/data/<id>/perm-words.txt`.
+3. Run `bin/fm-permission-grant.sh grant --scope task --task <id> --permission <name> --pattern '<pattern>' --action allow --words-file "$FM_HOME/data/<id>/perm-words.txt" --channel chat`.
+   For one shell command, `<name>` is `bash` and `<pattern>` is that exact command; for a path outside the worker's copy, `<name>` is `external_directory` and `<pattern>` is that path.
+   Inside this session it refuses on purpose and prints the exact command for the captain's own terminal; give the captain that command and end your turn.
+4. When the captain says it is recorded, relaunch the worker with `bin/fm-control.sh <id> relaunch --note '<progress so far>'`, then answer it with `bin/fm-send.sh <id> --resolve-key <key> '<what the captain allowed>'`.
+5. When the captain says no, answer the worker the same way with the captain's refusal.
+   Never look for another route to the permission.

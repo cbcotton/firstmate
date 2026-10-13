@@ -4,7 +4,9 @@
 # profile, and endpoint; bin/fm-spawn.sh refuses each forbidden spawn in a
 # Privateer home and clears the environment of the one it allows; every
 # script the session gate (bin/fm-privateer-lib.sh) covers refuses the home
-# from outside its session, naming no socket, and runs inside it; and the
+# from outside its session, naming no socket, and runs inside it;
+# bin/fm-permission-grant.sh records a grant or revocation only from outside
+# the session, naming that exact command when refused inside; and the
 # launcher, run with a stub first mate that prints its environment, passes no
 # ANTHROPIC_*, CLAUDE_*, or CLAUDECODE variable, refuses without the flag or
 # with a forbidden file, starts the real egress proxy (bin/fm-privateer-proxy.py)
@@ -16,14 +18,14 @@
 # and a fake sandbox-exec records the profile it was given and runs the
 # command, so the launch shape is pinned on every platform. Where sandbox-exec
 # and tmux really run, cases start the real session: one proves that a
-# command the first mate starts through tmux reaches nothing but the proxy and
-# cannot stop or rewrite it, one that a first mate running as opencode
-# detects its harness and owns the fleet lock while a plain shell in the same
-# session stays read-only, one that such a command can move aside, replace,
-# link over, or plant no directory leading to a Git config or hooks, and one
-# that it can point Git at no other config and hooks through a commondir or a
-# .git gitfile, while the session's own pool worktrees are still added and
-# removed. The live egress audit
+# command the first mate starts through tmux reaches nothing but the proxy,
+# cannot stop or rewrite it, and cannot forge a grant, one that a first mate
+# running as opencode detects its harness and owns the fleet lock while a plain
+# shell in the same session stays read-only, one that such a command can move
+# aside, replace, link over, or plant no directory leading to a Git config or
+# hooks, and one that it can point Git at no other config and hooks through a
+# commondir or a .git gitfile, while the session's own pool worktrees are still
+# added and removed. The live egress audit
 # (tests/fm-privateer-egress-live-e2e.test.sh) and session lock check
 # (tests/fm-privateer-session-lock-live-e2e.test.sh) run the real OpenCode.
 # docs/configuration.md ("Privateer quarantine") owns the contract.
@@ -74,6 +76,14 @@ wait_for_file() {
 
 run_check() {  # <home>
   FM_HOME="$1" "$PRIVATEER" check 2>&1
+}
+
+# run_grant <home> <tmux> <args...>: bin/fm-permission-grant.sh against <home>
+# with TMUX set to <tmux>.
+run_grant() {
+  local home=$1 tmux=$2
+  shift 2
+  TMUX=$tmux FM_HOME="$home" "$ROOT/bin/fm-permission-grant.sh" "$@" 2>&1
 }
 
 # fake_sailor_curl <fakebin>: the sailor's model server answering the probe.
@@ -795,6 +805,7 @@ test_start_passes_only_the_allowlist() {
   (subpath \"$home_real/state/privateer/egress\")
   (subpath \"$home_real/config\")
   (subpath \"$home_real/bin\")
+  (subpath \"$home_real/state/permission-grants.jsonl\")
   (subpath \"$helm_real\")
   (regex #\"^$(rq "$helm_real")\$\")
   (regex #\"^$(rq "$home_real")/state/privateer\$\")
@@ -808,7 +819,7 @@ test_start_passes_only_the_allowlist() {
   (regex #\"^$(rq "$home_real")/projects\$\")
   (regex #\"^$(rq "$root_real")/\\.git/worktrees/side(\$|/(commondir|gitdir)\$|/modules(\$|/[^/]+\$|/.+/(hooks(/|\$)|config|commondir\$)))\")
 )" "$(sed -n '/^(deny file-write\*$/,/^)$/p' "$profile")" \
-    "the sandbox must take back only the egress record and the directories leading to it, the home's config and scripts, the helm and the directories leading to it, and every Git config and hook and the directories leading to them, so every worker's OpenCode directories stay writable"
+    "the sandbox must take back only the egress record and the directories leading to it, the home's config and scripts, the grant ledger, the helm and the directories leading to it, and every Git config and hook and the directories leading to them, so every worker's OpenCode directories stay writable"
   assert_equals "(deny file-write-unlink (regex #\"^$(rq "$root_real")/\\.git/worktrees\$\"))
 (deny file-write-create (require-all (regex #\"^$(rq "$root_real")/\\.git/worktrees\$\") (vnode-type SYMLINK)))
 (deny file-write-unlink (regex #\"^$(rq "$home_real")/projects/[^/]+/(.+/)?\\.git/worktrees\$\"))
@@ -864,6 +875,27 @@ test_start_denies_the_instructions_of_a_checkout_that_is_the_home() {
   out=$(run_launcher "$dir" "$home" "$home" stop)
   expect_code 0 "$?" "stop must end the session: $out"
   pass "start denies writes to every path a checkout that is the home gives its first mate's OpenCode, and leaves the rest of .opencode writable"
+}
+
+test_start_denies_the_scripts_of_a_checkout_nested_in_the_home() {
+  local dir home root out status root_real deny
+  dir="$TMP_ROOT/start-nested"
+  home=$(make_home start-nested)
+  root="$home/nest/root"
+  make_checkout "$root"
+  make_launcher_fakebin "$dir" >/dev/null
+  make_stub_primary "$dir" >/dev/null
+  out=$(run_launcher "$dir" "$home" "$root" start)
+  status=$?
+  expect_code 0 "$status" "start must succeed from a checkout nested below the home: $out"
+  root_real=$(cd "$root" && pwd -P)
+  [ -f "$dir/profile.sb" ] || fail "the tmux server never started inside the sandbox"
+  deny=$(sed -n '/^(deny file-write\*$/,/^)$/p' "$dir/profile.sb")
+  assert_contains "$deny" "  (subpath \"$root_real/bin\")" "the sandbox must deny writes to the nested checkout's bin/"
+  assert_contains "$deny" "  (subpath \"$root_real/AGENTS.md\")" "the sandbox must deny writes to the nested checkout's instructions"
+  out=$(run_launcher "$dir" "$home" "$root" stop)
+  expect_code 0 "$?" "stop must end the session: $out"
+  pass "start denies writes to the scripts of a checkout nested below the home, which the captain runs outside the session"
 }
 
 test_start_denies_the_gitfiles_of_submodules_and_outside_worktrees() {
@@ -1405,7 +1437,7 @@ serve_dir() {
 }
 
 test_session_sandbox_holds_every_command() {
-  local dir home root out status spid opid sport oport port pid socket probe alive wtbase wtgit proj shared treehouse_line captain helm
+  local dir home root out status spid opid sport oport port pid socket probe alive wtbase wtgit proj shared treehouse_line captain helm ledger first during
   if ! "$ROOT/bin/fm-sandbox-exec.sh" available || ! command -v tmux >/dev/null 2>&1; then
     pass "session sandbox checks not run: sandbox-exec or tmux is not available on this machine"
     return 0
@@ -1419,9 +1451,9 @@ test_session_sandbox_holds_every_command() {
   mkdir -p "$home/nest"
   git -C "$dir/rootmain" worktree add -q -b pv-root "$root"
   # Paths in that checkout an OpenCode first mate loads or the helm is rendered from.
-  mkdir -p "$root/.agents/skills/probe" "$root/docs" "$root/.opencode/plugins" "$root/.opencode/skills/probe" "$root/.claude"
+  mkdir -p "$root/.agents/skills/probe" "$root/docs" "$root/.opencode/plugins" "$root/.opencode/skills/probe" "$root/.claude" "$root/bin"
   for f in AGENTS.md CLAUDE.md .agents/skills/probe/SKILL.md docs/probe.md opencode.json .opencode/opencode.json \
-    .opencode/plugins/probe.js .opencode/skills/probe/SKILL.md; do
+    .opencode/plugins/probe.js .opencode/skills/probe/SKILL.md bin/fm-permission-grant.sh; do
     printf 'original\n' > "$root/$f"
   done
   ln -s ../.agents/skills "$root/.claude/skills"
@@ -1453,6 +1485,13 @@ test_session_sandbox_holds_every_command() {
   mkdir -p "${shared%/*}"
   git -C "$dir/other" worktree add -q -b other-slot "$shared"
   if command -v treehouse >/dev/null 2>&1; then treehouse_line=treehouse=in-pool; else treehouse_line=treehouse=absent; fi
+  # The captain's grant ledger, recorded from the captain's own shell before
+  # the session starts, so a worker's append meets an existing file.
+  ledger="$home/state/permission-grants.jsonl"
+  printf 'deny it any network tool\n' > "$dir/words"
+  run_grant "$home" /tmp/tmux-501/default,1,0 grant --scope standing --permission bash --pattern 'curl *' --action deny \
+    --words-file "$dir/words" --channel chat >/dev/null || fail "the captain's grant must be recorded before the session starts"
+  first=$(cat "$ledger")
   # A command the first mate starts through tmux, as a worker's pane is: it
   # tries the other server directly and through the proxy, writes where a
   # worker's OpenCode keeps its data and in OpenCode's scratch, tries to plant
@@ -1470,7 +1509,7 @@ echo "write=\$?" >> '$probe.window.tmp'
 echo "scratch=\$?" >> '$probe.window.tmp'
 planted=
 for t in '$proj/.git/hooks/post-checkout' '$proj/.git/config' '$wtgit/config.worktree' '$wtgit/hooks/post-checkout' \
-  '$wtgit/commondir' '$wtgit/gitdir' '$home/config/probe' '$home/bin/probe' '$shared/.git' '$shared/README' "\$HOME/.treehouse/probe" \
+  '$wtgit/commondir' '$wtgit/gitdir' '$home/config/probe' '$home/bin/probe' '$root/bin/fm-permission-grant.sh' '$root/bin/probe' '$shared/.git' '$shared/README' "\$HOME/.treehouse/probe" \
   '$root/AGENTS.md' '$root/.agents/skills/probe/SKILL.md' '$root/.agents/skills/new.md' '$root/docs/probe.md' \
   '$root/CLAUDE.md' '$root/CONTEXT.md' '$root/opencode.json' '$root/opencode.jsonc' '$root/tui.json' '$root/tui.jsonc' \
   '$root/.opencode/opencode.json' '$root/.opencode/opencode.jsonc' '$root/.opencode/tui.json' '$root/.opencode/tui.jsonc' \
@@ -1481,13 +1520,20 @@ for t in '$proj/.git/hooks/post-checkout' '$proj/.git/config' '$wtgit/config.wor
   ( : >> "\$t" ) 2>/dev/null && planted="\$planted \$t"
 done
 ( mkdir -p '$helm/.opencode/skills/new' && : >> '$helm/.opencode/skills/new/SKILL.md' ) 2>/dev/null && planted="\$planted $helm/.opencode/skills/new"
+( printf '%s\\n' '{"v":1,"op":"grant","id":"gforged","ts":1,"scope":"standing","permission":"bash","pattern":"*","action":"allow"}' >> '$ledger' ) 2>/dev/null &&
+  planted="\$planted grant:$ledger"
+if mv '$home/state' '$home/state.moved' 2>/dev/null; then
+  ( printf '%s\\n' '{"v":1,"op":"grant","id":"gmoved","ts":1,"scope":"standing","permission":"bash","pattern":"*","action":"allow"}' >> '$home/state.moved/permission-grants.jsonl' ) 2>/dev/null &&
+    planted="\$planted grant-via-move:$ledger"
+  mv '$home/state.moved' '$home/state' 2>/dev/null
+fi
 for t in '$helm' '$home/state/privateer/egress' '$home/state/privateer' '$home/state'; do
   mv "\$t" "\$t.aside" 2>/dev/null && planted="\$planted move:\$t"
 done
 for d in agent agents command commands mode modes plugin plugins skill skills tool tools; do
   ( mkdir -p '$root/.opencode/'"\$d" && : >> '$root/.opencode/'"\$d/new.md" ) 2>/dev/null && planted="\$planted $root/.opencode/\$d"
 done
-for t in '$root/AGENTS.md' '$root/CLAUDE.md' '$root/.agents' '$root/docs' '$root/opencode.json' '$root/.opencode/opencode.json' \
+for t in '$root/bin' '$root/AGENTS.md' '$root/CLAUDE.md' '$root/.agents' '$root/docs' '$root/opencode.json' '$root/.opencode/opencode.json' \
   '$root/.opencode/plugins' '$root/.opencode/skills' '$root/.opencode' '$root/.claude/skills' '$root/.claude'; do
   mv "\$t" "\$t.aside" 2>/dev/null && planted="\$planted move:\$t"
 done
@@ -1544,6 +1590,8 @@ SH
   pid=$(cat "$home/state/privateer/egress/pid" 2>/dev/null)
   wait_for_file "$probe.primary" && wait_for_file "$probe.window"
   alive=$(proxy_request "$port" "GET http://127.0.0.1:$sport/v1/models HTTP/1.1")
+  during=$(run_grant "$home" /tmp/tmux-501/default,1,0 grant --scope standing --permission bash --pattern 'wget *' --action deny \
+    --words-file "$dir/words" --channel chat)
   FM_HOME="$home" FM_ROOT_OVERRIDE="$root" "$PRIVATEER" stop >/dev/null 2>&1 || { [ -z "$socket" ] || tmux -L "$socket" kill-server 2>/dev/null; }
   kill "$spid" "$opid" 2>/dev/null
   git -C "$proj" worktree remove --force "$wtbase/wt" 2>/dev/null
@@ -1559,7 +1607,7 @@ status=0
 commit=0
 slot=0
 $treehouse_line" "$(cat "$probe.window" 2>/dev/null)" \
-    "a command started through tmux must reach nothing directly, be refused by the proxy for an unlisted host, write the worker's OpenCode data and OpenCode's scratch, plant no Git config, hook, home config, script, or shared-pool slot, rewrite or move none of the first mate's instructions, skills, docs, or plugins in the checkout or the helm, nor move aside the helm or the directories leading to it, still write its status and commit in its own copy, and create and commit in a slot of the home's own pool"
+    "a command started through tmux must reach nothing directly, be refused by the proxy for an unlisted host, write the worker's OpenCode data and OpenCode's scratch, plant no Git config, hook, home config, script, grant, or shared-pool slot, rewrite or move none of the first mate's instructions, skills, docs, or plugins in the checkout or the helm, nor move aside the helm or the directories leading to it, still write its status and commit in its own copy, and create and commit in a slot of the home's own pool"
   case "$(cat "$probe.primary" 2>/dev/null)" in
     "kill=0"* | *"rewrite=0") fail "the first mate stopped or rewrote the egress proxy: $(cat "$probe.primary" 2>/dev/null)" ;;
     "kill="*) ;;
@@ -1567,6 +1615,9 @@ $treehouse_line" "$(cat "$probe.window" 2>/dev/null)" \
   esac
   cmp -s "$helm/AGENTS.md" "$ROOT/docs/privateer/AGENTS.md" ||
     fail "the helm's rulebook must exist and be unchanged after the session, so its write probes were real"
+  assert_contains "$during" "deny bash \"wget *\" for standing" "the captain's own shell must record a grant while the session runs"
+  assert_equals "$first" "$(head -1 "$ledger")" "a worker's append must leave the captain's grant untouched"
+  assert_equals 2 "$(wc -l < "$ledger" | tr -d ' ')" "the ledger must hold exactly the captain's two grants"
   assert_equals "HTTP/1.0 200 OK" "$alive" "the proxy must still serve the sailor after the first mate's attempt to stop it"
   assert_equals "refused GET 127.0.0.1:$oport
 allowed GET 127.0.0.1:$sport" "$(jq -r --arg o "127.0.0.1:$oport" --arg s "127.0.0.1:$sport" 'select(.dest == $o or .dest == $s) | "\(.verdict) \(.method) \(.dest)"' "$home/state/privateer/egress/log")" \
@@ -1575,7 +1626,7 @@ allowed GET 127.0.0.1:$sport" "$(jq -r --arg o "127.0.0.1:$oport" --arg s "127.0
     fail "stop must stop the egress proxy"
   fi
   [ "$port" != 1 ] || fail "the first mate rewrote the proxy's port"
-  pass "in the real sandboxed session, a command started through tmux reaches nothing but the proxy, plants nothing that runs outside, and cannot rewrite the first mate's instructions, skills, docs, or plugins in the checkout or the helm, a worker still commits in its own copy and in a new slot of the home's own pool, and the first mate cannot stop or rewrite the proxy"
+  pass "in the real sandboxed session, a command started through tmux reaches nothing but the proxy, plants nothing that runs outside, forges no grant while the captain's own shell still records one, and cannot rewrite the first mate's instructions, skills, docs, or plugins in the checkout or the helm, a worker still commits in its own copy and in a new slot of the home's own pool, and the first mate cannot stop or rewrite the proxy"
 }
 
 test_session_first_mate_owns_the_lock_and_a_plain_shell_does_not() {
@@ -2060,7 +2111,6 @@ GATED_CALLS=(
   "fm-send.sh pv-gate hello"
   "fm-control.sh pv-gate interrupt"
   "fm-captain-hold.sh open pv-gate"
-  "fm-permission-grant.sh list"
   "fm-merge-local.sh pv-gate"
   "fm-teardown.sh pv-gate"
 )
@@ -2108,7 +2158,7 @@ test_gated_scripts_refuse_outside_the_session() {
     assert_equals "error: $script refused: $SEALED_REFUSAL" "$out" "$script must say only what to do instead"
     assert_not_contains "$out" "$socket" "$script must not name the session's socket"
   done
-  out=$(run_gated "$fakebin" "$home" '' "fm-permission-grant.sh list")
+  out=$(run_gated "$fakebin" "$home" '' "fm-merge-local.sh pv-gate")
   expect_code 2 "$?" "a caller outside every tmux server must be refused: $out"
   [ ! -e "$dir/tasks-axi.log" ] || fail "a refused call reached tasks-axi: $(cat "$dir/tasks-axi.log")"
   assert_equals "$before" "$(home_snapshot "$home")" "a refused call must leave the home exactly as it was"
@@ -2136,15 +2186,15 @@ test_the_gate_is_keyed_to_the_home() {
   home=$(make_home gate-keyed)
   other=$(make_home gate-keyed-other)
   fakebin=$(make_gate_fakebin "$dir")
-  out=$(run_gated "$fakebin" "$home" "/tmp/tmux-fake/$(session_socket "$other"),1,0" "fm-permission-grant.sh list")
+  out=$(run_gated "$fakebin" "$home" "/tmp/tmux-fake/$(session_socket "$other"),1,0" "fm-tasks-axi.sh add pv-gate Gate")
   status=$?
   expect_code 2 "$status" "another home's Privateer session is outside this one: $out"
   mkdir -p "$dir/config"
   mv "$home/config/privateer" "$dir/config/privateer"
-  out=$(FM_CONFIG_OVERRIDE="$dir/config" run_gated "$fakebin" "$home" /tmp/tmux-501/default,1,0 "fm-permission-grant.sh list")
+  out=$(FM_CONFIG_OVERRIDE="$dir/config" run_gated "$fakebin" "$home" /tmp/tmux-501/default,1,0 "fm-tasks-axi.sh add pv-gate Gate")
   status=$?
   expect_code 2 "$status" "the flag in an overridden config directory must seal the home: $out"
-  out=$(run_gated "$fakebin" "$home" /tmp/tmux-501/default,1,0 "fm-permission-grant.sh list")
+  out=$(run_gated "$fakebin" "$home" /tmp/tmux-501/default,1,0 "fm-tasks-axi.sh add pv-gate Gate")
   status=$?
   expect_code 0 "$status" "a home without config/privateer must be untouched by the gate: $out"
   assert_not_contains "$out" "sealed Privateer home" "a home without config/privateer must never be refused"
@@ -2162,6 +2212,48 @@ test_captain_side_commands_stay_usable_outside() {
   expect_code 0 "$status" "the sailor registry must be readable from outside the session: $out"
   assert_contains "$out" "tiller" "the sailor registry must list the home's sailor"
   pass "the quarantine check and the sailor registry stay usable from the captain's own shell"
+}
+
+test_grants_are_recorded_only_from_the_captains_shell() {
+  local home inside outside words before out status call
+  home=$(make_home gate-grant)
+  inside="/tmp/tmux-fake/$(session_socket "$home"),1,0"
+  outside=/tmp/tmux-501/default,1,0
+  printf 'harness=opencode\ndispatched_at=1000\n' > "$home/state/pv-grant.meta"
+  words="$home/data/pv-grant/perm-words.txt"
+  mkdir -p "${words%/*}"
+  printf "yes, let it run the captain's npm test\n" > "$words"
+  before=$(home_snapshot "$home")
+  out=$(run_grant "$home" "$inside" grant --scope task --task pv-grant --permission bash --pattern 'npm test' \
+    --action allow --words-file "$words" --channel chat)
+  status=$?
+  expect_code 2 "$status" "a grant inside the Privateer session must be refused: $out"
+  assert_contains "$out" "error: fm-permission-grant.sh refused: in a Privateer home only the captain records a grant or revocation, from their own shell outside this session; ask the captain to run it there, then relaunch the worker once the captain says it is recorded: FM_HOME=" \
+    "the refusal must send the grant to the captain's own shell"
+  assert_contains "$out" "fm-permission-grant.sh grant --scope task --task pv-grant --permission bash --pattern 'npm test' --action allow --words-file " \
+    "the refusal must name the same call, quoted for a shell"
+  assert_equals "$before" "$(home_snapshot "$home")" "a refused grant must leave the home exactly as it was"
+  call=${out##*recorded: }
+  out=$(cd / && env -u FM_HOME TMUX=$outside bash -c "$call" 2>&1)
+  status=$?
+  expect_code 0 "$status" "the command the refusal names must record the grant from the captain's shell: $out"
+  assert_equals 1 "$(wc -l < "$home/state/permission-grants.jsonl" | tr -d ' ')" "the captain's grant must be the ledger's one record"
+  assert_equals "allow bash npm test pv-grant 1000 yes, let it run the captain's npm test" \
+    "$(jq -r '"\(.action) \(.permission) \(.pattern) \(.task) \(.task_dispatched_at) \(.words | rtrimstr("\n"))"' "$home/state/permission-grants.jsonl")" \
+    "the captain's command must record exactly the call the first mate made, with the captain's words"
+  for side in "$inside" "$outside"; do
+    assert_equals '[{"bash":{"npm test":"allow"}}]' "$(run_grant "$home" "$side" active --task pv-grant)" "active must run on both sides of the session"
+    assert_contains "$(run_grant "$home" "$side" list --task pv-grant)" 'task pv-grant allow bash "npm test" via chat' "list must run on both sides of the session"
+  done
+  out=$(run_grant "$home" "$inside" revoke "$(jq -r .id "$home/state/permission-grants.jsonl")" --words-file "$words" --channel chat)
+  status=$?
+  expect_code 2 "$status" "a revocation inside the Privateer session must be refused: $out"
+  assert_contains "$out" "only the captain records a grant or revocation" "the revocation refusal must name the captain's side"
+  out=$(run_grant "$home" "$outside" revoke "$(jq -r .id "$home/state/permission-grants.jsonl")" --words-file "$words" --channel chat)
+  status=$?
+  expect_code 0 "$status" "the captain's revocation must be recorded from outside the session: $out"
+  assert_equals '[]' "$(run_grant "$home" "$inside" active --task pv-grant)" "a revoked grant must be gone inside the session too"
+  pass "in a Privateer home only the captain's own shell records a grant or revocation, the refusal inside names that exact command, and list and active run on both sides"
 }
 
 test_spawn_refuses_while_no_egress_proxy_runs() {
@@ -2193,6 +2285,7 @@ test_start_refuses_with_a_forbidden_file
 test_start_refuses_without_a_first_mate_line
 test_start_passes_only_the_allowlist
 test_start_denies_the_instructions_of_a_checkout_that_is_the_home
+test_start_denies_the_scripts_of_a_checkout_nested_in_the_home
 test_start_denies_the_gitfiles_of_submodules_and_outside_worktrees
 test_start_renders_the_helm_afresh
 test_start_refuses_without_the_rulebook
@@ -2228,6 +2321,7 @@ test_gated_scripts_refuse_outside_the_session
 test_gated_scripts_run_inside_the_session
 test_the_gate_is_keyed_to_the_home
 test_captain_side_commands_stay_usable_outside
+test_grants_are_recorded_only_from_the_captains_shell
 test_project_sets_clears_and_prints_the_active_project
 
 echo "# all fm-privateer tests passed"
