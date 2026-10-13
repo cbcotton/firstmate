@@ -896,8 +896,10 @@ A deny is always accepted.
 An allow is refused, at every scope, for what the captain approves only one action at a time and firstmate then performs itself rather than delegating: blanket allows, web access, credential, system, shell or Git configuration, PATH command directories, or whole-home paths, this firstmate home, privilege escalation, a leading environment assignment, shells, interpreters, and command and package runners such as `sh`, `python3`, `node`, `env`, `xargs`, `find`, `make`, `npx`, or `npm exec`, Git global options and `git config`, and any wildcard shell allow except one over plain `git` (no path) `log`, `diff`, `show`, `status`, `add`, `commit`, `rev-parse`, `blame`, `ls-files`, `shortlog`, or `describe` (every other shell allow names one exact command, so runners, package managers, and interpreters are granted only as exact commands), a push that can force, delete, or match by wildcard, branch, tag, or history deletion, merging, recursive or out-of-copy deletion, credential or keychain access, system configuration, network tools, global installs or downloaded code, fleet, permission, or sandbox control, and anything that names Anthropic or Claude.
 `bin/fm-permission-grant.sh` owns the record, the scope bindings, and the refusal list; `list` shows the grants in force and `active --task <id>` prints what a launch would fold in.
 In a [Privateer home](#privateer-quarantine-configprivateer) only the captain records a grant or revocation, from their own shell outside the session, because the session sandbox denies the ledger to the first mate and every worker alike.
-Inside the session `grant` and `revoke` refuse with exit status 2 and name the same call as the command for the captain to run, and the first mate relaunches the worker once the captain says it is recorded; `list` and `active` run on both sides.
-The words file that command reads is not tamper-proof; the Privateer remaining limits below say why.
+Inside the session `grant` and `revoke` refuse with exit status 2 and name the same call, less any `--words-file`, as the command for the captain to run, and the first mate relaunches the worker once the captain says it is recorded; `list` and `active` run on both sides.
+Any worker can write anywhere in the home, so there the captain's words never come from a file in it.
+The captain types them at the command's prompt, which first shows what the record holds; pipes them on stdin; or names a `--words-file` of their own outside the home.
+A `--words-file` that resolves inside the home is refused, naming the stdin command.
 
 ## Sailor sandbox (config/sailor-sandbox)
 
@@ -1014,7 +1016,7 @@ Version 1 has these remaining limits:
 - `sandbox-exec` is required, so Privateer runs on macOS only, and `python3` is required for the proxy.
 - macOS cannot apply one sandbox inside another, so one session sandbox covers the first mate and every worker alike, in place of the per-task [sailor sandbox](#sailor-sandbox-configsailor-sandbox).
 - A worker can therefore still write the task records `state/<id>.meta` that the first mate's own spawn writes from inside that sandbox.
-- The words file the printed grant or revoke command reads with `--words-file` lives in the home, so a worker can rewrite it before the captain runs the command; the words in the ledger are first-mate-supplied and not tamper-proof, while the permission, pattern, scope, and task are unaffected because the captain sees them in the command.
+- A grant or revoke `--words-file` is refused only inside the home, so one the captain keeps where the session can still write, such as the shared temporary namespaces below or the checkout's `.opencode/` scratch, is as open to a worker; typing the words on stdin avoids that.
 - The per-task temp roots under `/tmp/fm-`, the user's own temporary directory (`$TMPDIR`), and the flat here-document files stock macOS Bash writes directly in `/var/tmp` as `sh-thd*` are namespaces shared by every home on the machine.
   A checkout kept in one of them, such as a linked worktree, keeps its `.git` gitfile writable.
 - Clones under `projects/` are added, moved, and removed from outside the session, and a worktree the session creates in its own pool is meant for use only inside it.
