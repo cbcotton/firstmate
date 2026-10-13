@@ -898,7 +898,7 @@ An allow is refused, at every scope, for what the captain approves only one acti
 In a [Privateer home](#privateer-quarantine-configprivateer) only the captain records a grant or revocation, from their own shell outside the session, because the session sandbox denies the ledger to the first mate and every worker alike.
 Inside the session `grant` and `revoke` refuse with exit status 2 and name the same call, less any `--words-file`, as the command for the captain to run, and the first mate relaunches the worker once the captain says it is recorded; `list` and `active` run on both sides.
 Any worker can write anywhere in the home, so there the captain's words never come from a file in it.
-The captain types them at the command's prompt, which first shows what the record holds and, as context only, the first mate's one-line `--summary` of the request; pipes them on stdin; or names a `--words-file` of their own outside the home.
+The captain types them at the command's prompt, which first shows what the record holds; pipes them on stdin; or names a `--words-file` of their own outside the home.
 A `--words-file` that resolves inside the home is refused, naming the stdin command.
 
 ## Sailor sandbox (config/sailor-sandbox)

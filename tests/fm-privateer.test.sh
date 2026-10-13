@@ -2224,12 +2224,12 @@ test_grants_are_recorded_only_from_the_captains_shell() {
   printf 'harness=opencode\ndispatched_at=1000\n' > "$home/state/pv-grant.meta"
   before=$(home_snapshot "$home")
   out=$(run_grant "$home" "$inside" grant --scope task --task pv-grant --permission bash --pattern 'npm test' \
-    --action allow --summary "pv-grant asks to run the project's npm test" --channel chat)
+    --action allow --channel chat)
   status=$?
   expect_code 2 "$status" "a grant inside the Privateer session must be refused: $out"
   assert_contains "$out" "error: fm-permission-grant.sh refused: in a Privateer home only the captain records a grant or revocation, from their own shell outside this session, typing their own words when it asks; ask the captain to run it there, then relaunch the worker once the captain says it is recorded: FM_HOME=" \
     "the refusal must send the grant to the captain's own shell"
-  assert_contains "$out" "fm-permission-grant.sh grant --scope task --task pv-grant --permission bash --pattern 'npm test' --action allow --summary 'pv-grant asks to run the project'\\''s npm test' --channel chat" \
+  assert_contains "$out" "fm-permission-grant.sh grant --scope task --task pv-grant --permission bash --pattern 'npm test' --action allow --channel chat" \
     "the refusal must name the same call, quoted for a shell"
   assert_equals "$before" "$(home_snapshot "$home")" "a refused grant must leave the home exactly as it was"
   call=${out##*recorded: }
@@ -2242,7 +2242,6 @@ test_grants_are_recorded_only_from_the_captains_shell() {
     "the captain's command must record exactly the call the first mate made"
   assert_equals '"  yes, let it run npm test\n\n"' "$(jq -c .words "$home/state/permission-grants.jsonl")" \
     "the words the captain types on stdin must land verbatim in the ledger"
-  assert_not_contains "$(cat "$home/state/permission-grants.jsonl")" "asks to run" "the first mate's summary must never be recorded as the captain's words"
   for side in "$inside" "$outside"; do
     assert_equals '[{"bash":{"npm test":"allow"}}]' "$(run_grant "$home" "$side" active --task pv-grant)" "active must run on both sides of the session"
     assert_contains "$(run_grant "$home" "$side" list --task pv-grant)" 'task pv-grant allow bash "npm test" via chat' "list must run on both sides of the session"
@@ -2301,6 +2300,30 @@ test_grant_words_never_come_from_a_file_in_the_privateer_home() {
   pass "a Privateer home refuses a words file that resolves inside it, naming the stdin form, and accepts the captain's own file outside it, while an ordinary home keeps its words file"
 }
 
+test_grant_words_file_in_home_is_refused_whatever_its_letter_case() {
+  local home outside words cased ledger out status
+  home=$(make_home gate-grant-case)
+  outside=/tmp/tmux-501/default,1,0
+  ledger="$home/state/permission-grants.jsonl"
+  printf 'harness=opencode\ndispatched_at=1000\n' > "$home/state/pv-grant.meta"
+  words="$home/data/pv-grant/perm-words.txt"
+  mkdir -p "${words%/*}"
+  printf 'words a worker rewrote\n' > "$words"
+  cased=$(printf '%s' "$words" | tr '[:lower:]' '[:upper:]')
+  if [ "$cased" = "$words" ] || [ ! "$cased" -ef "$words" ]; then
+    pass "SKIP: the in-home words file refusal across letter case needs a case-insensitive filesystem, and $TMP_ROOT is not one"
+    return 0
+  fi
+  out=$(run_grant "$home" "$outside" grant --scope task --task pv-grant --permission bash --pattern 'npm test' \
+    --action allow --words-file "$cased" --channel chat </dev/null)
+  status=$?
+  expect_code 2 "$status" "a words file in the Privateer home named in another letter case must be refused: $cased: $out"
+  assert_contains "$out" "--words-file is in this Privateer home, where any worker can rewrite it" \
+    "the refusal must hold whatever the letter case of the path"
+  [ ! -e "$ledger" ] || fail "a refused words file must record nothing: $(cat "$ledger")"
+  pass "on a case-insensitive filesystem a Privateer home refuses its own words file named in another letter case"
+}
+
 test_grant_prompts_the_captain_on_a_terminal() {
   local dir home ledger out status
   dir="$TMP_ROOT/gate-grant-tty"
@@ -2334,14 +2357,12 @@ sys.exit(os.WEXITSTATUS(status) if os.WIFEXITED(status) else 1)
 PY
   out=$(TMUX=/tmp/tmux-501/default,1,0 FM_HOME="$home" python3 -I "$dir/pty.py" "$ROOT/bin/fm-permission-grant.sh" grant \
     --scope task --task pv-grant --permission bash --pattern 'npm test' --action allow \
-    --summary 'pv-grant asks to run npm test' --channel chat 2>&1)
+    --channel chat 2>&1)
   status=$?
   expect_code 0 "$status" "the captain's typed words must record the grant: $out"
-  assert_contains "$out" "The first mate's summary of the request (context only, never recorded): pv-grant asks to run npm test" \
-    "the terminal must show the first mate's summary as context"
   assert_contains "$out" 'This records: allow bash "npm test" for task pv-grant' "the terminal must show what the record holds"
   assert_equals '"typed by the captain\n"' "$(jq -c .words "$ledger")" "the words typed at the prompt must be recorded verbatim"
-  pass "on a terminal the captain-side grant shows the first mate's summary and the record, then records the words the captain types"
+  pass "on a terminal the captain-side grant shows what the record holds, then records the words the captain types"
 }
 
 test_spawn_refuses_while_no_egress_proxy_runs() {
@@ -2411,6 +2432,7 @@ test_the_gate_is_keyed_to_the_home
 test_captain_side_commands_stay_usable_outside
 test_grants_are_recorded_only_from_the_captains_shell
 test_grant_words_never_come_from_a_file_in_the_privateer_home
+test_grant_words_file_in_home_is_refused_whatever_its_letter_case
 test_grant_prompts_the_captain_on_a_terminal
 test_project_sets_clears_and_prints_the_active_project
 

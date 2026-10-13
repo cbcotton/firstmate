@@ -51,10 +51,10 @@ A `needs-decision` whose key starts with `perm-` asks for something the worker's
 It always goes to the captain, and only the captain records a grant, from their own terminal outside this session, in words they type there.
 
 1. Ask the captain as above: what the worker needs, why, and whether to allow it for this task only.
-2. When the captain says yes, run `bin/fm-permission-grant.sh grant --scope task --task <id> --permission <name> --pattern '<pattern>' --action allow --summary '<one line: what the worker asks and why>' --channel chat`.
+2. When the captain says yes, run `bin/fm-permission-grant.sh grant --scope task --task <id> --permission <name> --pattern '<pattern>' --action allow --channel chat`.
    For one shell command, `<name>` is `bash` and `<pattern>` is that exact command; for a path outside the worker's copy, `<name>` is `external_directory` and `<pattern>` is that path.
    Inside this session it refuses on purpose and prints the exact command for the captain's own terminal; give the captain that command and end your turn.
-   That command shows your summary to the captain only as context and records the words the captain types; never write the captain's words to a file for it.
+   That command records the words the captain types; never write the captain's words to a file for it.
 3. When the captain says it is recorded, relaunch the worker with `bin/fm-control.sh <id> relaunch --note '<progress so far>'`, then answer it with `bin/fm-send.sh <id> --resolve-key <key> '<what the captain allowed>'`.
 4. When the captain says no, answer the worker the same way with the captain's refusal.
    Never look for another route to the permission.

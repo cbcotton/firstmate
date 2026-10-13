@@ -8,8 +8,8 @@
 # Usage:
 #   fm-permission-grant.sh grant --scope task|session|standing [--task <id>] \
 #     --permission <name> [--pattern <pattern>] --action allow|deny \
-#     [--words-file <path>] [--summary <text>] --channel chat|pinnace [--ref <note-or-message-id>]
-#   fm-permission-grant.sh revoke <grant-id> [--words-file <path>] [--summary <text>] \
+#     [--words-file <path>] --channel chat|pinnace [--ref <note-or-message-id>]
+#   fm-permission-grant.sh revoke <grant-id> [--words-file <path>] \
 #     --channel chat|pinnace [--ref <id>]
 #   fm-permission-grant.sh list [--task <id>]
 #   fm-permission-grant.sh active --task <id>
@@ -63,8 +63,7 @@
 # active run on both sides. Any worker can write anywhere in the home, so
 # there the captain's words never come from a file in it: with no
 # --words-file, grant and revoke read them on stdin once every other check has
-# passed, after showing on a terminal what the record holds and, as context
-# only, the first mate's one-line --summary of the request; a --words-file
+# passed, after showing on a terminal what the record holds; a --words-file
 # whose real path is in the home is refused, naming that stdin command.
 #
 # Environment: FM_HOME, FM_STATE_OVERRIDE, and FM_CONFIG_OVERRIDE resolve the
@@ -166,14 +165,25 @@ session_stamp() {
 # none take_words reads the words on stdin, and a file whose real path is in
 # the home is refused, since any worker can rewrite it.
 read_words() {
-  local size real home
+  local size status
   if fm_privateer_home "$CONFIG"; then
     [ -n "$1" ] || return 0
-    real=$(perl -MCwd=realpath -e '$p = realpath($ARGV[0]); defined($p) or exit 1; print "$p\n"' "$1" 2>/dev/null) ||
-      die "--words-file must be a readable file"
-    home=$(cd "$FM_HOME" 2>/dev/null && pwd -P) || die "cannot resolve $FM_HOME"
-    case "$real/" in
-      "$home"/*) die "--words-file is in this Privateer home, where any worker can rewrite it; run the command without it and type the captain's words on stdin: $CAPTAIN_CALL" ;;
+    perl -MCwd=realpath -e '
+      my @h = stat($ARGV[1]) or exit 2;
+      my $p = realpath($ARGV[0]); defined($p) or exit 1;
+      while (1) {
+        my @s = stat($p);
+        exit 3 if @s && $s[0] == $h[0] && $s[1] == $h[1];
+        last if $p eq "/";
+        $p =~ s{/[^/]*$}{};
+        $p = "/" if $p eq "";
+      }' "$1" "$FM_HOME" 2>/dev/null
+    status=$?
+    case "$status" in
+      0) ;;
+      2) die "cannot resolve $FM_HOME" ;;
+      3) die "--words-file is in this Privateer home, where any worker can rewrite it; run the command without it and type the captain's words on stdin: $CAPTAIN_CALL" ;;
+      *) die "--words-file must be a readable file" ;;
     esac
   fi
   [ -f "$1" ] && [ -r "$1" ] || die "--words-file must be a readable file"
@@ -183,10 +193,9 @@ read_words() {
   [ -n "$(tr -d '[:space:]' <"$1")" ] || die "--words-file holds only whitespace; record the captain's actual words"
 }
 
-# take_words <path-or-empty> <record> <summary>: set WORDS_JQ to the jq
-# arguments carrying the captain's words: the --words-file read_words checked,
-# or the words on stdin, read after showing <record> and the first mate's
-# <summary> when stdin is a terminal.
+# take_words <path-or-empty> <record>: set WORDS_JQ to the jq arguments
+# carrying the captain's words: the --words-file read_words checked, or the
+# words on stdin, read after showing <record> when stdin is a terminal.
 take_words() {
   local text
   if [ -n "$1" ]; then
@@ -195,7 +204,6 @@ take_words() {
   fi
   if [ -t 0 ]; then
     {
-      [ -z "$3" ] || printf "The first mate's summary of the request (context only, never recorded): %s\n" "$3"
       printf 'This records: %s\n' "$2"
       printf 'Type your own words for the record, then press Ctrl-D on a new line:\n'
     } >&2
@@ -311,7 +319,7 @@ append_record() {  # <json>
 }
 
 cmd_grant() {
-  local scope='' task='' perm='' pat='*' action='' words='' summary='' channel='' ref='' reason stamp='' session='' id now
+  local scope='' task='' perm='' pat='*' action='' words='' channel='' ref='' reason stamp='' session='' id now
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --scope) scope=${2:-}; shift 2 || usage ;;
@@ -320,7 +328,6 @@ cmd_grant() {
       --pattern) pat=${2:-}; shift 2 || usage ;;
       --action) action=${2:-}; shift 2 || usage ;;
       --words-file) words=${2:-}; shift 2 || usage ;;
-      --summary) summary=${2:-}; shift 2 || usage ;;
       --channel) channel=${2:-}; shift 2 || usage ;;
       --ref) ref=${2:-}; shift 2 || usage ;;
       *) usage ;;
@@ -332,7 +339,6 @@ cmd_grant() {
   case "$perm" in '' | *[!a-z_*]*) die "--permission must be an OpenCode permission name such as bash, edit, or external_directory" ;; esac
   [ -n "$pat" ] || die "--pattern must not be empty"
   case "$pat" in *[[:cntrl:]]*) die "--pattern must be one line" ;; esac
-  case "$summary" in *[[:cntrl:]]*) die "--summary must be one line" ;; esac
   read_words "$words"
   if [ "$scope" = task ]; then
     task_ok "$task" || die "--scope task needs --task <id>"
@@ -349,7 +355,7 @@ cmd_grant() {
     reason=$(refusal_reason "$perm" "$pat")
     [ -z "$reason" ] || refuse "$reason; the captain approves that one action in the moment and firstmate performs it"
   fi
-  take_words "$words" "$action $perm \"$pat\" for $scope${task:+ $task}" "$summary"
+  take_words "$words" "$action $perm \"$pat\" for $scope${task:+ $task}"
   now=$(date +%s)
   id="g$now-$$-$RANDOM"
   append_record "$(jq -cn --arg id "$id" --argjson ts "$now" --arg scope "$scope" --arg task "$task" \
@@ -365,25 +371,23 @@ cmd_grant() {
 }
 
 cmd_revoke() {
-  local id=${1:-} words='' summary='' channel='' ref=''
+  local id=${1:-} words='' channel='' ref=''
   [ -n "$id" ] || usage
   shift
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --words-file) words=${2:-}; shift 2 || usage ;;
-      --summary) summary=${2:-}; shift 2 || usage ;;
       --channel) channel=${2:-}; shift 2 || usage ;;
       --ref) ref=${2:-}; shift 2 || usage ;;
       *) usage ;;
     esac
   done
   case "$channel" in chat | pinnace) ;; *) die "--channel must be chat or pinnace" ;; esac
-  case "$summary" in *[[:cntrl:]]*) die "--summary must be one line" ;; esac
   read_words "$words"
   if [ ! -f "$LOG" ] || ! jq -e --arg id "$id" 'select(.op == "grant" and .id == $id)' "$LOG" >/dev/null 2>&1; then
     refuse "no grant $id in this home"
   fi
-  take_words "$words" "revoke grant $id" "$summary"
+  take_words "$words" "revoke grant $id"
   append_record "$(jq -cn --arg id "$id" --argjson ts "$(date +%s)" "${WORDS_JQ[@]}" --arg channel "$channel" --arg ref "$ref" '
     {v: 1, op: "revoke", id: $id, ts: $ts, words: $words, channel: $channel, ref: (if $ref == "" then null else $ref end)}')"
   echo "$id: revoked; it no longer applies from each OpenCode worker's next launch"
