@@ -1,0 +1,114 @@
+=== Lab Privateer home; first mate sailor tiller (loopback scripted model) with auth_env HF_TOKEN
+
+$ fm-sailor.sh check tiller scripted   # no HF_TOKEN anywhere yet
+refused: sailor tiller has no token: HF_TOKEN is set in neither the environment nor /private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-lab.PkGbda/.env
+exit=1
+
+$ fm-privateer.sh start   # still no token
+fm-privateer: refused: the first mate's sailor cannot take the session: sailor tiller has no token: HF_TOKEN is set in neither the environment nor /private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-lab.PkGbda/.env
+exit=1
+--- captain writes HF_TOKEN into the home's .env
+
+$ fm-sailor.sh check tiller scripted
+ok: sailor tiller serves scripted at http://127.0.0.1:54687/v1 (0 of 1 tasks busy)
+exit=0
+
+$ fm-sailor.sh provider-json tiller scripted
+{"tiller":{"npm":"@ai-sdk/openai-compatible","name":"Local","options":{"baseURL":"http://127.0.0.1:54687/v1","apiKey":"{env:HF_TOKEN}"},"models":{"scripted":{"name":"scripted"}}}}
+
+--- adversarial registry edits in this Privateer home
+
+$ fm-sailor.sh add claude --endpoint https://api.anthropic.com/v1 --models claude-x --auth-env HF_TOKEN
+refused: the change would break this home's Privateer quarantine:
+  config/crew-dispatch.json sailor claude has endpoint 'https://api.anthropic.com/v1', on an Anthropic or Claude host
+exit=1
+
+$ fm-sailor.sh add hfplain --endpoint http://router.huggingface.co/v1 --models m
+refused: the change would break this home's Privateer quarantine:
+  config/crew-dispatch.json sailor hfplain has endpoint 'http://router.huggingface.co/v1', which is not on this machine or the local network and is not https
+exit=1
+
+$ fm-sailor.sh add hfa --endpoint https://router.huggingface.co/v1 --models m --auth-env ANTHROPIC_API_KEY
+refused: the change would break this home's Privateer quarantine:
+  config/crew-dispatch.json sailor hfa takes its token from ANTHROPIC_API_KEY, an Anthropic or Claude variable
+exit=1
+
+$ fm-privateer.sh check
+exit=0
+
+$ env -u HF_TOKEN fm-privateer.sh start
+privateer: started session privateer on tmux socket fm-privateer-eda981de1285 (first mate tiller/scripted, egress proxy 127.0.0.1:54695); attach with: FM_HOME='/private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-lab.PkGbda' '/private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-lab.PkGbda/root/bin/fm-privateer.sh' attach
+exit=0
+--- egress allow file:
+127.0.0.1:54687
+github.com:443
+inside-session curl https://router.huggingface.co/v1/models -> curl: (56) CONNECT tunnel failed, response 403
+000 rc=56
+inside-session curl https://api.anthropic.com/ -> curl: (56) CONNECT tunnel failed, response 403
+000 rc=56
+--- captain registers the external HF sailor from their own shell
+
+$ fm-sailor.sh add hf --endpoint https://router.huggingface.co/v1 --models meta-llama/Llama-3.1-8B-Instruct --title 'HF router' --auth-env HF_TOKEN
+wrote config/crew-dispatch.json (previous copy: crew-dispatch.json.bak-20261014-143853)
+added sailor hf (placeholder) at https://router.huggingface.co/v1 serving meta-llama/Llama-3.1-8B-Instruct
+workers: the change applies from each worker's next spawn; running workers keep what they launched with
+egress: a running Privateer session allows a new endpoint only after fm-privateer.sh reload
+exit=0
+
+$ fm-sailor.sh list
+tiller status=live endpoint=http://127.0.0.1:54687/v1 max_concurrent=1 models=scripted auth_env=HF_TOKEN
+hf status=placeholder endpoint=https://router.huggingface.co/v1 max_concurrent=1 models=meta-llama/Llama-3.1-8B-Instruct auth_env=HF_TOKEN
+
+$ fm-privateer.sh check
+exit=0
+
+$ fm-privateer.sh reload
+privateer: added router.huggingface.co:443
+privateer: reloaded the egress allowlist
+exit=0
+--- egress allow file:
+127.0.0.1:54687
+github.com:443
+router.huggingface.co:443
+inside-session curl https://router.huggingface.co/v1/models -> 200 rc=0
+inside-session curl https://api.anthropic.com/ -> curl: (56) CONNECT tunnel failed, response 403
+000 rc=56
+--- waiting for the OpenCode first mate's model request (via with-token)
+--- requests the loopback sailor received (token redacted):
+GET /metrics auth=Bearer <lab-token>
+GET /v1/models auth=Bearer <lab-token>
+POST /v1/chat/completions auth=Bearer <lab-token>
+--- egress proxy log (verdict dest):
+   4 allowed CONNECT router.huggingface.co:443
+   3 allowed GET 127.0.0.1:54687
+   1 allowed POST 127.0.0.1:54687
+   2 refused CONNECT api.anthropic.com:443
+   1 refused CONNECT models.opencode.ai:443
+   1 refused CONNECT registry.npmjs.org:443
+   1 refused CONNECT router.huggingface.co:443
+   1 reload - +1 -0
+--- token on any process command line?
+matches (incl. this grep): 2
+--- token in any file other than .env?
+/private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-lab.PkGbda/model.py
+--- first mate pane:
+  ┃  This script never starts supervision itself.
+  ┃
+  ┃  The digest above is complete for this session start. The READ-ONCE
+  ┃  CONTRACT
+  ┃  section near the top of it governs what may still be read from disk.
+  ┃
+     Aye, standing by.
+     ▣  Privateer · scripted · 984ms
+  ┃
+  ┃
+  ┃
+  ┃  Privateer · scripted Local
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+   /private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/ab      ctrl+p
+   T/fm-lab.PkGbda/state/privateer/helm                  agents   commands
+
+$ fm-privateer.sh stop
+privateer: stopped session privateer on tmux socket fm-privateer-eda981de1285
+exit=0
+/tmp/fm-drv/drive.sh: line 7: 34284 Terminated: 15          python3 "$LAB/model.py" "$LAB/port" "$LAB/requests.log"
