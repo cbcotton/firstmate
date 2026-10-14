@@ -231,6 +231,23 @@ test_check_passes_a_clean_home() {
   pass "check passes a Privateer home with only opencode, a sandbox, and private sailors"
 }
 
+test_check_passes_grade_profiles() {
+  local home out status
+  home=$(make_home graded)
+  jq '.sailors.tiller.grade = "sailor" | .rules = [{"when": "hard asks", "spend": "allowed", "use": {"harness": "opencode", "grade": "sailor"}}] | .default = {"harness": "opencode", "grade": "deckhand"}' \
+    "$home/config/crew-dispatch.json" > "$home/config/crew-dispatch.json.new" && mv "$home/config/crew-dispatch.json.new" "$home/config/crew-dispatch.json"
+  out=$(run_check "$home")
+  status=$?
+  expect_code 0 "$status" "grade profiles resolve only to this home's sailors, so they must pass: $out"
+  assert_equals "" "$out" "a home dispatching by grade must print nothing"
+  jq '.default.harness = "claude"' "$home/config/crew-dispatch.json" > "$home/config/crew-dispatch.json.new" &&
+    mv "$home/config/crew-dispatch.json.new" "$home/config/crew-dispatch.json"
+  out=$(run_check "$home")
+  expect_code 1 "$?" "a grade profile on another harness must still be refused"
+  assert_contains "$out" "profile claude uses a harness other than opencode" "the grade profile's harness violation is missing"
+  pass "check passes rules and defaults that name a grade, and still refuses one on another harness"
+}
+
 test_check_names_every_violation() {
   local home out status
   home=$(make_home dirty)
@@ -2773,6 +2790,7 @@ test_task_record_writes_go_through_the_writer_inside_the_session() {
 
 test_check_is_silent_without_the_flag
 test_check_passes_a_clean_home
+test_check_passes_grade_profiles
 test_check_names_every_violation
 test_check_requires_the_dispatch_file
 test_check_refuses_anthropic_forges

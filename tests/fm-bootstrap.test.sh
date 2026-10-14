@@ -1114,16 +1114,16 @@ test_crew_dispatch_sailors_are_verbose_bootstrap_info() {
   case_dir="$TMP_ROOT/dispatch-sailors"
   mkdir -p "$case_dir/home/config"
   printf '%s\n' manual > "$case_dir/home/config/backlog-backend"
-  printf '%s\n' '{"sailors":{"tiller":{"endpoint":"http://127.0.0.1:1/v1","status":"live","models":["coder"]}},"rules":[{"when":"clear-path code","use":{"harness":"opencode","sailor":"tiller","model":"coder"}}],"sailor_fallback":{"harness":"claude","model":"claude-opus-5-5"}}' > "$case_dir/home/config/crew-dispatch.json"
+  printf '%s\n' '{"sailors":{"tiller":{"endpoint":"http://127.0.0.1:1/v1","status":"live","models":["coder"]}},"rules":[{"when":"clear-path code","use":{"harness":"opencode","sailor":"tiller","model":"coder"}},{"when":"triage","use":{"harness":"opencode","grade":"deckhand"}}],"sailor_fallback":{"harness":"claude","model":"claude-opus-5-5"}}' > "$case_dir/home/config/crew-dispatch.json"
   fakebin=$(make_fake_toolchain "$case_dir")
   add_real_jq "$fakebin"
 
   out=$(PATH="$fakebin:$BASE_PATH" FM_HOME="$case_dir/home" FM_ROOT_OVERRIDE="$case_dir/home" \
     FM_BOOTSTRAP_VERBOSE_FACTS=1 FM_FAKE_TREEHOUSE_LEASE_HELP=1 "$ROOT/bin/fm-bootstrap.sh")
 
-  expect=$'BOOTSTRAP_INFO: crew dispatch active config/crew-dispatch.json\nBOOTSTRAP_INFO: crew dispatch rule: clear-path code -> opencode/coder@tiller\nBOOTSTRAP_INFO: crew dispatch sailor fallback: claude/claude-opus-5-5'
+  expect=$'BOOTSTRAP_INFO: crew dispatch active config/crew-dispatch.json\nBOOTSTRAP_INFO: crew dispatch rule: clear-path code -> opencode/coder@tiller\nBOOTSTRAP_INFO: crew dispatch rule: triage -> opencode@grade:deckhand\nBOOTSTRAP_INFO: crew dispatch sailor fallback: claude/claude-opus-5-5'
   [ "$out" = "$expect" ] || fail "sailor verbose info block mismatch"$'\n'"expected: $expect"$'\n'"actual:   $out"
-  pass "bootstrap names each profile's sailor and the sailor fallback in verbose BOOTSTRAP_INFO"
+  pass "bootstrap names each profile's sailor or grade and the sailor fallback in verbose BOOTSTRAP_INFO"
 }
 
 test_privateer_violations_are_reported() {
@@ -1254,6 +1254,9 @@ sailor model outside its list is flagged^{"sailors":{"tiller":{"endpoint":"http:
 sailor without an http endpoint is flagged^{"sailors":{"tiller":{"endpoint":"127.0.0.1:1","status":"live","models":["coder"]}}}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - sailor tiller needs an http(s) endpoint
 sailor fallback naming a sailor is flagged^{"sailors":{"tiller":{"endpoint":"http://127.0.0.1:1/v1","status":"live","models":["coder"]}},"sailor_fallback":{"harness":"opencode","sailor":"tiller","model":"coder"}}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - sailor_fallback must not name a sailor
 sailor fallback harness is verified^{"sailor_fallback":{"harness":"spaceship"}}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - unverified harness: spaceship
+graded sailors, grade profiles, and spend are accepted^{"sailors":{"tiller":{"endpoint":"http://127.0.0.1:1/v1","status":"live","models":["coder"],"grade":"sailor","facets":["helm"],"paid":false}},"rules":[{"when":"hard asks","spend":"allowed","use":[{"harness":"opencode","grade":"sailor"},{"harness":"opencode","sailor":"tiller"}]}],"default":{"harness":"opencode","grade":"deckhand"}}^empty^
+unknown profile grade is flagged^{"default":{"harness":"opencode","grade":"scout"}}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - profile grade "scout" is not a grade; the grades, lowest first, are deckhand, sailor, specialist, expert
+unknown sailor grade is flagged^{"sailors":{"tiller":{"endpoint":"http://127.0.0.1:1/v1","status":"live","models":["coder"],"grade":"captain"}}}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - sailor tiller grade "captain" is not a grade; the grades, lowest first, are deckhand, sailor, specialist, expert
 ROWS
 
   case_dir="$TMP_ROOT/dispatch-opt-in-gate"
