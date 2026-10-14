@@ -1,5 +1,5 @@
 ---
-description: Start a local-only ship - /ship [<project>] <ask>
+description: Start a local-only ship - /ship [--grade <grade>] [--spend] [<project>] <ask>
 ---
 !`bin/fm-helm.sh ship --stdin 2>&1 <<'FM_HELM_ARGUMENTS'
 $ARGUMENTS

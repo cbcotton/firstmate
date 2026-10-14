@@ -10,8 +10,8 @@
 #
 # Usage:
 #   fm-helm.sh helm
-#   fm-helm.sh scout [--rule <n>|default] [<project>] <ask...>
-#   fm-helm.sh ship [--rule <n>|default] [<project>] <ask...>
+#   fm-helm.sh scout [--rule <n>|default] [--grade <grade>] [--spend] [<project>] <ask...>
+#   fm-helm.sh ship [--rule <n>|default] [--grade <grade>] [--spend] [<project>] <ask...>
 #   fm-helm.sh project
 #   fm-helm.sh queue
 #   fm-helm.sh sailors
@@ -32,24 +32,31 @@
 #      --mode local-only --branch-prefix <the project's registered prefix> for
 #      a ship, then fill `## Captain's intent` with the ask exactly as given
 #      and `## Firstmate spec` with one fixed line that keeps the work to it;
-#   4. take the first candidate that bin/fm-sailor.sh check passes;
+#   4. take the first candidate for which bin/fm-sailor.sh pick names a
+#      sailor and model;
 #   5. spawn with bin/fm-spawn.sh <id> <project> --scout, or --mode local-only
 #      --yolo <the project's registered yolo> --branch-prefix <prefix> for a
 #      ship, plus --harness opencode --sailor <sailor> --model <model> and the
 #      profile's --effort when it names one.
 # When every candidate is refused, or the spawn refuses, the row stays Queued
 # with its instructions written, and the output names the bin/fm-spawn.sh call
-# of step 5 that starts it, with the candidate sailors in order when none
-# answered. When the instructions cannot be written, the row just filed is
-# removed.
+# of step 5 that starts it, with the candidates in order when none answered.
+# When the instructions cannot be written, the row just filed is removed.
 #
-# The candidate sailors are profiles of config/crew-dispatch.json, in the
-# order listed: its default profiles when it declares no rules, the profiles
-# of the rule that --rule <n> names (counting from 1), or the default profiles
-# with --rule default. A rule's condition is natural language, which no script
-# judges, so while the file declares rules a call without --rule is refused
-# before anything is written, listing each rule's condition and the call to
-# repeat with --rule.
+# The candidates are profiles of config/crew-dispatch.json, in the order
+# listed: its default profiles when it declares no rules, the profiles of the
+# rule that --rule <n> names (counting from 1), or the default profiles with
+# --rule default. A profile naming a sailor is weighed with pick --sailor
+# <sailor>, plus --model when it names one; a profile naming a grade with pick
+# --grade <grade>. --grade <grade> raises the floor for this one task, so
+# every candidate gets it too, and pick takes the higher. --spend, given only
+# on the captain's word, lets this one task take a paid sailor, as a rule
+# whose `spend` is "allowed" does for every task it matches; either way every
+# candidate gets pick --spend. An unknown --grade is refused before anything
+# is written. A rule's condition is natural language, which no script judges,
+# so while the file declares rules a call without --rule is refused before
+# anything is written, listing each rule's condition and the call to repeat
+# with --rule.
 #
 # When config/active-project names a registered project with a clone (the
 # captain sets it outside the session with bin/fm-privateer.sh project), scout
@@ -72,13 +79,13 @@
 # bin/fm-wake-drain.sh.
 #
 # --stdin reads the verb's arguments as text on standard input instead, the
-# form the slash commands in .opencode/commands/ use: after an optional
-# leading --rule <n>, the first word is the project or task id, and the rest,
-# newlines included, is the ask or the steer. Each slash command writes the
-# captain's words inside a quoted here-document, so no quote, $, or ; in them
-# reaches a shell, three times: OpenCode's $ARGUMENTS, the line FM_HELM_AGAIN,
-# $ARGUMENTS again, the line FM_HELM_TOKENS, OpenCode's $1, and the line
-# FM_HELM_END_OF_ARGUMENTS. OpenCode fills $1 with the words' tokens as they
+# form the slash commands in .opencode/commands/ use: after optional leading
+# --rule <n>, --grade <grade>, and --spend, the first word is the project or
+# task id, and the rest, newlines included, is the ask or the steer. Each
+# slash command writes the captain's words inside a quoted here-document, so
+# no quote, $, or ; in them reaches a shell, three times: OpenCode's
+# $ARGUMENTS, the line FM_HELM_AGAIN, $ARGUMENTS again, the line
+# FM_HELM_TOKENS, OpenCode's $1, and the line FM_HELM_END_OF_ARGUMENTS. OpenCode fills $1 with the words' tokens as they
 # are, but writes $ARGUMENTS with JavaScript's replaceAll, which reads $$, $&,
 # $`, and $' in the words as its own patterns, and it ends the shell step at
 # the first backtick. So the text is taken only when it has exactly that
@@ -121,7 +128,7 @@ refuse() {
 misuse() {
   {
     echo "refused: $*"
-    echo "the calls: bin/fm-helm.sh helm | scout|ship [--rule <n>|default] [<project>] <ask...> | project | queue | sailors | steer <task-id> <text...> | land <task-id> | wake"
+    echo "the calls: bin/fm-helm.sh helm | scout|ship [--rule <n>|default] [--grade <grade>] [--spend] [<project>] <ask...> | project | queue | sailors | steer <task-id> <text...> | land <task-id> | wake"
   } >&2
   exit 2
 }
@@ -173,11 +180,15 @@ read_stdin_args() {
   text=$(trim "$text")
   while :; do
     case "$text" in
-      --rule[[:space:]]*)
-        text=$(trim "${text#--rule}")
+      --rule[[:space:]]* | --grade[[:space:]]*)
         word=${text%%[[:space:]]*}
-        ARGS+=(--rule "$word")
         text=$(trim "${text#"$word"}")
+        ARGS+=("$word" "${text%%[[:space:]]*}")
+        text=$(trim "${text#"${text%%[[:space:]]*}"}")
+        ;;
+      --spend | --spend[[:space:]]*)
+        ARGS+=(--spend)
+        text=$(trim "${text#--spend}")
         ;;
       *) break ;;
     esac
@@ -249,11 +260,13 @@ names_project() {
 
 # again <kind> <project> <ask>: the same call with --rule left to fill in.
 again() {
-  printf '%s\n' "bin/fm-helm.sh $1 --rule <n> $2 $(shell_quote "$3")"
+  printf '%s\n' "bin/fm-helm.sh $1 --rule <n>${GRADE:+ --grade $GRADE}${SPEND:+ --spend} $2 $(shell_quote "$3")"
 }
 
-# choose_candidates <kind> <project> <ask>: CANDIDATES, one `sailor<TAB>model<TAB>effort`
-# line per profile, as the header's sailor choice says.
+# choose_candidates <kind> <project> <ask>: CANDIDATES, one line per profile,
+# its fields `sailor|grade`, the sailor or grade, the model, and the effort,
+# each ended by a unit separator; and SPEND, set when the chosen rule allows
+# spend. The header's sailor choice says which profiles.
 choose_candidates() {
   local rules selector
   command -v jq >/dev/null 2>&1 || refuse "jq is required to read config/crew-dispatch.json"
@@ -266,8 +279,9 @@ choose_candidates() {
         echo "refused: this home's dispatch rules are chosen by judgment, not by this script; repeat the call with --rule <n> for the rule whose condition fits the work, or --rule default when none fits:"
         jq -r '
           def profiles($v): if ($v | type) == "array" then $v elif ($v | type) == "object" then [$v] else [] end;
-          def names($v): profiles($v) | map("\(.sailor // "?")/\(.model // "?")") | join(", ");
-          ((.rules // []) | to_entries[] | "  --rule \(.key + 1): \(.value.when // "") (\(names(.value.use)))"),
+          def name: if has("grade") and (has("sailor") | not) then "grade \(.grade)" else "\(.sailor // "?")" + (if has("model") then "/\(.model)" else "" end) end;
+          def names($v): profiles($v) | map(name) | join(", ");
+          ((.rules // []) | to_entries[] | "  --rule \(.key + 1): \(.value.when // "") (\(names(.value.use))\(if .value.spend? == "allowed" then "; spend allowed" else "" end))"),
           (if has("default") then "  --rule default (\(names(.default)))" else empty end)' "$DISPATCH"
         echo "the call: $(again "$@")"
       } >&2
@@ -279,12 +293,16 @@ choose_candidates() {
   else
     [ "$RULE" -le "$rules" ] || refuse "there is no rule $RULE; config/crew-dispatch.json declares $rules"
     selector=".rules[$((RULE - 1))].use"
+    [ "$(jq -r ".rules[$((RULE - 1))].spend? // empty" "$DISPATCH")" != allowed ] || SPEND=1
   fi
   CANDIDATES=$(jq -r "
     def profiles(\$v): if (\$v | type) == \"array\" then \$v elif (\$v | type) == \"object\" then [\$v] else [] end;
-    profiles($selector)[] | select(type == \"object\" and (.sailor | type) == \"string\" and (.model | type) == \"string\")
-    | [.sailor, .model, (.effort // \"\" | tostring)] | @tsv" "$DISPATCH")
-  [ -n "$CANDIDATES" ] || refuse "the ${RULE:+rule }${RULE:-default} in config/crew-dispatch.json names no sailor; tell the captain"
+    profiles($selector)[] | select(type == \"object\")
+    | if (.sailor | type) == \"string\" then [\"sailor\", .sailor]
+      elif (.grade | type) == \"string\" then [\"grade\", .grade]
+      else empty end
+    + [(.model // \"\" | tostring), (.effort // \"\" | tostring)] | map(. + \"\u001f\") | add" "$DISPATCH")
+  [ -n "$CANDIDATES" ] || refuse "the ${RULE:+rule }${RULE:-default} in config/crew-dispatch.json names no sailor or grade; tell the captain"
 }
 
 # fill_brief <brief> <kind> <ask>: the two `# Task` subsections, filled literally.
@@ -330,8 +348,8 @@ ship_posture() {
 # launch <kind> <id> <project>: steps 4 and 5, with PREFIX and YOLO set for a
 # ship; exits.
 launch() {
-  local kind=$1 id=$2 project=$3 sailor model effort out
-  local -a refusals args profiles
+  local kind=$1 id=$2 project=$3 type value sailor model effort out rc label line
+  local -a refusals args profiles pick
   refusals=()
   profiles=()
   args=("$id" "$project")
@@ -341,10 +359,24 @@ launch() {
     args+=(--scout)
   fi
   args+=(--harness opencode)
-  while IFS=$'\t' read -r sailor model effort; do
-    [ -n "$sailor" ] || continue
-    profiles+=("$sailor/$model${effort:+ --effort $effort}")
-    if out=$("$SCRIPT_DIR/fm-sailor.sh" check "$sailor" "$model" 2>&1); then
+  while IFS=$'\x1f' read -r type value model effort; do
+    [ -n "$type" ] || continue
+    if [ "$type" = grade ]; then
+      pick=(--grade "$value")
+      label="the sailor bin/fm-sailor.sh pick --grade $value${GRADE:+ --grade $GRADE}${SPEND:+ --spend} names"
+    else
+      pick=(--sailor "$value")
+      [ -z "$model" ] || pick+=(--model "$model")
+      label="$value${model:+/$model}"
+    fi
+    [ -z "$GRADE" ] || pick+=(--grade "$GRADE")
+    [ -z "$SPEND" ] || pick+=(--spend)
+    profiles+=("$label${effort:+ --effort $effort}")
+    rc=0
+    out=$("$SCRIPT_DIR/fm-sailor.sh" pick "${pick[@]}" 2>&1) || rc=$?
+    if [ "$rc" = 0 ]; then
+      sailor=${out%% *}
+      model=${out#* }
       say "sailor: $sailor/$model can take it"
       args+=(--sailor "$sailor" --model "$model")
       [ -z "$effort" ] || args+=(--effort "$effort")
@@ -358,7 +390,18 @@ launch() {
       } >&2
       exit 1
     fi
-    refusals+=("$sailor/$model: ${out#refused: }")
+    if [ "$rc" != 1 ]; then
+      {
+        echo "refused: the sailors could not be weighed, so $id stays Queued with its instructions written; tell the captain:"
+        printf '%s\n' "$out" | sed 's/^/  /'
+      } >&2
+      exit 1
+    fi
+    if [ "$type" = grade ]; then
+      while IFS= read -r line; do refusals+=("${line#refused: }"); done <<<"$out"
+    else
+      refusals+=("$label: ${out#refused: }")
+    fi
   done <<EOF
 $CANDIDATES
 EOF
@@ -369,11 +412,13 @@ EOF
   exit 0
 }
 
-# intake <kind> [--rule <n>|default] <project> <ask...>
+# intake <kind> [--rule <n>|default] [--grade <grade>] [--spend] <project> <ask...>
 intake() {
-  local kind=$1 ask out rc id title brief project
+  local kind=$1 ask out rc id title brief project grades
   shift
   RULE=
+  GRADE=
+  SPEND=
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --rule)
@@ -381,7 +426,13 @@ intake() {
         RULE=$2
         shift 2
         ;;
-      --*) misuse "unknown flag '$1'; $kind takes only --rule <n>|default, before the project" ;;
+      --grade)
+        [ "$#" -ge 2 ] || misuse "--grade needs a grade"
+        GRADE=$2
+        shift 2
+        ;;
+      --spend) SPEND=1; shift ;;
+      --*) misuse "unknown flag '$1'; $kind takes only --rule <n>|default, --grade <grade>, and --spend, before the project" ;;
       *) break ;;
     esac
   done
@@ -389,6 +440,11 @@ intake() {
     '' | default) ;;
     0* | *[!0-9]*) misuse "--rule takes a rule number from 1, or default, not '$RULE'" ;;
   esac
+  if [ -n "$GRADE" ]; then
+    grades=$("$SCRIPT_DIR/fm-sailor.sh" grades) || refuse "the grades could not be read; tell the captain"
+    printf '%s\n' "$grades" | grep -qxF -- "$GRADE" ||
+      misuse "--grade takes one of $(printf '%s\n' "$grades" | paste -sd, - | sed 's/,/, /g'), lowest to highest, not '$GRADE'"
+  fi
   [ "$#" -ge 1 ] || misuse "$kind needs a project and the ask"
   if [ -n "${1:-}" ] && ! project_registered "$1" && ! names_project "$1" &&
     project=$(fm_privateer_active_project "$CONFIG" "$DATA" "$PROJECTS" "$SCRIPT_DIR"); then
