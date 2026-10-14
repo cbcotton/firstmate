@@ -70,7 +70,8 @@
 # vLLM-style gauges (vllm:num_requests_running and vllm:num_requests_waiting),
 # and, when GET <endpoint>/models answers, each listed model as loaded,
 # unloaded (listed with loaded=false), listed (the server reports no loaded
-# flag), or missing. It exits 0 whatever the sailors answer.
+# flag), or missing. Every sailor is probed at once, so the run takes about
+# one probe timeout however many are down. It exits 0 whatever the sailors answer.
 #
 # health prints `<sailor> up <url>` or `<sailor> down <url>` for each live
 # sailor, and nothing when there is none. A sailor whose endpoint lies under
@@ -429,8 +430,30 @@ cmd_provider_json() {
               options: {baseURL: $x.endpoint}, models: {($m): ({name: $m} + ($x.model_settings[$m] // {}))}}}' "$FILE"
 }
 
+# status_line <sailor> <url>: the one status line for a sailor.
+status_line() {
+  local name=$1 url=$2 status endpoint max busy body queue models m states
+  status=$(sailor_field "$name" '.status')
+  endpoint=$(sailor_field "$name" '.endpoint')
+  max=$(sailor_field "$name" '.max_concurrent')
+  busy=$(busy_count "$name" "")
+  if ! probe_up "$url"; then
+    echo "$name $status not-answering endpoint=$endpoint tasks=$busy/${max:-1}"
+    return 0
+  fi
+  queue=$(server_queue "$endpoint")
+  states=
+  if body=$(fetch_models "$endpoint"); then
+    models=$(jq -r --arg s "$name" '.sailors[$s].models[]' "$FILE")
+    while IFS= read -r m; do
+      states="$states${states:+,}$m($(model_state "$body" "$m"))"
+    done <<<"$models"
+  fi
+  echo "$name $status answering endpoint=$endpoint tasks=$busy/${max:-1}${queue:+ $queue}${states:+ models=$states}"
+}
+
 cmd_status() {
-  local all=$1 targets name url status endpoint max busy body queue models m states
+  local all=$1 targets name url n=0
   load_valid
   need_curl
   load_timeouts
@@ -439,24 +462,18 @@ cmd_status() {
     if [ "$all" = true ]; then echo "no sailors"; else echo "no live sailors"; fi
     return 0
   fi
+  WORK=$(mktemp -d "${TMPDIR:-/tmp}/fm-sailor.XXXXXX") || die "cannot create a scratch directory"
+  trap cleanup EXIT
+  # Every sailor is probed at once, so a down sailor adds no time to the rest.
   while IFS=$'\t' read -r name url; do
-    status=$(sailor_field "$name" '.status')
-    endpoint=$(sailor_field "$name" '.endpoint')
-    max=$(sailor_field "$name" '.max_concurrent')
-    busy=$(busy_count "$name" "")
-    if ! probe_up "$url"; then
-      echo "$name $status not-answering endpoint=$endpoint tasks=$busy/${max:-1}"
-      continue
-    fi
-    queue=$(server_queue "$endpoint")
-    states=
-    if body=$(fetch_models "$endpoint"); then
-      models=$(jq -r --arg s "$name" '.sailors[$s].models[]' "$FILE")
-      while IFS= read -r m; do
-        states="$states${states:+,}$m($(model_state "$body" "$m"))"
-      done <<<"$models"
-    fi
-    echo "$name $status answering endpoint=$endpoint tasks=$busy/${max:-1}${queue:+ $queue}${states:+ models=$states}"
+    n=$((n + 1))
+    status_line "$name" "$url" > "$WORK/$n" &
+  done <<<"$targets"
+  wait
+  n=0
+  while IFS=$'\t' read -r name url; do
+    n=$((n + 1))
+    cat "$WORK/$n"
   done <<<"$targets"
 }
 
