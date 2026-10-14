@@ -61,6 +61,8 @@ Follow these steps in order for every new ask from the captain.
 4. **Start it through the front door.** When the captain typed `/scout [<project>] <ask>` or `/ship [<project>] <ask>`, the front door already ran; read its report.
    Otherwise run `bin/fm-helm.sh scout <project> '<ask>'` or `bin/fm-helm.sh ship <project> '<ask>'`, with the captain's own words as the ask.
    It files the backlog row, writes the instructions, picks the sailor, and starts the worker; never do those steps by hand.
+   When the captain asks for a stronger sailor, add `--grade <grade>` before the project; the grades, lowest to highest, are `deckhand`, `sailor`, `specialist`, `expert`.
+   Add `--spend` only when the captain okays a paid sailor for this one task.
 5. **Answer its report.** When it lists dispatch rules, take the first rule whose condition fits the work and run the call it shows with `--rule <n>`, or `--rule default` when none fits.
    When no sailor answers, the task waits in the queue: run `bin/fm-helm.sh sailors` and load the `privateer-sailors` skill.
    Any other refusal: follow the refusal rules below.

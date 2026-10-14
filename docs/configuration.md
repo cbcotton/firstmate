@@ -948,7 +948,7 @@ With the flag present, bootstrap reports each violation as `PRIVATEER: <violatio
 - The [spoken interface and captain inbox](#spoken-interface-and-captain-inbox-configvoice--configinbox-) settings `config/inbox-ask-model`, `inbox-stt-model`, `inbox-region`, `inbox-profile`, `voice-model`, `voice-region`, and `voice-profile` must not exist, because those side channels send the captain's words to Bedrock.
 - `config/sailor-sandbox` must exist, so a sailor under the `restricted` profile may launch; a Privateer worker then runs inside the session sandbox described below.
 - `.env` must set no Relay pairing token, no typed-resolution key, no `FM_INBOX_*` or `FM_VOICE_*` override, and no `ANTHROPIC_*`, `CLAUDE_*`, or `CLAUDECODE` line, and `config/launch-env-allowlist` must list none of the Anthropic or Claude names.
-- `config/crew-dispatch.json` must exist, declare no `sailor_fallback`, give every profile the `opencode` harness and a sailor, and give every sailor an endpoint that is either private (localhost, a loopback, RFC 1918, or tailnet (100.64/10) address, an IPv6 loopback or unique-local address, or a name ending in `.local` or `.ts.net`) or https elsewhere, as an [external sailor](#crew-dispatch-profiles-configcrew-dispatchjson) is, and never on a host that is, or is under, `anthropic.com`, `claude.ai`, or `claude.com`.
+- `config/crew-dispatch.json` must exist, declare no `sailor_fallback`, give every profile the `opencode` harness and a sailor or a grade, and give every sailor an endpoint that is either private (localhost, a loopback, RFC 1918, or tailnet (100.64/10) address, an IPv6 loopback or unique-local address, or a name ending in `.local` or `.ts.net`) or https elsewhere, as an [external sailor](#crew-dispatch-profiles-configcrew-dispatchjson) is, and never on a host that is, or is under, `anthropic.com`, `claude.ai`, or `claude.com`.
   No sailor's `auth_env` may name an `ANTHROPIC_*`, `CLAUDE_*`, or `CLAUDECODE` variable.
 - The origin of the checkout and of every clone under `projects/`, in https, http, ssh, or scp form, must not be on a host that is, or is under, `anthropic.com`, `claude.ai`, or `claude.com`, and the egress proxy never allows such a host.
 - An endpoint's host is read from its authority, which ends at the first `/`, `?`, or `#`; an authority carrying userinfo or a backslash is refused, so no endpoint can hide a public host behind a private-looking suffix.
@@ -1058,8 +1058,8 @@ Each slash command in `.opencode/commands/` runs one verb and hands its report t
 | Command | What it does |
 | --- | --- |
 | `/helm` | Runs the session start |
-| `/scout [<project>] <ask>` | Files the backlog row, writes the worker's instructions with the ask as the captain's intent, and starts a scout on the first sailor that can take it |
-| `/ship [<project>] <ask>` | The same for a local-only ship, on the project's registered branch prefix and merge authority |
+| `/scout [--grade <grade>] [--spend] [<project>] <ask>` | Files the backlog row, writes the worker's instructions with the ask as the captain's intent, and starts a scout on the first sailor that can take it |
+| `/ship [--grade <grade>] [--spend] [<project>] <ask>` | The same for a local-only ship, on the project's registered branch prefix and merge authority |
 | `/project` | Shows the registered projects and marks the active one; only the captain switches it, outside the session |
 | `/queue` | Shows the backlog |
 | `/sailors` | Shows each sailor's status |
@@ -1068,7 +1068,8 @@ Each slash command in `.opencode/commands/` runs one verb and hands its report t
 | `/wake` | Drains the wake queue |
 | `/stow` | Shows the backlog and has the first mate file what only the conversation knows: open items as backlog rows, corrected notes, and lasting facts in `data/learnings.md`; `stop --stow` sends it before stopping the session |
 
-When no sailor can take the work, the task waits in the queue with its instructions written, and the front door names the `bin/fm-spawn.sh` call that starts it later and the candidate sailors in order.
+The front door weighs each candidate profile through `bin/fm-sailor.sh pick` ([Sailor grades](#crew-dispatch-profiles-configcrew-dispatchjson)); on the captain's word, `--grade <grade>` raises the grade floor and `--spend` lets a paid sailor take this one task.
+When no sailor can take the work, the task waits in the queue with its instructions written, and the front door names the `bin/fm-spawn.sh` call that starts it later and the candidates in order.
 While the dispatch file declares rules, the front door refuses before writing anything and lists each rule's condition, because no script judges a natural-language rule; the first mate repeats the call with `--rule <n>`, or `--rule default` when no rule fits.
 Every verb runs only in a Privateer home and only inside its session.
 The captain's words reach the front door exactly, or not at all: OpenCode ends a command's shell step at the first backtick and reads `$$`, `$&`, `` $` ``, and `$'` in the words as its own substitution patterns, so each command passes the words three ways, and the front door refuses, before writing anything, words holding a backtick or a `$` followed by `$`, `&`, `'`, or a backtick, and asks for them again without those.
@@ -1297,7 +1298,7 @@ This section is the single owner of the canonical schema and its per-field seman
 ```json
 {
   "sailors": {
-    "<sailor name>": { "title": "<optional display name>", "host": "<optional machine description>", "endpoint": "<http(s) OpenAI-compatible base URL>", "status": "<live|placeholder>", "models": ["<model id>"], "max_concurrent": 1, "auth_env": "<optional token variable>", "unlisted_models": false }
+    "<sailor name>": { "title": "<optional display name>", "host": "<optional machine description>", "endpoint": "<http(s) OpenAI-compatible base URL>", "status": "<live|placeholder>", "models": ["<model id>"], "max_concurrent": 1, "auth_env": "<optional token variable>", "unlisted_models": false, "grade": "<deckhand|sailor|specialist|expert, optional>", "facets": ["<optional role word>"], "paid": false }
   },
   "rules": [
     {
@@ -1307,8 +1308,10 @@ This section is the single owner of the canonical schema and its per-field seman
       "floor": { "scope": "<quota-axi scope>", "min_percent": 20, "provider": "<quota-axi provider>" },
       "use": [
         { "harness": "<adapter>", "model": "<optional model>", "effort": "<low|medium|high|xhigh|max|ultra, optional>", "provider": "<optional quota-axi provider>", "floor": { "scope": "<quota-axi scope>", "min_percent": 50 } },
-        { "harness": "opencode", "sailor": "<sailor name>", "model": "<a model listed for that sailor>" }
+        { "harness": "opencode", "sailor": "<sailor name>", "model": "<a model listed for that sailor, optional>" },
+        { "harness": "opencode", "grade": "<the lowest grade the work needs>" }
       ],
+      "spend": "<allowed, optional>",
       "why": "<optional rationale that helps firstmate choose>"
     }
   ],
@@ -1328,7 +1331,7 @@ This section is the single owner of the canonical schema and its per-field seman
 | `use` and optional top-level `default` | Accept one profile object or a non-empty array of profile objects; the single-object form remains fully backward-compatible. |
 | Profile `harness` | Required in every profile. |
 | Profile `model` and `effort`; rule `why` | Optional. |
-| `sailors`, profile `sailor`, and `sailor_fallback` | Optional; see "Named sailors" below. |
+| `sailors`, profile `sailor` and `grade`, rule `spend`, and `sailor_fallback` | Optional; see "Named sailors" below. |
 
 **Fields applied only by typed resolution**
 
@@ -1395,7 +1398,8 @@ A sailor is a named OpenAI-compatible endpoint that ordinary work can run on: us
   A sailor whose variable is set nowhere is refused by every check, which names the variable and never a value, and reads as down.
   `tests/fm-sailor-token-live-e2e.test.sh` re-proves the header against the installed OpenCode, and [`verification/local-sailors.md`](verification/local-sailors.md) records the result.
 - `unlisted_models: true` marks an endpoint that serves model ids its model list leaves out, as a router taking provider-routed ids does; the eligibility check then needs that list to answer but not to name the model.
-- A profile with `sailor` must use the `opencode` harness and name a `model` from that sailor's list; `fm-spawn.sh --sailor` then points the worker's OpenCode at that endpoint.
+- A profile with `sailor` must use the `opencode` harness and may name a `model` from that sailor's list; without one it means the sailor's one listed model, and it is invalid while the sailor lists several.
+  `fm-spawn.sh --sailor` points the worker's OpenCode at that endpoint, and without `--model` it likewise takes the sailor's one model.
 - Every sailor launch, a Privateer worker's included, folds OpenCode's system prompt into one system message, keeping every part in order.
   OpenCode sends a second system message whenever a plugin adds system text, such as the global AXI plugins under `~/.config/opencode/plugins/`, and a local chat template that allows one leading system message, as Qwen-family templates do, rejects the request.
   The fold is a worktree plugin that `fm-spawn.sh` writes beside the busy-state plugin; it folds what earlier plugins added and what later ones add, because OpenCode runs plugins in an order it does not document.
@@ -1403,6 +1407,7 @@ A sailor is a named OpenAI-compatible endpoint that ordinary work can run on: us
 - A `placeholder` sailor is never dispatched, even when something answers at its address; only the captain changes its status to `live`.
 - A `live` sailor is eligible only while `bin/fm-sailor.sh check <sailor> <model>` passes: it must have its token when it names one, its endpoint must answer within a few seconds and list the model (or only answer, with `unlisted_models`), and this home must hold fewer than `max_concurrent` tasks on it.
   The capacity count is per home, so homes that share one machine each count only their own tasks.
+  `bin/fm-sailor.sh pick`, under "Sailor grades" below, runs that check for each candidate it weighs.
 - No eligibility, status, or health probe ever asks for a completion: each reads only the model list, an mlx-serve health path, or the server's `/metrics` gauges, so watching a pay-per-token sailor spends nothing.
 - `bin/fm-sailor.sh status` shows each live sailor, or every sailor with `--all`: whether it answers the same health probe the watcher uses (below), or `no-token` when its token is missing, this home's tasks on it, the server's running and waiting requests when it reports them, and, when its model list answers, each listed model as loaded, unloaded, unlisted, or missing.
 - The supervision watcher probes every live sailor on the heartbeat's base interval through `bin/fm-sailor.sh health`, at its mlx-serve server's `healthPath` when `~/.mlx-serve/servers.json` lists a server whose `baseURL` the endpoint lies under, and otherwise at the endpoint's model list.
@@ -1448,7 +1453,7 @@ Put a fine-grained token with the Inference Providers permission in the home's g
 ```json
 {
   "sailors": {
-    "hf": { "title": "Hugging Face Inference", "endpoint": "https://router.huggingface.co/v1", "status": "live", "models": ["<org>/<model>:cheapest"], "auth_env": "HF_TOKEN", "unlisted_models": true, "max_concurrent": 1 }
+    "hf": { "title": "Hugging Face Inference", "endpoint": "https://router.huggingface.co/v1", "status": "live", "models": ["<org>/<model>:cheapest"], "auth_env": "HF_TOKEN", "unlisted_models": true, "paid": true, "max_concurrent": 1 }
   },
   "default": { "harness": "opencode", "sailor": "hf", "model": "<org>/<model>:cheapest" }
 }
@@ -1456,12 +1461,34 @@ Put a fine-grained token with the Inference Providers permission in the home's g
 
 When `~/.mlx-serve/servers.json` names the router, `bin/fm-sailor.sh add hf --from-mlx-serve <server-id> --models '<org>/<model>:cheapest' --auth-env HF_TOKEN --unlisted-models --live` writes the same entry.
 Hugging Face bills Inference Providers pay-as-you-go, with monthly included credits on some plans, so every worker request and `set-model --warm` counts against them, while the probes above do not.
+Its `paid` flag keeps dispatch from choosing it unless spend is allowed, as "Sailor grades" below says.
+
+**Sailor grades**
+
+A sailor's optional `grade` is the reasoning class of its one bound model, set by the captain; firstmate never infers it from a model name.
+A graded sailor therefore lists exactly one model.
+
+| Grade | Reasoning class | Work it suits |
+| --- | --- | --- |
+| `deckhand` | low | Rote edits, renames, formatting, file gathering, docs tweaks, summaries, and first-pass triage, but no build-and-test ships |
+| `sailor` | medium | Small clear ships and fixes in one project, and bounded scouts with an obvious approach |
+| `specialist` | high | Multi-file features, bug diagnosis with an unknown cause, and investigations whose answer changes what gets built |
+| `expert` | xhigh | Planning and architecture, security audits, risky refactors, concurrency, auth, and data migrations |
+
+- A profile may name `{ "harness": "opencode", "grade": "<grade>" }` instead of a sailor; it names no model, and any live sailor of that grade or higher meets it, so a model swap on a sailor never rewrites a rule.
+- `bin/fm-sailor.sh pick --grade <grade>` resolves it: of this home's live sailors at or above that grade, lowest sufficient grade first, then free before paid, then in map order, it prints `<sailor> <model>` for the first that `check` passes, and otherwise each candidate's refusal.
+  `pick --sailor <sailor> [--model <model>]` weighs one named sailor through the same gates, so firstmate and the Privateer front door choose every sailor through `pick` and pass its sailor and model to `fm-spawn.sh`.
+- A repeated `--grade` raises the floor to the highest one given, which is how the captain asks a stronger sailor for one task; an ungraded sailor is never picked by grade.
+- `facets` optionally lists a sailor's role capabilities as lowercase words; `helm` marks a sailor fit to run the Privateer first mate, and `pick --facet <facet>` keeps only sailors that list it.
+- A sailor marked `"paid": true` bills per token, so it is chosen only when the matched rule says `"spend": "allowed"` or the captain okays spend for that one task; `pick` weighs it only with `--spend`.
+- When the work's reasoning class exceeds every live sailor's grade, the sailor candidates yield nothing, and `sailor_fallback` applies or the work waits.
+- A grade outside the four, a graded sailor listing several models, a grade profile that names a model or a sailor, or a rule `spend` other than `"allowed"` is a configuration error that `bin/fm-sailor.sh validate` reports.
 
 **Validation and diagnostics**
 
 - When the file exists, bootstrap validates it with `jq`.
 - Valid files stay silent by default; with `FM_BOOTSTRAP_VERBOSE_FACTS=1`, bootstrap emits `BOOTSTRAP_INFO: crew dispatch active config/crew-dispatch.json`, one `BOOTSTRAP_INFO:` fact per rule, and one fact for the optional default profile set.
-- Malformed JSON, malformed rules, an empty or malformed profile array, an unverified harness, an effort value unsupported by that harness, or a malformed sailor map, sailor reference, or `sailor_fallback` is reported as `CREW_DISPATCH: invalid config/crew-dispatch.json - ...`.
+- Malformed JSON, malformed rules, an empty or malformed profile array, an unverified harness, an effort value unsupported by that harness, or a malformed sailor map, sailor or grade reference, rule `spend`, or `sailor_fallback` is reported as `CREW_DISPATCH: invalid config/crew-dispatch.json - ...`.
 - While typed resolution is active, malformed `approval`, `min_confidence`, `floor`, and present `provider` declarations receive the same diagnostic; without the key those inert declarations preserve the pre-existing bootstrap behavior.
 - Missing `jq` is reported through the normal `MISSING: jq` install-consent flow.
 - While the file remains present, no crewmate or scout spawn may proceed without an explicit resolved harness; malformed configuration must be reported and corrected rather than selected around.
