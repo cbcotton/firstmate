@@ -14,6 +14,7 @@
 #   fm-privateer.sh start
 #   fm-privateer.sh attach
 #   fm-privateer.sh stop [--stow]
+#   fm-privateer.sh status
 #   fm-privateer.sh project [<name> | --clear]
 #   fm-privateer.sh reload
 #
@@ -267,6 +268,19 @@
 # running. Its output names no socket or port. When the session has already
 # ended there is nothing to stow, and it cleans up as stop does.
 #
+# status is the read-only query for a caller outside the session, such as a Dock
+# app, and runs like start, attach, and stop. It prints one of three lines from
+# the same tests the other verbs use (session_running, proxy_running,
+# records_running): `running` while the session's tmux server holds it,
+# `stopped` when neither the session nor its egress proxy nor its record writer
+# lives, and `ended, proxy or record writer left behind` when the session is gone
+# but either process still lives. While running it adds a second line, `turn
+# busy` or `turn idle`, from the first mate's pane read stop --stow makes
+# (fm_pane_busy_state, one capture of the pane), and omits it when that read is
+# inconclusive. It never attaches, types, or writes, names no socket or port, and
+# exits 0 for each of the three answers; it refuses (exit 1) without
+# config/privateer or without tmux.
+#
 # project is the captain's way to set the home's active project, the default
 # referent for a request that names none (docs/configuration.md owns the
 # contract). `project <name>` refuses unless data/projects.md registers <name>
@@ -309,7 +323,7 @@ STOW_IDLE_READS=3
 FORBIDDEN_NAME_RE='^(ANTHROPIC_[A-Za-z0-9_]*|CLAUDE_[A-Za-z0-9_]*|CLAUDECODE)$'
 
 usage() {
-  echo "usage: fm-privateer.sh check | inside | launch-env | start | attach | stop [--stow] | reload | project [<name>|--clear]" >&2
+  echo "usage: fm-privateer.sh check | inside | launch-env | start | attach | stop [--stow] | status | reload | project [<name>|--clear]" >&2
   exit 2
 }
 
@@ -1083,6 +1097,38 @@ cmd_stop() {  # [--stow]
   fi
 }
 
+# first_mate_turn <socket>: busy or idle from one read of the first mate's pane,
+# nothing when the read is inconclusive.
+first_mate_turn() {
+  local socket=$1
+  (
+    # shellcheck source=bin/fm-tmux-lib.sh
+    . "$SCRIPT_DIR/fm-tmux-lib.sh"
+    # shellcheck disable=SC2329
+    tmux() { command tmux -L "$socket" "$@"; }
+    case "$(fm_pane_busy_state "$SESSION:firstmate" opencode)" in
+      busy) echo busy ;;
+      idle) echo idle ;;
+    esac
+  )
+}
+
+cmd_status() {
+  local socket turn
+  active || refuse "config/privateer is absent; this launcher reports only on a Privateer home"
+  command -v tmux >/dev/null 2>&1 || refuse "tmux is required"
+  socket=$(socket_name)
+  if session_running "$socket"; then
+    echo running
+    turn=$(first_mate_turn "$socket")
+    [ -z "$turn" ] || echo "turn $turn"
+  elif proxy_running || records_running; then
+    echo "ended, proxy or record writer left behind"
+  else
+    echo stopped
+  fi
+}
+
 cmd_project() {  # [<name> | --clear]
   local name target tmp
   active || refuse "config/privateer is absent; the active project is set only in a Privateer home"
@@ -1160,6 +1206,10 @@ case "$cmd" in
       *) usage ;;
     esac
     cmd_stop "$@"
+    ;;
+  status)
+    [ "$#" -eq 0 ] || usage
+    cmd_status
     ;;
   project)
     [ "$#" -le 1 ] || usage
