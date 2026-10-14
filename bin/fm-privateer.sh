@@ -40,11 +40,15 @@
 #     CLAUDECODE name;
 #   - config/crew-dispatch.json must exist and parse, declare no sailor_fallback,
 #     give every rule and default profile the opencode harness and a sailor, and
-#     give every sailor a private endpoint: an http or https URL whose authority
-#     (everything up to the first /, ?, or #) carries no userinfo or backslash
-#     and names localhost, a loopback, RFC 1918, or tailnet (100.64/10) IPv4
-#     address, an IPv6 loopback or unique-local address, or a name ending in
-#     .local or .ts.net;
+#     give every sailor an endpoint that is an http or https URL whose authority
+#     (everything up to the first /, ?, or #) carries no userinfo or backslash,
+#     whose host is not, and is not under, anthropic.com, claude.ai, or
+#     claude.com, and that is either private, naming localhost, a loopback,
+#     RFC 1918, or tailnet (100.64/10) IPv4 address, an IPv6 loopback or
+#     unique-local address, or a name ending in .local or .ts.net, or an https
+#     URL elsewhere (an external sailor such as a hosted inference router); and
+#     no sailor's auth_env may name an ANTHROPIC_*, CLAUDE_*, or CLAUDECODE
+#     variable;
 #   - a non-empty config/privateer must read <sailor>/<model> with that model
 #     listed for that sailor;
 #   - the origin of this checkout and of every clone under projects/ (https,
@@ -131,7 +135,11 @@
 # keeps it as the code root; and OPENCODE_DISABLE_EXTERNAL_SKILLS=1 and
 # OPENCODE_DISABLE_CLAUDE_CODE=1, so no skill or instruction file under the
 # captain's ~/.claude or ~/.agents reaches the first mate. The primary also
-# keeps the TMUX and TMUX_PANE names its own server sets.
+# keeps the TMUX and TMUX_PANE names its own server sets. When the first
+# mate's sailor names an auth_env, the primary runs through bin/fm-sailor.sh
+# with-token, which reads that variable from this home's .env inside the
+# session and adds it to the primary's environment alone, so the token is on
+# no command line and in no file the launcher writes.
 # No ANTHROPIC_*, CLAUDE_*, or CLAUDECODE variable can reach the tree,
 # because nothing outside that list does; the server copies no variable from a
 # later attaching client either. A worker pane's login shell may still read
@@ -405,12 +413,23 @@ EOF
   return 1
 }
 
-endpoint_ok() {
-  local host
-  host=$(url_hostport "$1") || return 1
-  host=${host%:*}
+# endpoint_violation <sailor> <url>: why the endpoint rule in the header
+# refuses <url>, or nothing.
+endpoint_violation() {
+  local dest host
+  if ! dest=$(url_hostport "$2"); then
+    echo "config/crew-dispatch.json sailor $1 has endpoint '$2', which is not an http or https URL with a plain host"
+    return 0
+  fi
+  if anthropic_host "$dest"; then
+    echo "config/crew-dispatch.json sailor $1 has endpoint '$2', on an Anthropic or Claude host"
+    return 0
+  fi
+  host=${dest%:*}
   host=${host#[}
-  private_host "${host%]}"
+  private_host "${host%]}" && return 0
+  case "$2" in https://*) return 0 ;; esac
+  echo "config/crew-dispatch.json sailor $1 has endpoint '$2', which is not on this machine or the local network and is not https"
 }
 
 # env_file_violations: forbidden keys set in this home's .env, one per line.
@@ -472,9 +491,12 @@ dispatch_violations() {
        elif (.sailors // {} | length) == 0 then ["config/crew-dispatch.json names no sailors"]
        else [] end)
     | .[]' "$DISPATCH" 2>/dev/null
-  jq -r '(.sailors // {}) | to_entries[] | select((.value | type) == "object") | "\(.key)\t\(.value.endpoint // "")"' "$DISPATCH" 2>/dev/null |
-    while IFS=$'\t' read -r name endpoint; do
-      endpoint_ok "$endpoint" || echo "config/crew-dispatch.json sailor $name has endpoint '$endpoint', which is not on this machine or the local network"
+  jq -r '(.sailors // {}) | to_entries[] | select((.value | type) == "object") | "\(.key)\t\(.value.endpoint // "")\t\(.value.auth_env // "" | tostring)"' "$DISPATCH" 2>/dev/null |
+    while IFS=$'\t' read -r name endpoint auth; do
+      endpoint_violation "$name" "$endpoint"
+      if printf '%s\n' "$auth" | grep -Eq "$FORBIDDEN_NAME_RE"; then
+        echo "config/crew-dispatch.json sailor $name takes its token from $auth, an Anthropic or Claude variable"
+      fi
     done
   line=$(first_mate_line)
   [ -n "$line" ] || return 0
@@ -800,7 +822,7 @@ render_helm() {
 }
 
 cmd_start() {
-  local line sailor model check provider config socket socket_path primary port
+  local line sailor model check provider config socket socket_path primary port auth
   local name value launch tmp_real home_real root_real egress_real root_git projects_real git_meta pool_real wt_git wt_gitfile helm_real modules_dir
   local anchor anchor_start records
   local -a env_args session_env sandbox_args
@@ -830,7 +852,7 @@ cmd_start() {
   fi
   socket=$(socket_name)
   ! session_running "$socket" || refuse "the Privateer session is already running; attach to it, or stop it first"
-  if ! check=$(FM_CONFIG_OVERRIDE="$CONFIG" FM_STATE_OVERRIDE="$STATE" "$SCRIPT_DIR/fm-sailor.sh" check "$sailor" "$model" 2>&1); then
+  if ! check=$(FM_HOME="$FM_HOME" FM_CONFIG_OVERRIDE="$CONFIG" FM_STATE_OVERRIDE="$STATE" "$SCRIPT_DIR/fm-sailor.sh" check "$sailor" "$model" 2>&1); then
     refuse "the first mate's sailor cannot take the session: ${check#refused: }"
   fi
   provider=$(FM_CONFIG_OVERRIDE="$CONFIG" FM_STATE_OVERRIDE="$STATE" "$SCRIPT_DIR/fm-sailor.sh" provider-json "$sailor" "$model") ||
@@ -967,6 +989,11 @@ cmd_start() {
     OPENCODE_DISABLE_EXTERNAL_SKILLS=1 OPENCODE_DISABLE_CLAUDE_CODE=1; do
     launch="$launch $(shell_quote "$value")"
   done
+  # The first mate's sailor token is read inside the session, at exec, so it
+  # is on no command line (bin/fm-sailor.sh with-token).
+  auth=$(jq -r --arg s "$sailor" '.sailors[$s].auth_env // empty' "$DISPATCH")
+  [ -z "$auth" ] ||
+    launch="$launch $(shell_quote "$SCRIPT_DIR/fm-sailor.sh") with-token $(shell_quote "$auth") $(shell_quote "$home_real/.env") --"
   launch="$launch $(shell_quote "$primary") --agent privateer"
   if ! /usr/bin/env -i "${session_env[@]}" "$SCRIPT_DIR/fm-sandbox-exec.sh" "${sandbox_args[@]}" -- \
     tmux -L "$socket" new-session -d -s "$SESSION" -n firstmate -c "$helm_real" -- "$launch"; then

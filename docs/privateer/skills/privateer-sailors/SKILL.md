@@ -5,8 +5,8 @@ description: Load when bin/fm-sailor.sh check or bin/fm-spawn.sh refuses a sailo
 
 # Sailors
 
-A sailor is a local model server listed under `sailors` in `$FM_HOME/config/crew-dispatch.json`.
-Every worker runs on one sailor and one of its models; nothing here ever falls back to a hosted model.
+A sailor is a model server, local or external, listed under `sailors` in `$FM_HOME/config/crew-dispatch.json`.
+Every worker runs on one sailor and one of its models; nothing here ever falls back to a model outside that list.
 You only read the sailor list: the captain adds, changes, and retires sailors from outside this session.
 
 ## See the sailors
@@ -28,6 +28,7 @@ Spawn on that one, with that exact sailor and model.
 | `unknown sailor` or `is not listed for sailor` | You read the file wrong | Read the file again and use a sailor and model it lists |
 | `is a placeholder` | The captain has not switched it on | Skip it; never spawn on it |
 | `is at capacity` | It already runs as many tasks as it may | Try the next candidate; it frees up when one of its tasks is cleaned up |
+| `has no token` | The captain has not set the token variable it names | Try the next candidate, and tell the captain which variable that sailor needs in `$FM_HOME/.env` |
 | `is not answering` | Its server is down or unreachable | Try the next candidate |
 | `does not serve` | The server runs but lacks that model | Try the next candidate |
 

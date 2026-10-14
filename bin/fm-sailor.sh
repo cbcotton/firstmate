@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# fm-sailor.sh - named local sailors: the `sailors` map in config/crew-dispatch.json.
+# fm-sailor.sh - named sailors: the `sailors` map in config/crew-dispatch.json.
 #
 # docs/configuration.md ("Crew dispatch profiles", "Named sailors") owns the
 # schema and what firstmate does with each answer. This header owns the checks:
@@ -15,14 +15,16 @@
 #   fm-sailor.sh provider-json <sailor> <model>
 #   fm-sailor.sh status [--all]
 #   fm-sailor.sh health
+#   fm-sailor.sh with-token <variable> <env-file> -- <command> [<arg>...]
 #   fm-sailor.sh add <sailor> --endpoint <url> --models <id>[,<id>...]
 #                    [--title <text>] [--host <text>] [--max-concurrent <n>]
-#                    [--live | --placeholder]
+#                    [--auth-env <variable>] [--unlisted-models] [--live | --placeholder]
 #   fm-sailor.sh add <sailor> --from-mlx-serve <server-id> [--models <id>[,<id>...]]
 #                    [--title <text>] [--host <text>] [--max-concurrent <n>]
-#                    [--live | --placeholder]
+#                    [--auth-env <variable>] [--unlisted-models] [--live | --placeholder]
 #   fm-sailor.sh set <sailor> [--endpoint <url>] [--title <text>] [--host <text>]
-#                    [--max-concurrent <n>] [--live | --placeholder]
+#                    [--max-concurrent <n>] [--auth-env <variable> | --no-auth-env]
+#                    [--unlisted-models | --no-unlisted-models] [--live | --placeholder]
 #   fm-sailor.sh set-model <sailor> <model> [--replace <old>] [--first-mate]
 #                    [--model-limit <context>:<output>] [--model-options <json>]
 #                    [--warm] [--dry-run]
@@ -33,6 +35,21 @@
 # string, number, or boolean values (for example reasoningEffort, temperature,
 # top_p, top_k, enable_thinking). validate refuses any other shape, and a
 # sailor without model_settings behaves as it always has.
+#
+# `auth_env` names the environment variable holding the sailor's bearer token,
+# a POSIX name such as HF_TOKEN. Its value is read at use time: the
+# environment's when set and non-empty, otherwise the last assignment in this
+# home's .env (bin/fm-env-lib.sh). Every request this script sends to the
+# sailor carries `Authorization: Bearer <value>` on a header curl reads from a
+# pipe, never from its command line, and the value is never printed, logged,
+# or written anywhere. A variable set nowhere, or holding whitespace or a
+# control character, is a missing token: check refuses, health reads the
+# sailor as down, and status reads it as no-token, each naming the variable
+# and never its value. `unlisted_models: true` says the endpoint also serves
+# model ids its model list leaves out, as a router that takes provider-routed
+# ids does, so check, status, and set-model need that list to answer but not
+# to name the model. validate refuses an auth_env that is not such a name and
+# an unlisted_models that is not true or false.
 #
 # validate is silent and exits 0 when config/crew-dispatch.json is absent or
 # declares no sailor anywhere; otherwise it checks the `sailors` map, every
@@ -50,18 +67,32 @@
 #      something answers at its address;
 #   3. fewer than max_concurrent (default 1) task records in state/ carry
 #      sailor=<name>, not counting --task <id>, the task being relaunched;
-#   4. GET <endpoint>/models answers within FM_SAILOR_PROBE_TIMEOUT seconds
-#      (default 3) with an OpenAI-style model list that includes <model>.
+#   4. a sailor with auth_env has its token;
+#   5. GET <endpoint>/models answers within FM_SAILOR_PROBE_TIMEOUT seconds
+#      (default 3) with an OpenAI-style model list that includes <model>, or,
+#      for a sailor with unlisted_models, with any model list.
 # It prints `ok: ...` and exits 0, or prints `refused: ...` and exits 1. When
 # the model list carries a `loaded` flag, the ok line says whether the model
-# is loaded or only listed.
+# is loaded or only listed. No probe here or in status or health ever asks
+# for a completion, so none spends a paid endpoint's credits.
 #
 # provider-json prints the compact OpenCode `provider` entry for the sailor
 # with just that model, keyed by the sailor's name, for bin/fm-spawn.sh and
 # bin/fm-privateer.sh to put inside the OpenCode configuration they write;
 # OpenCode then addresses the model as <sailor>/<model>. The model carries the
 # sailor's optional `model_settings` for it: a `limit` object (context, output)
-# and an `options` object, in OpenCode's own field names.
+# and an `options` object, in OpenCode's own field names. A sailor with
+# auth_env gets `apiKey: "{env:<variable>}"`, which OpenCode resolves from its
+# own environment and sends as the bearer token, so the entry never holds the
+# value.
+#
+# with-token puts <variable> into <command>'s environment and execs it: the
+# environment's value when set and non-empty, otherwise <env-file>'s, read as
+# auth_env is. It refuses (exit 1), naming the variable and never its value,
+# when neither sets it or it holds whitespace or a control character. It reads
+# no dispatch file, so bin/fm-spawn.sh and bin/fm-privateer.sh put it before an
+# OpenCode launch on a sailor with auth_env, and the value reaches OpenCode
+# through its environment alone, never a command line or a file.
 #
 # status prints one line per live sailor, or per sailor with --all: its status,
 # whether it is answering by the same probe health uses (below), this home's
@@ -70,8 +101,11 @@
 # vLLM-style gauges (vllm:num_requests_running and vllm:num_requests_waiting),
 # and, when GET <endpoint>/models answers, each listed model as loaded,
 # unloaded (listed with loaded=false), listed (the server reports no loaded
-# flag), or missing. Every sailor is probed at once, so the run takes about
-# one probe timeout however many are down. It exits 0 whatever the sailors answer.
+# flag), unlisted (left out of the list of a sailor with unlisted_models), or
+# missing. A sailor missing its token is not probed: its line reads no-token
+# in place of the answer and ends with auth_env=<variable>. Every sailor is
+# probed at once, so the run takes about one probe timeout however many are
+# down. It exits 0 whatever the sailors answer.
 #
 # health prints `<sailor> up <url>` or `<sailor> down <url>` for each live
 # sailor, and nothing when there is none. A sailor whose endpoint lies under
@@ -79,7 +113,8 @@
 # default ~/.mlx-serve/servers.json) that names a healthPath is up when GET
 # <baseURL><healthPath> answers without an HTTP error status within
 # FM_SAILOR_PROBE_TIMEOUT seconds, the longest matching baseURL winning; any
-# other sailor is up when GET <endpoint>/models does. Every sailor is probed
+# other sailor is up when GET <endpoint>/models does. A sailor missing its
+# token is down without a probe. Every sailor is probed
 # at once, so the whole run takes about one probe timeout however many there
 # are. bin/fm-watch.sh turns its changes into wakes. It exits 0 whatever the
 # sailors answer.
@@ -109,10 +144,14 @@
 # or the --models subset of them. It refuses an unknown or duplicated server
 # id, a baseURL that is not http(s), and a server that does not answer or lists
 # nothing. It only reads the registry and that list: it never writes
-# servers.json and never loads, unloads, or starts a server.
+# servers.json and never loads, unloads, or starts a server. --auth-env records
+# the sailor's auth_env, and with --from-mlx-serve its token also rides that
+# list request; --unlisted-models records unlisted_models, and with
+# --from-mlx-serve lets --models name ids the list leaves out.
 #
 # set changes the given fields of an existing sailor; its models change only
-# through set-model. In a Privateer home it refuses --placeholder on the
+# through set-model. --no-auth-env and --no-unlisted-models remove those
+# fields. In a Privateer home it refuses --placeholder on the
 # sailor config/privateer names for the first mate, which runs only on a live
 # sailor.
 #
@@ -127,7 +166,9 @@
 # answer with a completion within FM_SAILOR_WARM_TIMEOUT seconds (default 600),
 # so a server that loads models on demand (mlx-serve lists every pulled model,
 # each with a `loaded` flag) loads it now, and a load or memory refusal
-# surfaces here rather than in a worker's first request. --dry-run prints the
+# surfaces here rather than in a worker's first request. The warm-up is the
+# one request this script sends that asks for a completion, so on a paid
+# endpoint it spends that one token. --dry-run prints the
 # change and writes nothing. It refuses:
 #   - --warm with --dry-run, since a warm-up loads the model;
 #   - an unknown sailor, or --replace naming a model the sailor does not list
@@ -137,8 +178,9 @@
 #   - --replace of the first mate's own <sailor>/<old> without --first-mate;
 #   - --first-mate outside a Privateer home, or on a placeholder sailor;
 #   - --warm on a placeholder sailor;
-#   - for a live sailor, an endpoint that does not answer or does not list
-#     <model>, and with --warm, a failed warm-up.
+#   - for a live sailor, a missing token, an endpoint that does not answer or
+#     does not list <model> (unless the sailor has unlisted_models), and with
+#     --warm, a failed warm-up.
 # A placeholder is not probed. When the server lists <model> as not loaded
 # and --warm is absent, it says so and names --warm.
 #
@@ -164,15 +206,21 @@ FLAG="$CONFIG/privateer"
 SERVERS_FILE="${FM_MLX_SERVE_SERVERS:-$HOME/.mlx-serve/servers.json}"
 WORK=
 DRY_RUN=0
+SAILOR_TOKEN=
+# shellcheck source=bin/fm-env-lib.sh
+. "$SCRIPT_DIR/fm-env-lib.sh"
 
 usage() {
   cat >&2 <<'EOF'
 usage: fm-sailor.sh validate | list | status [--all] | health
        fm-sailor.sh check <sailor> <model> [--task <id>]
        fm-sailor.sh provider-json <sailor> <model>
+       fm-sailor.sh with-token <variable> <env-file> -- <command> [<arg>...]
        fm-sailor.sh add <sailor> (--endpoint <url> --models <ids> | --from-mlx-serve <server-id> [--models <ids>])
-                    [--title <text>] [--host <text>] [--max-concurrent <n>] [--live | --placeholder]
-       fm-sailor.sh set <sailor> [--endpoint <url>] [--title <text>] [--host <text>] [--max-concurrent <n>] [--live | --placeholder]
+                    [--title <text>] [--host <text>] [--max-concurrent <n>] [--auth-env <variable>] [--unlisted-models]
+                    [--live | --placeholder]
+       fm-sailor.sh set <sailor> [--endpoint <url>] [--title <text>] [--host <text>] [--max-concurrent <n>]
+                    [--auth-env <variable> | --no-auth-env] [--unlisted-models | --no-unlisted-models] [--live | --placeholder]
        fm-sailor.sh set-model <sailor> <model> [--replace <old>] [--first-mate] [--model-limit <context>:<output>]
                     [--model-options <json>] [--warm] [--dry-run]
        fm-sailor.sh retire <sailor>
@@ -226,6 +274,52 @@ sailor_field() {
   jq -r --arg s "$1" ".sailors[\$s]$2 // empty" "$FILE"
 }
 
+# token_lookup <variable> <env-file>: sets TOKEN_VALUE as the header describes
+# for auth_env; returns 1 with TOKEN_REASON naming the variable, never its
+# value. printenv reads the inherited environment, never this script's own
+# variables.
+token_lookup() {
+  local name=$1 file=$2
+  TOKEN_VALUE=$(printenv "$name" 2>/dev/null) || TOKEN_VALUE=
+  [ -n "$TOKEN_VALUE" ] || TOKEN_VALUE=$(fmx_env_get "$name" "$file")
+  if [ -z "$TOKEN_VALUE" ]; then
+    TOKEN_REASON="$name is set in neither the environment nor $file"
+    return 1
+  fi
+  case "$TOKEN_VALUE" in
+    *[[:space:][:cntrl:]]*)
+      TOKEN_VALUE=
+      TOKEN_REASON="$name holds whitespace or a control character"
+      return 1
+      ;;
+  esac
+}
+
+# sailor_auth <sailor>: sets SAILOR_TOKEN to the sailor's token, empty for a
+# sailor without auth_env; returns 1 with AUTH_ENV and TOKEN_REASON set when
+# its token is missing.
+sailor_auth() {
+  SAILOR_TOKEN=
+  AUTH_ENV=$(sailor_field "$1" '.auth_env')
+  [ -n "$AUTH_ENV" ] || return 0
+  token_lookup "$AUTH_ENV" "$FM_HOME/.env" || return 1
+  SAILOR_TOKEN=$TOKEN_VALUE
+}
+
+# sailor_curl <curl args...>: curl, with SAILOR_TOKEN as the bearer token on a
+# header read from a pipe, so it never appears on a command line.
+sailor_curl() {
+  if [ -n "$SAILOR_TOKEN" ]; then
+    curl -H @<(printf 'Authorization: Bearer %s\n' "$SAILOR_TOKEN") "$@"
+  else
+    curl "$@"
+  fi
+}
+
+unlisted_models() {  # <sailor>
+  [ "$(sailor_field "$1" '.unlisted_models')" = true ]
+}
+
 # validate_file <file>: the validate checks on one dispatch file.
 validate_file() {
   local err
@@ -257,6 +351,8 @@ validate_file() {
       elif ($s | has("max_concurrent")) and ((($s.max_concurrent | type) != "number") or $s.max_concurrent < 1 or ($s.max_concurrent | floor) != $s.max_concurrent) then "sailor \($n) max_concurrent must be a positive whole number"
       elif ($s | has("title")) and (($s.title | type) != "string") then "sailor \($n) title must be a string"
       elif ($s | has("host")) and (($s.host | type) != "string") then "sailor \($n) host must be a string"
+      elif ($s | has("auth_env")) and ((($s.auth_env | type) != "string") or ($s.auth_env | test("^[A-Za-z_][A-Za-z0-9_]*$") | not)) then "sailor \($n) auth_env must name an environment variable"
+      elif ($s | has("unlisted_models")) and (($s.unlisted_models | type) != "boolean") then "sailor \($n) unlisted_models must be true or false"
       elif ($s | has("model_settings")) and (settings_bad($n; $s) != "") then settings_bad($n; $s)
       else empty
       end;
@@ -303,7 +399,7 @@ cmd_list() {
   need_jq
   load_file
   jq -r '(.sailors // {}) | to_entries[]
-    | "\(.key) status=\(.value.status) endpoint=\(.value.endpoint) max_concurrent=\(.value.max_concurrent // 1) models=\(.value.models | join(","))"' "$FILE"
+    | "\(.key) status=\(.value.status) endpoint=\(.value.endpoint) max_concurrent=\(.value.max_concurrent // 1) models=\(.value.models | join(","))\(if .value.auth_env then " auth_env=\(.value.auth_env)" else "" end)\(if .value.unlisted_models then " unlisted_models=true" else "" end)"' "$FILE"
 }
 
 # sailor_load <sailor> <model>: shared lookup for check and provider-json.
@@ -344,7 +440,7 @@ task_count() {
 
 # fetch_models <endpoint>: the endpoint's model list, or failure.
 fetch_models() {
-  curl -fsS --proto '=http,https' --max-time "$PROBE_TIMEOUT" "${1%/}/models" 2>/dev/null
+  sailor_curl -fsS --proto '=http,https' --max-time "$PROBE_TIMEOUT" "${1%/}/models" 2>/dev/null
 }
 
 # model_state <models-body> <model>: loaded, unloaded, listed (no loaded
@@ -363,7 +459,7 @@ model_state() {
 warm_model() {
   local endpoint=$1 model=$2 out code body reason
   if ! out=$(jq -nc --arg m "$model" '{model: $m, messages: [{role: "user", content: "Reply with OK."}], max_tokens: 1, stream: false}' |
-    curl -sS --proto '=http,https' --max-time "$WARM_TIMEOUT" -H 'Content-Type: application/json' \
+    sailor_curl -sS --proto '=http,https' --max-time "$WARM_TIMEOUT" -H 'Content-Type: application/json' \
       --data-binary @- -w '\n%{http_code}' "${endpoint%/}/chat/completions" 2>/dev/null); then
     echo "no completion from $endpoint within $WARM_TIMEOUT seconds"
     return 1
@@ -388,7 +484,7 @@ origin_of() {
 # server_queue <endpoint>: `running=<n> waiting=<n>` from the server's vLLM
 # gauges, or nothing.
 server_queue() {
-  curl -fsS --proto '=http,https' --max-time "$PROBE_TIMEOUT" "$(origin_of "$1")/metrics" 2>/dev/null | awk '
+  sailor_curl -fsS --proto '=http,https' --max-time "$PROBE_TIMEOUT" "$(origin_of "$1")/metrics" 2>/dev/null | awk '
     $1 ~ /^vllm:num_requests_running($|[{])/ { r += $2; hr = 1 }
     $1 ~ /^vllm:num_requests_waiting($|[{])/ { w += $2; hw = 1 }
     END { if (hr && hw) printf "running=%d waiting=%d\n", r, w }'
@@ -410,12 +506,15 @@ cmd_check() {
   fi
   need_curl
   load_timeouts
+  sailor_auth "$sailor" || refuse "sailor $sailor has no token: $TOKEN_REASON"
   body=$(fetch_models "$endpoint") || refuse "sailor $sailor is not answering at $endpoint"
   state=$(model_state "$body" "$model")
+  [ "$state" != missing ] || ! unlisted_models "$sailor" || state=unlisted
   [ "$state" != missing ] || refuse "sailor $sailor at $endpoint does not serve $model"
   case "$state" in
     loaded) note="; model loaded" ;;
     unloaded) note="; model listed but not loaded, so the first request loads it" ;;
+    unlisted) note="; model not in the endpoint's list, which this sailor's unlisted_models allows" ;;
     *) note= ;;
   esac
   echo "ok: sailor $sailor serves $model at $endpoint ($busy of $max tasks busy$note)"
@@ -427,16 +526,21 @@ cmd_provider_json() {
   jq -c --arg s "$sailor" --arg m "$model" '
     .sailors[$s] as $x
     | {($s): {npm: "@ai-sdk/openai-compatible", name: ($x.title // $s),
-              options: {baseURL: $x.endpoint}, models: {($m): ({name: $m} + ($x.model_settings[$m] // {}))}}}' "$FILE"
+              options: ({baseURL: $x.endpoint} + (if $x.auth_env then {apiKey: "{env:\($x.auth_env)}"} else {} end)),
+              models: {($m): ({name: $m} + ($x.model_settings[$m] // {}))}}}' "$FILE"
 }
 
 # status_line <sailor> <url>: the one status line for a sailor.
 status_line() {
-  local name=$1 url=$2 status endpoint max busy body queue models m states
+  local name=$1 url=$2 status endpoint max busy body queue models m state states
   status=$(sailor_field "$name" '.status')
   endpoint=$(sailor_field "$name" '.endpoint')
   max=$(sailor_field "$name" '.max_concurrent')
   busy=$(busy_count "$name" "")
+  if ! sailor_auth "$name"; then
+    echo "$name $status no-token endpoint=$endpoint tasks=$busy/${max:-1} auth_env=$AUTH_ENV"
+    return 0
+  fi
   if ! probe_up "$url"; then
     echo "$name $status not-answering endpoint=$endpoint tasks=$busy/${max:-1}"
     return 0
@@ -446,7 +550,9 @@ status_line() {
   if body=$(fetch_models "$endpoint"); then
     models=$(jq -r --arg s "$name" '.sailors[$s].models[]' "$FILE")
     while IFS= read -r m; do
-      states="$states${states:+,}$m($(model_state "$body" "$m"))"
+      state=$(model_state "$body" "$m")
+      [ "$state" != missing ] || ! unlisted_models "$name" || state=unlisted
+      states="$states${states:+,}$m($state)"
     done <<<"$models"
   fi
   echo "$name $status answering endpoint=$endpoint tasks=$busy/${max:-1}${queue:+ $queue}${states:+ models=$states}"
@@ -480,7 +586,7 @@ cmd_status() {
 # probe_up <url>: whether GET <url> answers without an HTTP error status
 # within the probe timeout.
 probe_up() {
-  curl -fsS -o /dev/null --proto '=http,https' --max-time "$PROBE_TIMEOUT" "$1" >/dev/null 2>&1
+  sailor_curl -fsS -o /dev/null --proto '=http,https' --max-time "$PROBE_TIMEOUT" "$1" >/dev/null 2>&1
 }
 
 # health_targets <all>: `<sailor>\t<url>` for each live sailor, or each sailor
@@ -500,6 +606,15 @@ health_targets() {
     | "\(.key)\t\(if $m then $m.base + "/" + ($m.health | ltrimstr("/")) else $e + "/models" end)"' "$FILE"
 }
 
+cmd_with_token() {
+  local name=$1 file=$2
+  shift 2
+  case "$name" in '' | [!A-Za-z_]* | *[!A-Za-z0-9_]*) die "with-token takes an environment variable name" ;; esac
+  token_lookup "$name" "$file" || refuse "$TOKEN_REASON, so the sailor's token is missing"
+  export "$name=$TOKEN_VALUE"
+  exec "$@"
+}
+
 cmd_health() {
   local targets name url state n=0
   load_valid
@@ -511,7 +626,7 @@ cmd_health() {
   trap cleanup EXIT
   while IFS=$'\t' read -r name url; do
     n=$((n + 1))
-    { probe_up "$url" && echo up || echo down; } > "$WORK/$n" &
+    { sailor_auth "$name" && probe_up "$url" && echo up || echo down; } > "$WORK/$n" &
   done <<<"$targets"
   wait
   n=0
@@ -669,7 +784,7 @@ report_effects() {
     echo "first mate: restart the Privateer session to switch (fm-privateer.sh stop, then start; stop waits until no task is in flight, $(task_count) now)"
   fi
   if ! cmp -s <(jq -c '[(.sailors // {})[] | .endpoint] | sort' "$WORK/current.json") <(jq -c '[(.sailors // {})[] | .endpoint] | sort' "$FILE"); then
-    echo "egress: a running Privateer session allows a new endpoint only after fm-privateer.sh stop and start"
+    echo "egress: a running Privateer session allows a new endpoint only after fm-privateer.sh reload"
   fi
   if [ -s "$WORK/after" ]; then
     echo "note: the Privateer quarantine still reports:"
@@ -683,7 +798,8 @@ models_json() {
 }
 
 # mlx_server <server-id>: sets ENDPOINT and LIVE_MODELS (a JSON array) from
-# the mlx-serve registry and the server's live model list.
+# the mlx-serve registry and the server's live model list, read with
+# SAILOR_TOKEN when the caller set one.
 mlx_server() {
   local id=$1 count base path url enabled body hint=
   [ -f "$SERVERS_FILE" ] || refuse "no mlx-serve registry at $SERVERS_FILE"
@@ -703,7 +819,7 @@ mlx_server() {
   url="$base/${path#/}"
   need_curl
   load_timeouts
-  body=$(curl -fsS --proto '=http,https' --max-time "$PROBE_TIMEOUT" "$url" 2>/dev/null) ||
+  body=$(sailor_curl -fsS --proto '=http,https' --max-time "$PROBE_TIMEOUT" "$url" 2>/dev/null) ||
     refuse "mlx-serve server $id is not answering at $url$hint; fm-sailor.sh never starts a server"
   LIVE_MODELS=$(printf '%s' "$body" | jq -c '[.data[]?.id? | strings]' 2>/dev/null) || LIVE_MODELS='[]'
   [ "$LIVE_MODELS" != '[]' ] || refuse "mlx-serve server $id lists no models at $url"
@@ -712,6 +828,7 @@ mlx_server() {
 
 cmd_add() {
   local name title='' host='' endpoint='' models='' max='' status=placeholder from='' has_title=0 has_host=0 entry models_array missing
+  local auth_env='' unlisted=false
   [ "$#" -ge 1 ] || usage
   name=$1
   shift
@@ -724,6 +841,8 @@ cmd_add() {
       --host) [ "$#" -ge 2 ] || usage; host=$2; has_host=1; shift 2 ;;
       --max-concurrent) [ "$#" -ge 2 ] || usage; max=$2; shift 2 ;;
       --from-mlx-serve) [ "$#" -ge 2 ] && [ -n "$2" ] || usage; from=$2; shift 2 ;;
+      --auth-env) [ "$#" -ge 2 ] && [ -n "$2" ] || usage; auth_env=$2; shift 2 ;;
+      --unlisted-models) unlisted=true; shift ;;
       --live) status=live; shift ;;
       --placeholder) status=placeholder; shift ;;
       *) usage ;;
@@ -739,21 +858,29 @@ cmd_add() {
   [ -z "$(sailor_field "$name" '.endpoint')" ] || refuse "sailor $name already exists; change it with set or set-model"
   models_array=$(models_json "$models")
   if [ -n "$from" ]; then
+    if [ -n "$auth_env" ]; then
+      case "$auth_env" in [!A-Za-z_]* | *[!A-Za-z0-9_]*) refuse "sailor $name auth_env must name an environment variable" ;; esac
+      token_lookup "$auth_env" "$FM_HOME/.env" || refuse "sailor $name has no token: $TOKEN_REASON"
+      SAILOR_TOKEN=$TOKEN_VALUE
+    fi
     mlx_server "$from"
     endpoint=$ENDPOINT
     if [ -n "$models" ]; then
       missing=$(jq -rn --argjson want "$models_array" --argjson live "$LIVE_MODELS" '[$want[] | select(. as $m | $live | index($m) | not)] | join(", ")')
-      [ -z "$missing" ] || refuse "mlx-serve server $from does not list $missing"
+      [ -z "$missing" ] || [ "$unlisted" = true ] || refuse "mlx-serve server $from does not list $missing"
     else
       models_array=$LIVE_MODELS
     fi
   fi
   entry=$(jq -nc --arg title "$title" --argjson has_title "$has_title" --arg host "$host" --argjson has_host "$has_host" \
-    --arg endpoint "$endpoint" --arg status "$status" --argjson models "$models_array" --arg max "$max" '
+    --arg endpoint "$endpoint" --arg status "$status" --argjson models "$models_array" --arg max "$max" \
+    --arg auth_env "$auth_env" --argjson unlisted "$unlisted" '
     (if $has_title == 1 then {title: $title} else {} end)
     + (if $has_host == 1 then {host: $host} else {} end)
     + {endpoint: $endpoint, status: $status, models: $models}
-    + (if $max != "" then {max_concurrent: ($max | tonumber)} else {} end)')
+    + (if $max != "" then {max_concurrent: ($max | tonumber)} else {} end)
+    + (if $auth_env != "" then {auth_env: $auth_env} else {} end)
+    + (if $unlisted then {unlisted_models: true} else {} end)')
   # shellcheck disable=SC2016 # jq, not the shell, expands the $ names.
   compose --arg s "$name" --argjson e "$entry" '.sailors = ((.sailors // {}) + {($s): $e})'
   guard_candidate
@@ -787,6 +914,14 @@ cmd_set() {
         patch=$(jq -c --arg v "$value" '. + {status: $v}' <<<"$patch")
         shift
         ;;
+      --auth-env)
+        [ "$#" -ge 2 ] && [ -n "$2" ] || usage
+        patch=$(jq -c --arg v "$2" '. + {auth_env: $v}' <<<"$patch")
+        shift 2
+        ;;
+      --no-auth-env) patch=$(jq -c '. + {auth_env: null}' <<<"$patch"); shift ;;
+      --unlisted-models) patch=$(jq -c '. + {unlisted_models: true}' <<<"$patch"); shift ;;
+      --no-unlisted-models) patch=$(jq -c '. + {unlisted_models: null}' <<<"$patch"); shift ;;
       *) usage ;;
     esac
   done
@@ -798,7 +933,7 @@ cmd_set() {
     refuse "the first mate runs on $line, and the first mate runs only on a live sailor"
   fi
   # shellcheck disable=SC2016 # jq, not the shell, expands the $ names.
-  compose --arg s "$name" --argjson p "$patch" '.sailors[$s] += $p'
+  compose --arg s "$name" --argjson p "$patch" '.sailors[$s] += $p | .sailors[$s] |= with_entries(select(.value != null))'
   guard_candidate
   if ! commit; then
     echo "sailor $name already reads that way; nothing written"
@@ -882,8 +1017,10 @@ cmd_set_model() {
   if [ "$status" = live ]; then
     need_curl
     load_timeouts
+    sailor_auth "$name" || refuse "sailor $name has no token: $TOKEN_REASON"
     body=$(fetch_models "$endpoint") || refuse "sailor $name is not answering at $endpoint"
     state=$(model_state "$body" "$model")
+    [ "$state" != missing ] || ! unlisted_models "$name" || state=unlisted
     [ "$state" != missing ] || refuse "sailor $name at $endpoint does not serve $model"
     if [ "$warm" = 1 ]; then
       reason=$(warm_model "$endpoint" "$model") || refuse "sailor $name could not load $model: $reason"
@@ -983,6 +1120,10 @@ case "$1" in
   health)
     [ "$#" -eq 1 ] || usage
     cmd_health
+    ;;
+  with-token)
+    [ "$#" -ge 5 ] && [ "$4" = -- ] || usage
+    cmd_with_token "$2" "$3" "${@:5}"
     ;;
   add) shift; cmd_add "$@" ;;
   set) shift; cmd_set "$@" ;;

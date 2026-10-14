@@ -130,6 +130,26 @@ Facts the fold depends on, read from OpenCode 1.18.33's `LLMRequestPrep.prepare`
 - After the hook, it joins every entry after the first into one when there are more than two and the first is unchanged, then sends one system message per entry.
 - OpenCode loaded the global plugins before the copy's own plugins in every run, but does not document that order, so the fold also folds whatever later hooks add.
 
+## A sailor's token reaches only OpenCode's model requests
+
+Verified 2026-10-14 on macOS 26.6 with OpenCode 1.18.33 by `tests/fm-sailor-token-live-e2e.test.sh`, which runs by default wherever `opencode` is installed because its model is a scripted OpenAI-compatible server on a loopback port.
+A throwaway home keeps a sentinel token in its `.env` under the sailor's `auth_env`, the provider entry comes from `bin/fm-sailor.sh provider-json`, and `opencode run --model hf/org/routed-model:cheapest` starts through `bin/fm-sailor.sh with-token` on a model id the server's list leaves out, which the sailor's `unlisted_models` lets `check` pass.
+
+| Run | Authorization on each model request | Model id the server received |
+| --- | --- | --- |
+| Control: the same entry, no variable in OpenCode's environment | none | `org/routed-model:cheapest` |
+| Through `with-token` | `Bearer <sentinel>` | `org/routed-model:cheapest` |
+
+No copy of the token appeared in the process command lines sampled every 0.1 seconds during the run, which caught OpenCode's own, in the run's output, or in any file under the home, OpenCode's data, state, and logs included.
+
+Facts the token path depends on:
+
+- OpenCode loads `OPENCODE_CONFIG_CONTENT` through the loader its config files use, so `{env:<variable>}` in a provider's `apiKey` resolves from OpenCode's own environment.
+- `@ai-sdk/openai-compatible` sends that value as `Authorization: Bearer <value>`, and with the variable unset it sends no Authorization header.
+- `--model <sailor>/<org>/<model>:<suffix>` reaches the server as `<org>/<model>:<suffix>`, unchanged.
+
+The Hugging Face router itself was not called; its base URL, bearer header, and `GET /v1/models` list are taken from Hugging Face's Inference Providers documentation.
+
 ## A Privateer session reaches nothing but its sailor
 
 Verified 2026-09-28 on macOS 26.6 with OpenCode 1.18.32 and tmux 3.7c by `FM_PRIVATEER_EGRESS_LIVE=1 tests/fm-privateer-egress-live-e2e.test.sh`, the egress audit that `../configuration.md` ("Privateer quarantine") names.

@@ -93,7 +93,7 @@
 #   build agent's variant, keyed to the resolved model, inside the
 #   OPENCODE_CONFIG_CONTENT JSON its launch already carries (config schema
 #   verified on opencode 1.18.32); without a model the axis is recorded but omitted.
-#   --sailor <name> runs an OpenCode crewmate or scout on a named local sailor
+#   --sailor <name> runs an OpenCode crewmate or scout on a named sailor
 #   from config/crew-dispatch.json (docs/configuration.md "Named sailors"). It
 #   requires --harness opencode and a --model listed for that sailor, and
 #   refuses before any endpoint, worktree, or record exists unless
@@ -103,6 +103,10 @@
 #   omitted because the sailor's server sets reasoning depth, and the record
 #   gets sailor=<name>. A relaunch that keeps OpenCode and the recorded model
 #   keeps the recorded sailor; a relaunch onto another harness drops it.
+#   For a sailor whose entry names auth_env, the provider entry carries only
+#   {env:<variable>} and the launch runs OpenCode through
+#   `bin/fm-sailor.sh with-token <variable> <home>/.env --`, outside any
+#   sandbox, so the token reaches OpenCode through its environment alone.
 #   Every sailor launch, a Privateer worker's included, also gets the worktree
 #   plugin .opencode/plugins/fm-sailor-system-fold.js, which folds OpenCode's
 #   system prompt into one system message; other OpenCode launches remove it.
@@ -2103,7 +2107,7 @@ launch_template() {
       printf '%s' 'codex __MODELFLAG____EFFORTFLAG__--dangerously-bypass-approvals-and-sandbox --disable hooks -c "notify=[\"bash\",\"-c\",\"touch __TURNEND__\"]" "$(__OPINPUT__ encode launch-brief < __BRIEF__)"'
     fi
     ;;
-  opencode) printf '%s' 'OPENCODE_CONFIG_CONTENT='\''{"permission":__OCPERMISSION____OCPROVIDER____EFFORTFLAG____OCPRIVATEER__}'\'' __OCSANDBOX__opencode __MODELFLAG__--prompt "$(__OPINPUT__ encode launch-brief < __BRIEF__)"' ;;
+  opencode) printf '%s' 'OPENCODE_CONFIG_CONTENT='\''{"permission":__OCPERMISSION____OCPROVIDER____EFFORTFLAG____OCPRIVATEER__}'\'' __OCAUTH____OCSANDBOX__opencode __MODELFLAG__--prompt "$(__OPINPUT__ encode launch-brief < __BRIEF__)"' ;;
   pi | pi-signed)
     printf '%s' '__PIBIN____PITUIMODE____PIRESUME__'
     if [ "$kind" = secondmate ]; then
@@ -2469,6 +2473,7 @@ if [ "$HARNESS" = opencode ] && [ "$RAW_LAUNCH" = 0 ] && [ "$KIND" != secondmate
   OC_WORKER_NOTE=$(FM_HOME="$FM_HOME" FM_CONFIG_OVERRIDE="$CONFIG" "$SCRIPT_DIR/fm-opencode-permissions.sh" worker-note) || exit 1
 fi
 SAILOR_PROVIDER_JSON=
+SAILOR_AUTH_ENV=
 if [ -n "$SAILOR" ]; then
   [ "$KIND" != secondmate ] || {
     echo "error: --sailor applies to crewmate and scout spawns only; a secondmate runs its own home" >&2
@@ -2482,7 +2487,7 @@ if [ -n "$SAILOR" ]; then
     echo "error: --sailor requires --model naming one of the sailor's models" >&2
     exit 1
   }
-  if ! SAILOR_CHECK=$(FM_CONFIG_OVERRIDE="$CONFIG" FM_STATE_OVERRIDE="$STATE" "$SCRIPT_DIR/fm-sailor.sh" check "$SAILOR" "$MODEL" --task "$ID" 2>&1); then
+  if ! SAILOR_CHECK=$(FM_HOME="$FM_HOME" FM_CONFIG_OVERRIDE="$CONFIG" FM_STATE_OVERRIDE="$STATE" "$SCRIPT_DIR/fm-sailor.sh" check "$SAILOR" "$MODEL" --task "$ID" 2>&1); then
     echo "error: sailor $SAILOR cannot take task $ID: ${SAILOR_CHECK#refused: }" >&2
     exit 1
   fi
@@ -2490,6 +2495,7 @@ if [ -n "$SAILOR" ]; then
     echo "error: sailor $SAILOR's OpenCode provider entry could not be built" >&2
     exit 1
   }
+  SAILOR_AUTH_ENV=$(jq -r --arg s "$SAILOR" '.sailors[$s].auth_env // empty' "$CONFIG/crew-dispatch.json")
 fi
 # Sailor sandbox (header above; docs/configuration.md "Sailor sandbox"). The
 # wrapper's paths need the task's copy, so only its availability is proven here,
@@ -5397,6 +5403,12 @@ if [ "$SAILOR_SANDBOX" = 1 ]; then
   }
 fi
 LAUNCH=${LAUNCH//__OCSANDBOX__/$OCSANDBOX}
+# A sailor's token is read when the launch runs and handed to OpenCode in its
+# environment alone (bin/fm-sailor.sh with-token), before any sandbox.
+OCAUTH=
+[ -z "$SAILOR_AUTH_ENV" ] ||
+  OCAUTH="$(shell_quote "$FM_ROOT/bin/fm-sailor.sh") with-token $(shell_quote "$SAILOR_AUTH_ENV") $(shell_quote "$FM_HOME/.env") -- "
+LAUNCH=${LAUNCH//__OCAUTH__/$OCAUTH}
 # Relaunch session continuity. Computed here, where the adopted endpoint (T) is
 # known, and substituted only into the Pi-family template's `__PIRESUME__`
 # placeholder; an empty value leaves every other launch byte-identical.

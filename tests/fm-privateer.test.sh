@@ -245,7 +245,7 @@ test_check_names_every_violation() {
   rm "$home/config/sailor-sandbox"
   printf 'FMX_PAIRING_TOKEN=relay\nTYPESAFE_API_KEY=typed\nFM_INBOX_ASK_MODEL=anthropic.claude-opus\nexport FM_VOICE_MODEL=nova\nexport ANTHROPIC_API_KEY=sk\nCLAUDE_CODE_OAUTH_TOKEN=tok\nCLAUDECODE=1\nOPENAI_API_KEY=fine\n' > "$home/.env"
   printf '# proxy\nANTHROPIC_BASE_URL\nSSH_AUTH_SOCK\n' > "$home/config/launch-env-allowlist"
-  printf '%s\n' '{"sailors":{"tiller":{"endpoint":"http://127.0.0.1:11234/v1","status":"live","models":["coder"]},"stoker":{"endpoint":"http://stoker.example.com:8000/v1","status":"placeholder","models":["coder"]}},"rules":[{"when":"anything","use":[{"harness":"claude","model":"claude-opus-5-5"},{"harness":"opencode","model":"anthropic/claude-sonnet-5"}]}],"default":{"harness":"opencode","sailor":"tiller","model":"coder"},"sailor_fallback":{"harness":"claude","model":"claude-opus-5-5"}}' \
+  printf '%s\n' '{"sailors":{"tiller":{"endpoint":"http://127.0.0.1:11234/v1","status":"live","models":["coder"]},"stoker":{"endpoint":"http://stoker.example.com:8000/v1","status":"placeholder","models":["coder"]},"hosted":{"endpoint":"https://router.example.com/v1","status":"live","models":["coder"],"auth_env":"ANTHROPIC_API_KEY"}},"rules":[{"when":"anything","use":[{"harness":"claude","model":"claude-opus-5-5"},{"harness":"opencode","model":"anthropic/claude-sonnet-5"}]}],"default":{"harness":"opencode","sailor":"tiller","model":"coder"},"sailor_fallback":{"harness":"claude","model":"claude-opus-5-5"}}' \
     > "$home/config/crew-dispatch.json"
   printf 'tiller/other\n' > "$home/config/privateer"
   out=$(run_check "$home")
@@ -273,9 +273,11 @@ test_check_names_every_violation() {
   assert_contains "$out" "config/crew-dispatch.json declares sailor_fallback" "the fallback violation is missing"
   assert_contains "$out" "profile claude/claude-opus-5-5 uses a harness other than opencode" "the Claude profile violation is missing"
   assert_contains "$out" "profile opencode/anthropic/claude-sonnet-5 names no sailor" "the sailor-less profile violation is missing"
-  assert_contains "$out" "sailor stoker has endpoint 'http://stoker.example.com:8000/v1', which is not on this machine or the local network" "the public endpoint violation is missing"
+  assert_contains "$out" "sailor stoker has endpoint 'http://stoker.example.com:8000/v1', which is not on this machine or the local network and is not https" "the plaintext public endpoint violation is missing"
+  assert_not_contains "$out" "endpoint 'https://router.example.com/v1'" "an https external endpoint is not a quarantine violation"
+  assert_contains "$out" "sailor hosted takes its token from ANTHROPIC_API_KEY, an Anthropic or Claude variable" "the Anthropic token variable violation is missing"
   assert_contains "$out" "config/privateer names tiller/other, but config/crew-dispatch.json lists no such sailor and model" "the first mate line violation is missing"
-  pass "check names every forbidden file, key, Bedrock side channel, harness, profile, fallback, endpoint, and first mate line"
+  pass "check names every forbidden file, key, Bedrock side channel, harness, profile, fallback, endpoint, token variable, and first mate line"
 }
 
 test_check_refuses_anthropic_forges() {
@@ -336,25 +338,40 @@ check_endpoints() {
 
 test_endpoint_rule() {
   local home out status url
-  local -a good bad
+  local -a good plain anthropic malformed
   home=$(make_home endpoints)
   good=(http://localhost:11234/v1 http://127.0.0.1:11234/v1 http://10.1.2.3:8000/v1 http://172.31.0.9:8000/v1
     http://192.168.1.9:8000/v1 http://100.100.1.1:8000/v1 http://flint.local:8000/v1 http://stoker.tail.ts.net:8000/v1
-    'http://[::1]:11234/v1' 'http://[fd7a:115c::1]:8000/v1' 'http://127.0.0.1:11234?x=1' 'http://Flint.LOCAL:8000#top')
+    'http://[::1]:11234/v1' 'http://[fd7a:115c::1]:8000/v1' 'http://127.0.0.1:11234?x=1' 'http://Flint.LOCAL:8000#top'
+    https://router.huggingface.co/v1 'https://Router.Example.com:8443/v1' https://8.8.8.8/v1)
   out=$(check_endpoints "$home" "${good[@]}")
   status=$?
-  expect_code 0 "$status" "check must accept every private endpoint: $out"
-  bad=(https://api.anthropic.com/v1 http://8.8.8.8/v1 http://172.32.0.1/v1 http://100.128.0.1/v1 http://stoker:8000/v1
-    http://example.local.com/v1 'http://[2001:db8::1]/v1' 'not a url' ''
-    'http://api.anthropic.com#@127.0.0.1/v1' 'http://api.anthropic.com?@10.0.0.1/v1' 'http://api.anthropic.com\@127.0.0.1/'
-    'http://user@127.0.0.1:11234/v1' 'http://127.0.0.1:port/v1' 'http://[::1/v1')
-  out=$(check_endpoints "$home" "${bad[@]}")
+  expect_code 0 "$status" "check must accept every private endpoint and every https endpoint elsewhere: $out"
+  plain=(http://8.8.8.8/v1 http://172.32.0.1/v1 http://100.128.0.1/v1 http://stoker:8000/v1
+    http://example.local.com/v1 'http://[2001:db8::1]/v1' http://router.huggingface.co/v1)
+  out=$(check_endpoints "$home" "${plain[@]}")
   status=$?
-  expect_code 1 "$status" "check must refuse every public or ambiguous endpoint"
-  for url in "${bad[@]}"; do
-    assert_contains "$out" "has endpoint '$url', which is not on this machine or the local network" "check must refuse '$url'"
+  expect_code 1 "$status" "check must refuse every plaintext endpoint off this machine and network"
+  for url in "${plain[@]}"; do
+    assert_contains "$out" "has endpoint '$url', which is not on this machine or the local network and is not https" "check must refuse '$url'"
   done
-  pass "check accepts loopback, private, tailnet, .local, and .ts.net endpoints and refuses the rest, including an authority hidden behind ?, #, a backslash, or userinfo"
+  anthropic=(https://api.anthropic.com/v1 https://claude.ai/v1 'https://API.claude.com./v1' http://console.anthropic.com/v1
+    'http://api.anthropic.com#@127.0.0.1/v1' 'http://api.anthropic.com?@10.0.0.1/v1')
+  out=$(check_endpoints "$home" "${anthropic[@]}")
+  status=$?
+  expect_code 1 "$status" "check must refuse every Anthropic or Claude endpoint, https included"
+  for url in "${anthropic[@]}"; do
+    assert_contains "$out" "has endpoint '$url', on an Anthropic or Claude host" "check must refuse '$url' as an Anthropic host"
+  done
+  malformed=('not a url' '' 'http://api.anthropic.com\@127.0.0.1/' 'http://user@127.0.0.1:11234/v1'
+    'https://user@router.huggingface.co/v1' 'http://127.0.0.1:port/v1' 'http://[::1/v1' 'ftp://127.0.0.1/v1')
+  out=$(check_endpoints "$home" "${malformed[@]}")
+  status=$?
+  expect_code 1 "$status" "check must refuse every ambiguous endpoint"
+  for url in "${malformed[@]}"; do
+    assert_contains "$out" "has endpoint '$url', which is not an http or https URL with a plain host" "check must refuse '$url' as malformed"
+  done
+  pass "check accepts private endpoints and https endpoints elsewhere, and refuses plaintext public ones, any Anthropic or Claude host, and an authority hidden behind ?, #, a backslash, or userinfo"
 }
 
 # session_socket <home>: the tmux socket name of <home>'s Privateer session.
@@ -890,6 +907,53 @@ refused CONNECT forge.example.test:443' "$(jq -r '"\(.verdict) \(.method) \(.des
   ! kill -0 "$writer" 2>/dev/null || fail "stop must stop the record writer"
   [ ! -e "$records" ] && [ ! -e "$home/state/privateer/egress/records.pid" ] || fail "stop must retire the record writer's socket and process id"
   pass "start runs the egress proxy with the sailor and forge allowed, the record writer for the first mate's process, and the first mate with only the allowlist and isolated OpenCode directories in a tmux server whose sandbox reaches only that proxy and that writer"
+}
+
+test_start_gives_the_first_mate_its_token_and_allows_an_external_sailor() {
+  local dir home root out status envlog var sentinel allow leaks
+  dir="$TMP_ROOT/start-token"
+  home=$(make_home start-token)
+  root="$dir/root"
+  var=FM_TEST_PRIVATEER_TOKEN
+  sentinel=fm-sentinel-privateer-4b9e21
+  make_checkout "$root"
+  git -C "$root" remote add origin https://forge.example.test:3000/captain/firstmate.git
+  make_launcher_fakebin "$dir" >/dev/null
+  make_stub_primary "$dir" >/dev/null
+  jq --arg v "$var" '.sailors.tiller.auth_env = $v
+    | .sailors.hf = {title: "Hugging Face Inference", endpoint: "https://router.huggingface.co/v1", status: "live", models: ["org/routed-model:cheapest"], auth_env: $v, unlisted_models: true}' \
+    <<<"$DISPATCH" > "$home/config/crew-dispatch.json"
+  out=$(run_check "$home")
+  expect_code 0 $? "an https external sailor with a token variable must pass the quarantine: $out"
+
+  out=$(env -u "$var" ANTHROPIC_API_KEY=sk-secret PATH="$dir/fakebin:$PATH" FM_TEST_SEAM=1 FM_PRIVATEER_PRIMARY="$dir/stub-primary" \
+    FM_HOME="$home" FM_ROOT_OVERRIDE="$root" "$PRIVATEER" start 2>&1)
+  status=$?
+  expect_code 1 "$status" "start must refuse while the first mate's sailor has no token"
+  assert_contains "$out" "the first mate's sailor cannot take the session: sailor tiller has no token: $var is set in neither the environment nor $home/.env" \
+    "the refusal must name the missing variable"
+  [ ! -e "$home/state/privateer/egress/port" ] || fail "a refused start must start no egress proxy"
+
+  printf '%s=%s\n' "$var" "$sentinel" > "$home/.env"
+  out=$(env -u "$var" PATH="$dir/fakebin:$PATH" FM_TEST_SEAM=1 FM_PRIVATEER_PRIMARY="$dir/stub-primary" \
+    FM_HOME="$home" FM_ROOT_OVERRIDE="$root" "$PRIVATEER" start 2>&1)
+  status=$?
+  expect_code 0 "$status" "start must succeed once the token is in the home's .env: $out"
+  envlog="$dir/primary.env"
+  wait_for_file "$envlog" || fail "the stub first mate never ran; tmux log: $(cat "$dir/tmux.log" 2>/dev/null)"
+  assert_equals "$var=$sentinel" "$(grep "^$var=" "$envlog")" "the first mate must find its sailor's token in its environment"
+  assert_grep "\"apiKey\":\"{env:$var}\"" "$envlog" "the first mate's OpenCode config must point at the variable"
+  assert_equals "ARGS=--agent privateer" "$(grep '^ARGS=' "$envlog")" "the token wrapper must hand the first mate its own arguments"
+  assert_no_grep "$sentinel" "$dir/tmux.log" "the token must be on no tmux command line"
+  assert_not_contains "$out" "$sentinel" "start must not print the token"
+  leaks=$(grep -rl --exclude=.env -- "$sentinel" "$home" 2>/dev/null)
+  [ -z "$leaks" ] || fail "the token must be written nowhere in the home but .env: $leaks"
+  allow="$home/state/privateer/egress/allow"
+  assert_equals "127.0.0.1:11234
+forge.example.test:3000
+router.huggingface.co:443" "$(cat "$allow")" "the egress allowlist must hold the local sailor, the external sailor's host and port, and the forge"
+  run_launcher "$dir" "$home" "$root" stop >/dev/null
+  pass "start refuses a first mate whose sailor has no token, hands it the token in its environment alone, and allows an external https sailor through the egress proxy"
 }
 
 test_start_denies_the_instructions_of_a_checkout_that_is_the_home() {
@@ -2725,6 +2789,7 @@ test_start_refuses_without_the_flag
 test_start_refuses_with_a_forbidden_file
 test_start_refuses_without_a_first_mate_line
 test_start_passes_only_the_allowlist
+test_start_gives_the_first_mate_its_token_and_allows_an_external_sailor
 test_start_denies_the_instructions_of_a_checkout_that_is_the_home
 test_start_denies_the_scripts_of_a_checkout_nested_in_the_home
 test_start_denies_the_gitfiles_of_submodules_and_outside_worktrees
