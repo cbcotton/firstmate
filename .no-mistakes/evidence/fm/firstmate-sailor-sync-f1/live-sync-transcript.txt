@@ -1,0 +1,150 @@
+=== S1: dry-run both homes before applying (as MLX Serve Apply would) ===
++      "unlisted_models": true
+     }
+   },
+   "rules": [
+dry run: nothing written
+[exit 0]
+   },
+   "rules": [
+dry run: nothing written
+[exit 0]
+dispatch unchanged after dry-run: yes
+
+=== S2: apply to both homes from the one registry ===
+
+$ [firstmate] fm-sailor.sh sync /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-mlx.I5IbGK/sailors.json --home firstmate
+wrote config/crew-dispatch.json (previous copy: crew-dispatch.json.bak-20261014-154000)
+synced home firstmate from /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-mlx.I5IbGK/sailors.json: tiller, bonsai-1, lookout
+workers: the change applies from each worker's next spawn; running workers keep what they launched with
+[exit 0]
+
+$ [privateer] fm-sailor.sh sync /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-mlx.I5IbGK/sailors.json --home privateer
+wrote config/crew-dispatch.json (previous copy: crew-dispatch.json.bak-20261014-154000)
+synced home privateer from /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-mlx.I5IbGK/sailors.json: tiller, bonsai-1, lookout
+workers: the change applies from each worker's next spawn; running workers keep what they launched with
+egress: a running Privateer session allows a new endpoint only after fm-privateer.sh reload
+[exit 0]
+
+--- firstmate sailors ---
+{"tiller":{"title":"Tiller","host":"MLX Serve","endpoint":"http://127.0.0.1:11234/v1","status":"live","models":["qwen-coder"],"max_concurrent":1,"grade":"specialist","facets":["helm"]}}
+{"bonsai-1":{"title":"Bonsai 1","host":"Bonsai","endpoint":"http://127.0.0.1:11310/v1","status":"live","models":["bonsai-2bit"],"max_concurrent":2,"grade":"deckhand"}}
+{"lookout":{"title":"Lookout","host":"Hugging Face","endpoint":"https://router.huggingface.co/v1","status":"placeholder","models":["OBLITERATUS/Qwen3.8-27B-OBLITERATED:cheapest"],"max_concurrent":1,"grade":"expert","paid":true,"auth_env":"HF_TOKEN","unlisted_models":true}}
+--- privateer sailors ---
+{"tiller":{"title":"Tiller","host":"MLX Serve","endpoint":"http://127.0.0.1:11234/v1","status":"live","models":["qwen-coder"],"max_concurrent":1,"grade":"specialist","facets":["helm"]}}
+{"bonsai-1":{"title":"Bonsai 1","host":"Bonsai","endpoint":"http://127.0.0.1:11310/v1","status":"live","models":["bonsai-2bit"],"max_concurrent":1,"grade":"deckhand"}}
+{"lookout":{"title":"Lookout","host":"Hugging Face","endpoint":"https://router.huggingface.co/v1","status":"placeholder","models":["OBLITERATUS/Qwen3.8-27B-OBLITERATED:cheapest"],"max_concurrent":1,"grade":"expert","paid":true,"auth_env":"HF_TOKEN","unlisted_models":true}}
+blank slots (stoker/flint/bosun) absent in both: true,true
+
+$ [firstmate] fm-sailor.sh validate
+[exit 0]
+
+$ [privateer] fm-sailor.sh validate
+[exit 0]
+$ fm-privateer.sh check (privateer home)
+[exit 0]
+slot registry untouched: yes; servers.json untouched: yes; .env created: none
+
+=== S3: re-sync is a no-op ===
+
+$ [firstmate] fm-sailor.sh sync /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-mlx.I5IbGK/sailors.json --home firstmate
+this home's sailors already match /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-mlx.I5IbGK/sailors.json; nothing written
+[exit 0]
+
+=== S4: one swap in the registry reaches both homes; first mate follows its helm slot ===
+synced home firstmate from /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-mlx.I5IbGK/sailors.json: tiller, bonsai-1, lookout
+workers: the change applies from each worker's next spawn; running workers keep what they launched with
+[exit 0]
+
+$ [privateer] fm-sailor.sh sync /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-mlx.I5IbGK/sailors.json --home privateer
+wrote config/crew-dispatch.json (previous copy: crew-dispatch.json.bak-20261014-154000-2)
+wrote config/privateer (previous copy: privateer.bak-20261014-154000)
+synced home privateer from /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-mlx.I5IbGK/sailors.json: tiller, bonsai-1, lookout
+workers: the change applies from each worker's next spawn; running workers keep what they launched with
+first mate: restart the Privateer session to switch (fm-privateer.sh stop, then start; stop waits until no task is in flight, 0 now)
+[exit 0]
+firstmate tiller models: ["qwen-next"]  privateer tiller models: ["qwen-next"]
+--- privateer config/privateer ---
+# first mate
+tiller/qwen-next
+
+=== S5: hand edit in registry-managed home gets a note and is overwritten by next sync ===
+
+$ [firstmate] fm-sailor.sh set bonsai-1 --host hand edit
+wrote config/crew-dispatch.json (previous copy: crew-dispatch.json.bak-20261014-154001)
+workers: the change applies from each worker's next spawn; running workers keep what they launched with
+note: this home's sailors follow /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-mlx.I5IbGK/sailors.json (config/sailor-registry), so the next sync rewrites them from it
+[exit 0]
+workers: the change applies from each worker's next spawn; running workers keep what they launched with
+[exit 0]
+host after sync: Bonsai
+
+=== S6 adversarial: invalid registries refused whole, nothing written ===
+
+# registry edit: .slots.lookout.grade = "scout"
+
+$ [firstmate] fm-sailor.sh sync /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-mlx.I5IbGK/sailors.json --home firstmate
+refused: slot lookout grade scout is not one of deckhand, sailor, specialist, expert
+[exit 1]
+
+# registry edit: .slots["bonsai-1"].homes.firstmate = 3
+
+$ [firstmate] fm-sailor.sh sync /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-mlx.I5IbGK/sailors.json --home firstmate
+refused: slot bonsai-1 shares 4 tasks among its homes, above its capacity of 3
+[exit 1]
+
+# registry edit: .slots.tiller.server = "ghost"
+
+$ [firstmate] fm-sailor.sh sync /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-mlx.I5IbGK/sailors.json --home firstmate
+refused: slot tiller names server ghost, which /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-mlx.I5IbGK/servers.json does not list
+[exit 1]
+
+# registry edit: .slots.tiller.model = "qwen-next" | .slots.lookout.server = "mlx-serve" | .slots.lookout.model = null
+
+$ [firstmate] fm-sailor.sh sync /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-mlx.I5IbGK/sailors.json --home firstmate
+refused: slot lookout model must be a non-empty string
+[exit 1]
+
+# registry edit: .privateer_first_mate = "bonsai-1"
+
+$ [privateer] fm-sailor.sh sync /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-mlx.I5IbGK/sailors.json --home privateer
+refused: slot bonsai-1 lacks the helm facet the first mate needs
+[exit 1]
+
+# registry edit: .privateer_first_mate = "stoker"
+
+$ [privateer] fm-sailor.sh sync /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-mlx.I5IbGK/sailors.json --home privateer
+refused: slot stoker is blank, and the first mate runs only on a bound slot
+[exit 1]
+
+# registry edit: .slots.tiller.status = "placeholder"
+
+$ [privateer] fm-sailor.sh sync /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-mlx.I5IbGK/sailors.json --home privateer
+refused: slot tiller is a placeholder, and the first mate runs only on a live sailor
+[exit 1]
+
+# registry edit: privateer loses its share of tiller (still privateer_first_mate)
+
+$ [privateer] fm-sailor.sh sync /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-mlx.I5IbGK/sailors.json --home privateer
+refused: slot tiller gives home privateer no share, so the first mate cannot run on it
+[exit 1]
+
+# a running task on bonsai-1/bonsai-2bit while registry rebinds bonsai-1
+
+$ [firstmate] fm-sailor.sh sync /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-mlx.I5IbGK/sailors.json --home firstmate
+refused: task(s) busy-t1 run bonsai-1/bonsai-2bit, which /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-mlx.I5IbGK/sailors.json no longer lists, and relaunching them needs it listed; sync once they land
+[exit 1]
+
+# firstmate home with no config/sailor-registry (hand-managed)
+
+$ [firstmate] fm-sailor.sh sync /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-mlx.I5IbGK/sailors.json --home firstmate
+refused: this home's sailors are managed by hand, since config/sailor-registry is absent; write the slot registry's path into it to hand them to sync
+[exit 1]
+
+# wrong home key: firstmate home synced as privateer
+
+$ [firstmate] fm-sailor.sh sync /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-mlx.I5IbGK/sailors.json --home privateer
+refused: the slot registry's home privateer is /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.9FDZCr, not this home (/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.DDvHvd)
+[exit 1]
+
+refusals left files untouched: firstmate=yes privateer=yes config/privateer=yes
