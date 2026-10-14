@@ -549,11 +549,14 @@ tiller/qwen-next" "$(cat "$CASE_DIR/config/privateer")" "the first mate line mus
 
   cp "$CASE_DIR/config/crew-dispatch.json" "$CASE_DIR/original.json"
   rm -f "$CASE_DIR/config/"*.bak-*
-  out=$(run_real add hosted --endpoint https://api.example.com/v1 --models coder)
+  out=$(run_real add hosted --endpoint http://api.example.com/v1 --models coder)
   status=$?
-  expect_code 1 "$status" "a public endpoint must be refused in a Privateer home"
+  expect_code 1 "$status" "a plaintext public endpoint must be refused in a Privateer home"
   assert_contains "$out" "refused: the change would break this home's Privateer quarantine:" "quarantine refusal missing"
-  assert_contains "$out" "sailor hosted has endpoint 'https://api.example.com/v1', which is not on this machine or the local network" "the refusal must carry the quarantine's own reason"
+  assert_contains "$out" "sailor hosted has endpoint 'http://api.example.com/v1', which is not on this machine or the local network and is not https" "the refusal must carry the quarantine's own reason"
+  out=$(run_real add hosted --endpoint https://api.anthropic.com/v1 --models coder)
+  expect_code 1 "$?" "an Anthropic endpoint must be refused in a Privateer home"
+  assert_contains "$out" "sailor hosted has endpoint 'https://api.anthropic.com/v1', on an Anthropic or Claude host" "the refusal must name the Anthropic host"
   out=$(run_real retire tiller)
   expect_code 1 "$?" "retiring the first mate's sailor must be refused"
   assert_contains "$out" "config/privateer names tiller/qwen-next, but config/crew-dispatch.json lists no such sailor and model" "retire refusal must carry the quarantine's reason"

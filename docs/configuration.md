@@ -948,13 +948,14 @@ With the flag present, bootstrap reports each violation as `PRIVATEER: <violatio
 - The [spoken interface and captain inbox](#spoken-interface-and-captain-inbox-configvoice--configinbox-) settings `config/inbox-ask-model`, `inbox-stt-model`, `inbox-region`, `inbox-profile`, `voice-model`, `voice-region`, and `voice-profile` must not exist, because those side channels send the captain's words to Bedrock.
 - `config/sailor-sandbox` must exist, so a sailor under the `restricted` profile may launch; a Privateer worker then runs inside the session sandbox described below.
 - `.env` must set no Relay pairing token, no typed-resolution key, no `FM_INBOX_*` or `FM_VOICE_*` override, and no `ANTHROPIC_*`, `CLAUDE_*`, or `CLAUDECODE` line, and `config/launch-env-allowlist` must list none of the Anthropic or Claude names.
-- `config/crew-dispatch.json` must exist, declare no `sailor_fallback`, give every profile the `opencode` harness and a sailor, and give every sailor a private endpoint: localhost, a loopback, RFC 1918, or tailnet (100.64/10) address, an IPv6 loopback or unique-local address, or a name ending in `.local` or `.ts.net`.
+- `config/crew-dispatch.json` must exist, declare no `sailor_fallback`, give every profile the `opencode` harness and a sailor, and give every sailor an endpoint that is either private (localhost, a loopback, RFC 1918, or tailnet (100.64/10) address, an IPv6 loopback or unique-local address, or a name ending in `.local` or `.ts.net`) or https elsewhere, as an [external sailor](#crew-dispatch-profiles-configcrew-dispatchjson) is, and never on a host that is, or is under, `anthropic.com`, `claude.ai`, or `claude.com`.
+  No sailor's `auth_env` may name an `ANTHROPIC_*`, `CLAUDE_*`, or `CLAUDECODE` variable.
 - The origin of the checkout and of every clone under `projects/`, in https, http, ssh, or scp form, must not be on a host that is, or is under, `anthropic.com`, `claude.ai`, or `claude.com`, and the egress proxy never allows such a host.
 - An endpoint's host is read from its authority, which ends at the first `/`, `?`, or `#`; an authority carrying userinfo or a backslash is refused, so no endpoint can hide a public host behind a private-looking suffix.
 
 A spawn in a Privateer home is also refused for a project directory outside the home's `projects/`, a secondmate, a raw launch command, any harness but `opencode`, a missing `--sailor`, or a ship mode other than `local-only`.
 `bin/fm-brief.sh` in a Privateer home likewise refuses a ship or scout brief for a repo that has no row in `data/projects.md`.
-With no `sailor_fallback`, work waits in the queue while every sailor is down; a struggling sailor is retried on another local sailor or goes to the captain, never to a hosted model.
+With no `sailor_fallback`, work waits in the queue while every sailor is down; a struggling sailor is retried on another sailor or goes to the captain, never to a model outside the sailor map.
 Version 1 ships local-only because the shared no-mistakes daemon's agent resolves to Claude; a Privateer-only pipeline instance is later work, and the shared daemon is never switched.
 
 ### How a Privateer session runs
@@ -1105,7 +1106,7 @@ It fails unless the session-start digest reaches the model's first answering req
 
 ### Setting up a home
 
-Create the home with `config/privateer` naming the first mate's sailor and model, `config/crew-harness` holding `opencode`, `config/sailor-sandbox`, and a `config/crew-dispatch.json` naming only local sailors and no `sailor_fallback`; `config/opencode-permission-profile` set to `restricted` is the agreed posture for its sailors.
+Create the home with `config/privateer` naming the first mate's sailor and model, `config/crew-harness` holding `opencode`, `config/sailor-sandbox`, and a `config/crew-dispatch.json` naming only local or external https sailors and no `sailor_fallback`; `config/opencode-permission-profile` set to `restricted` is the agreed posture for its sailors.
 Also create the presence flag `config/fleet-ledger` (see the [fleet activity ledger](#fleet-activity-ledger-configfleet-ledger)), because the Privateer Dock board reads the home's `state/fleet-ledger.jsonl` and shows no ledger activity without it.
 Make the home a clone of firstmate that is itself the home, at `forks/<name>` inside the Claude-orchestrated home's checkout, and start it with `FM_HOME=<that clone> <that clone>/bin/fm-privateer.sh start`.
 Its `bin/` is then the home's own, so no worker can rewrite the scripts that govern it; a checkout nested below the home works too, since the session denies its `bin/` as well, and so does pointing `FM_HOME` at the home from a checkout outside it.

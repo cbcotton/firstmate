@@ -40,11 +40,15 @@
 #     CLAUDECODE name;
 #   - config/crew-dispatch.json must exist and parse, declare no sailor_fallback,
 #     give every rule and default profile the opencode harness and a sailor, and
-#     give every sailor a private endpoint: an http or https URL whose authority
-#     (everything up to the first /, ?, or #) carries no userinfo or backslash
-#     and names localhost, a loopback, RFC 1918, or tailnet (100.64/10) IPv4
-#     address, an IPv6 loopback or unique-local address, or a name ending in
-#     .local or .ts.net;
+#     give every sailor an endpoint that is an http or https URL whose authority
+#     (everything up to the first /, ?, or #) carries no userinfo or backslash,
+#     whose host is not, and is not under, anthropic.com, claude.ai, or
+#     claude.com, and that is either private, naming localhost, a loopback,
+#     RFC 1918, or tailnet (100.64/10) IPv4 address, an IPv6 loopback or
+#     unique-local address, or a name ending in .local or .ts.net, or an https
+#     URL elsewhere (an external sailor such as a hosted inference router); and
+#     no sailor's auth_env may name an ANTHROPIC_*, CLAUDE_*, or CLAUDECODE
+#     variable;
 #   - a non-empty config/privateer must read <sailor>/<model> with that model
 #     listed for that sailor;
 #   - the origin of this checkout and of every clone under projects/ (https,
@@ -409,12 +413,23 @@ EOF
   return 1
 }
 
-endpoint_ok() {
-  local host
-  host=$(url_hostport "$1") || return 1
-  host=${host%:*}
+# endpoint_violation <sailor> <url>: why the endpoint rule in the header
+# refuses <url>, or nothing.
+endpoint_violation() {
+  local dest host
+  if ! dest=$(url_hostport "$2"); then
+    echo "config/crew-dispatch.json sailor $1 has endpoint '$2', which is not an http or https URL with a plain host"
+    return 0
+  fi
+  if anthropic_host "$dest"; then
+    echo "config/crew-dispatch.json sailor $1 has endpoint '$2', on an Anthropic or Claude host"
+    return 0
+  fi
+  host=${dest%:*}
   host=${host#[}
-  private_host "${host%]}"
+  private_host "${host%]}" && return 0
+  case "$2" in https://*) return 0 ;; esac
+  echo "config/crew-dispatch.json sailor $1 has endpoint '$2', which is not on this machine or the local network and is not https"
 }
 
 # env_file_violations: forbidden keys set in this home's .env, one per line.
@@ -476,9 +491,12 @@ dispatch_violations() {
        elif (.sailors // {} | length) == 0 then ["config/crew-dispatch.json names no sailors"]
        else [] end)
     | .[]' "$DISPATCH" 2>/dev/null
-  jq -r '(.sailors // {}) | to_entries[] | select((.value | type) == "object") | "\(.key)\t\(.value.endpoint // "")"' "$DISPATCH" 2>/dev/null |
-    while IFS=$'\t' read -r name endpoint; do
-      endpoint_ok "$endpoint" || echo "config/crew-dispatch.json sailor $name has endpoint '$endpoint', which is not on this machine or the local network"
+  jq -r '(.sailors // {}) | to_entries[] | select((.value | type) == "object") | "\(.key)\t\(.value.endpoint // "")\t\(.value.auth_env // "" | tostring)"' "$DISPATCH" 2>/dev/null |
+    while IFS=$'\t' read -r name endpoint auth; do
+      endpoint_violation "$name" "$endpoint"
+      if printf '%s\n' "$auth" | grep -Eq "$FORBIDDEN_NAME_RE"; then
+        echo "config/crew-dispatch.json sailor $name takes its token from $auth, an Anthropic or Claude variable"
+      fi
     done
   line=$(first_mate_line)
   [ -n "$line" ] || return 0
