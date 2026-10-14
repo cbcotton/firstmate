@@ -986,6 +986,48 @@ test_sandboxed_sailor_launch_runs_inside_the_sandbox() {
   pass "a sandboxed sailor launch starts OpenCode inside the sandbox with only its own paths and endpoint"
 }
 
+# A sailor whose entry names auth_env reads its token from the home's .env when
+# the launch runs; the sentinel stands in for the token, so a copy of it in the
+# launch, the record, or any other file of the home is a leak.
+test_token_sailor_launch_reads_its_token_at_launch() {
+  local rec id out status launch var sentinel leaks
+  id=profile-sailor-token-t1
+  var=FM_TEST_SPAWN_TOKEN
+  sentinel=fm-sentinel-spawn-91f3a7
+  rec=$(make_spawn_case profile-sailor-token opencode "$id")
+  read_case_record "$rec"
+  enable_sailors "$HOME_DIR" "$FAKEBIN_DIR" live
+  jq --arg v "$var" '.sailors.hf = {endpoint: "https://router.huggingface.co/v1", status: "live", models: ["org/routed-model:cheapest"], auth_env: $v, unlisted_models: true}' \
+    "$HOME_DIR/config/crew-dispatch.json" > "$CASE_DIR/dispatch.json" && mv "$CASE_DIR/dispatch.json" "$HOME_DIR/config/crew-dispatch.json"
+  fake_sandbox_exec "$FAKEBIN_DIR" 0
+  : > "$HOME_DIR/config/sailor-sandbox"
+
+  out=$(unset "$var"; run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR" --harness opencode --model org/routed-model:cheapest --sailor hf)
+  status=$?
+  expect_code 1 "$status" "a token sailor without its token must refuse the spawn"
+  assert_contains "$out" "error: sailor hf cannot take task $id: sailor hf has no token: $var is set in neither the environment nor $HOME_DIR/.env" \
+    "the refusal must name the missing variable"
+  [ ! -e "$HOME_DIR/state/$id.meta" ] || fail "a refused token sailor spawn must leave no task record"
+  [ ! -s "$LAUNCH_LOG" ] || fail "a refused token sailor spawn must launch nothing"
+
+  printf '%s=%s\n' "$var" "$sentinel" > "$HOME_DIR/.env"
+  out=$(unset "$var"; run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR" --harness opencode --model org/routed-model:cheapest --sailor hf)
+  status=$?
+  expect_code 0 "$status" "a token sailor spawn should succeed once the token is in .env"$'\n'"$out"
+  launch=$(cat "$LAUNCH_LOG")
+  assert_contains "$launch" "\"hf\":{\"npm\":\"@ai-sdk/openai-compatible\",\"name\":\"hf\",\"options\":{\"baseURL\":\"https://router.huggingface.co/v1\",\"apiKey\":\"{env:$var}\"}" \
+    "the provider entry must point OpenCode at the variable"
+  assert_contains "$launch" "' '$ROOT/bin/fm-sailor.sh' with-token '$var' '$HOME_DIR/.env' -- '$ROOT/bin/fm-sandbox-exec.sh' 'run' " \
+    "the token must be read when the launch runs, outside and before the sandbox"
+  assert_contains "$launch" "'--connect' 'https://router.huggingface.co/v1'" "the sandbox must reach the external sailor's endpoint"
+  assert_contains "$launch" " -- opencode --model 'hf/org/routed-model:cheapest' --prompt" "OpenCode must address the routed model through the sailor"
+  assert_not_contains "$launch" "$sentinel" "the token must not be in the launch"
+  assert_not_contains "$out" "$sentinel" "the spawn must not print the token"
+  leaks=$(grep -rl --exclude=.env -- "$sentinel" "$HOME_DIR" 2>/dev/null)
+  [ -z "$leaks" ] || fail "the token must be written nowhere in the home but .env: $leaks"
+  pass "a token sailor spawn refuses without its token and otherwise reads it at launch, outside the sandbox, with no copy in the launch or the home"
+}
+
 test_sandbox_that_cannot_run_refuses_the_sailor() {
   local rec id out status
   id=profile-sailor-nosandbox-x2
@@ -2151,6 +2193,7 @@ test_opencode_restricted_profile_reaches_the_launch_and_brief
 test_opencode_invalid_permission_profile_refuses_before_endpoint_or_metadata
 test_non_opencode_harness_ignores_the_opencode_permission_profile
 test_sandboxed_sailor_launch_runs_inside_the_sandbox
+test_token_sailor_launch_reads_its_token_at_launch
 test_sandbox_that_cannot_run_refuses_the_sailor
 test_restricted_sailor_requires_the_sandbox
 test_sandbox_leaves_non_sailor_opencode_launches_alone

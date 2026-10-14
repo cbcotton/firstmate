@@ -2,7 +2,8 @@
 # tests/fm-sailor.test.sh - named local sailors through bin/fm-sailor.sh:
 # map validation, the placeholder lock, the capacity count, the endpoint probe,
 # and the OpenCode provider fragment, then the warm-up, the status view, and
-# the registry commands. The first cases use a fake curl that logs every URL it
+# the registry commands, and a sailor's bearer token and unlisted model ids.
+# The first cases use a fake curl that logs every URL it
 # is asked for, so a test can prove a probe did or did not happen; the later
 # cases run the real curl against a local HTTP stub standing in for the
 # sailor's model server. docs/configuration.md ("Named sailors") owns the contract.
@@ -237,7 +238,8 @@ test_validate_is_silent_without_sailors_and_names_the_first_problem() {
 # /v1/chat/completions from control files in STUB_DIR and logs one line per
 # request to STUB_DIR/requests.log, so a case can drive loaded versus listed
 # models, a failed warm-up, and the queue gauges, and prove which requests the
-# script made.
+# script made; STUB_DIR/auth.log gets the same request with the Authorization
+# header it carried, or - for none.
 
 STUB_DIR="$TMP_ROOT/stub"
 STUB_PID=
@@ -278,6 +280,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def note(self, line):
         with open(os.path.join(root, "requests.log"), "a") as f:
             f.write(line + "\n")
+        with open(os.path.join(root, "auth.log"), "a") as f:
+            f.write("%s %s\n" % (line.split(" model=")[0], self.headers.get("Authorization") or "-"))
 
     def reply(self, code, body):
         data = body.encode()
@@ -333,6 +337,7 @@ stub_reset() {
   rm -f "$STUB_DIR/metrics.txt" "$STUB_DIR/health.json" "$STUB_DIR/chat.code" "$STUB_DIR/chat.body"
   printf '%s' "${1:-$STUB_MODELS}" > "$STUB_DIR/models.json"
   : > "$STUB_DIR/requests.log"
+  : > "$STUB_DIR/auth.log"
 }
 
 # stub_map: tiller is the stub; flint is a placeholder nothing answers for.
@@ -789,6 +794,192 @@ test_status_probes_every_sailor_at_once_within_the_bound() {
   pass "status probes every sailor at once, so a down sailor adds no time"
 }
 
+# --- sailor tokens -------------------------------------------------------------
+#
+# A sailor's token lives in its home's .env (or the environment) under the
+# variable its auth_env names. The sentinel stands in for a real token, so any
+# copy of it outside .env, the request headers, or a command the test itself
+# hands the value to is a leak.
+
+TOKEN_VAR=FM_TEST_SAILOR_TOKEN
+SENTINEL=fm-sentinel-token-7c1d0e5b
+unset "$TOKEN_VAR"
+
+# token_map: stub_map with tiller taking its token from TOKEN_VAR, and router,
+# a second sailor on the stub that serves model ids its list leaves out.
+token_map() {
+  stub_map | jq --arg v "$TOKEN_VAR" '.sailors.tiller.auth_env = $v
+    | .sailors.router = {endpoint: .sailors.tiller.endpoint, status: "live", models: ["org/routed-model:cheapest"], auth_env: $v, unlisted_models: true}'
+}
+
+set_token() {  # <value>: the case home's .env line for TOKEN_VAR
+  printf '%s=%s\n' "$TOKEN_VAR" "$1" > "$CASE_DIR/.env"
+}
+
+# assert_no_leak <output> <msg>: the sentinel is in neither <output> nor any
+# file of the case home but its .env.
+assert_no_leak() {
+  local leaks
+  assert_not_contains "$1" "$SENTINEL" "$2: the token was printed"
+  leaks=$(grep -rl --exclude=.env -- "$SENTINEL" "$CASE_DIR" 2>/dev/null)
+  [ -z "$leaks" ] || fail "$2: the token was written to $leaks"
+}
+
+test_token_rides_every_request_and_is_never_printed() {
+  local out status lines bearer
+  stub_reset
+  make_stub_case token-plain "$(stub_map)"
+  run_real check tiller qwen-coder >/dev/null
+  expect_code 0 "$?" "a sailor without auth_env must pass as before"
+  assert_equals "GET /v1/models -" "$(cat "$STUB_DIR/auth.log")" "a sailor without auth_env must send no Authorization header"
+
+  stub_reset
+  make_stub_case token "$(token_map)"
+  set_token "$SENTINEL"
+  out=$(run_real check tiller qwen-coder)
+  status=$?
+  expect_code 0 "$status" "a sailor with its token must pass check: $out"
+  out="$out"$'\n'$(run_real status --all)$'\n'$(run_real health)$'\n'$(run_real set-model tiller qwen-next)$'\n'$(run_real list)
+  assert_contains "$out" "sailor tiller lists qwen-next" "set-model must reach a token sailor's model list: $out"
+  assert_contains "$out" "auth_env=$TOKEN_VAR" "list must name the variable"
+  lines=$(wc -l < "$STUB_DIR/auth.log" | tr -d ' ')
+  bearer=$(grep -c " Bearer $SENTINEL\$" "$STUB_DIR/auth.log")
+  [ "$lines" -gt 3 ] || fail "check, status, health, and set-model must each have probed the stub: $(cat "$STUB_DIR/auth.log")"
+  assert_equals "$lines" "$bearer" "every request to a token sailor must carry Authorization: Bearer <token>: $(cat "$STUB_DIR/auth.log")"
+  assert_no_grep "POST" "$STUB_DIR/requests.log" "no probe may ask a token sailor for a completion"
+  assert_no_leak "$out" "check, status, health, set-model, and list"
+
+  : > "$STUB_DIR/auth.log"
+  out=$(env "$TOKEN_VAR=from-the-environment" FM_HOME="$CASE_DIR" FM_CONFIG_OVERRIDE="$CASE_DIR/config" FM_STATE_OVERRIDE="$CASE_DIR/state" \
+    FM_MLX_SERVE_SERVERS="$CASE_DIR/servers.json" "$SAILOR" check tiller qwen-coder 2>&1)
+  expect_code 0 "$?" "a token set in the environment must pass: $out"
+  assert_equals "GET /v1/models Bearer from-the-environment" "$(cat "$STUB_DIR/auth.log")" "the environment's token must win over .env"
+
+  out=$(run_real provider-json tiller qwen-coder)
+  assert_equals "{\"baseURL\":\"$STUB/v1\",\"apiKey\":\"{env:$TOKEN_VAR}\"}" "$(jq -c '.tiller.options' <<<"$out")" \
+    "the provider entry must point OpenCode at the variable, never carry its value"
+  assert_no_leak "$out" "provider-json"
+  pass "a token sailor's every probe carries its bearer token, the environment's over .env's, while output and files never hold it and local sailors send none"
+}
+
+test_missing_token_refuses_naming_only_the_variable() {
+  local out status
+  stub_reset
+  make_stub_case token-missing "$(token_map)"
+  out=$(run_real check tiller qwen-coder)
+  status=$?
+  expect_code 1 "$status" "a token sailor without its token must be refused"
+  assert_equals "refused: sailor tiller has no token: $TOKEN_VAR is set in neither the environment nor $CASE_DIR/.env" "$out" \
+    "the refusal must name the variable and where it was looked for"
+  [ ! -s "$STUB_DIR/requests.log" ] || fail "a sailor without its token must not be probed: $(cat "$STUB_DIR/requests.log")"
+  out=$(run_real health)
+  assert_contains "$out" "tiller down $STUB/v1/models" "a sailor without its token must read down"
+  out=$(run_real status --all)
+  assert_contains "$out" "tiller live no-token endpoint=$STUB/v1 tasks=0/1 auth_env=$TOKEN_VAR" "status must say the token is missing and name its variable"
+  [ ! -s "$STUB_DIR/requests.log" ] || fail "health and status must not probe a sailor without its token: $(cat "$STUB_DIR/requests.log")"
+  out=$(run_real set-model tiller qwen-next)
+  expect_code 1 "$?" "set-model must refuse a live sailor without its token"
+  assert_contains "$out" "refused: sailor tiller has no token: $TOKEN_VAR is set in neither" "the set-model refusal must name the variable"
+  assert_unchanged "the missing-token refusal"
+
+  printf '%s="%s with space"\n' "$TOKEN_VAR" "$SENTINEL" > "$CASE_DIR/.env"
+  out=$(run_real check tiller qwen-coder)
+  expect_code 1 "$?" "a token holding whitespace must be refused"
+  assert_equals "refused: sailor tiller has no token: $TOKEN_VAR holds whitespace or a control character" "$out" "the refusal must say why without the value"
+  [ ! -s "$STUB_DIR/requests.log" ] || fail "a malformed token must never be sent"
+  assert_not_contains "$out" "$SENTINEL" "a malformed token must not be printed"
+  pass "a token sailor without a usable token is refused, down, and no-token, naming its variable and never a value, and is never probed"
+}
+
+test_with_token_hands_the_value_to_the_command_alone() {
+  local out status
+  make_stub_case with-token "$(token_map)"
+  out=$(run_real with-token "$TOKEN_VAR" "$CASE_DIR/.env" -- printenv "$TOKEN_VAR")
+  status=$?
+  expect_code 1 "$status" "with-token must refuse when neither the environment nor the file sets the variable"
+  assert_equals "refused: $TOKEN_VAR is set in neither the environment nor $CASE_DIR/.env, so the sailor's token is missing" "$out" "the refusal must name the variable"
+  set_token "$SENTINEL"
+  out=$(run_real with-token "$TOKEN_VAR" "$CASE_DIR/.env" -- printenv "$TOKEN_VAR")
+  expect_code 0 "$?" "with-token must exec the command"
+  assert_equals "$SENTINEL" "$out" "the command must find the token in its environment"
+  out=$(env "$TOKEN_VAR=from-the-environment" "$SAILOR" with-token "$TOKEN_VAR" "$CASE_DIR/.env" -- printenv "$TOKEN_VAR" 2>&1)
+  assert_equals "from-the-environment" "$out" "the environment's value must win over the file's"
+  run_real with-token 'BAD-NAME' "$CASE_DIR/.env" -- true >/dev/null
+  expect_code 2 "$?" "with-token takes only a variable name"
+  run_real with-token "$TOKEN_VAR" "$CASE_DIR/.env" true >/dev/null
+  expect_code 2 "$?" "with-token needs -- before the command"
+  pass "with-token puts the token in the command's environment, the environment's over the file's, and refuses naming the variable"
+}
+
+test_unlisted_models_lets_a_router_serve_ids_it_does_not_list() {
+  local out status
+  stub_reset
+  make_stub_case unlisted "$(token_map)"
+  set_token "$SENTINEL"
+  out=$(run_real check router org/routed-model:cheapest)
+  status=$?
+  expect_code 0 "$status" "a sailor with unlisted_models must pass for a listed id its endpoint leaves out: $out"
+  assert_contains "$out" "model not in the endpoint's list, which this sailor's unlisted_models allows" "check must say the model was not in the endpoint's list"
+  out=$(run_real status --all)
+  assert_contains "$out" "models=org/routed-model:cheapest(unlisted)" "status must show the unlisted model as unlisted, not missing"
+  out=$(run_real set-model router org/other-model:fastest)
+  expect_code 0 "$?" "set-model must accept an unlisted id on a sailor with unlisted_models: $out"
+  cp "$CASE_DIR/config/crew-dispatch.json" "$CASE_DIR/original.json"
+  rm -f "$CASE_DIR/config/"*.bak-*
+  out=$(run_real set-model tiller org/other-model:fastest)
+  expect_code 1 "$?" "set-model must still refuse an unlisted id on a sailor without unlisted_models"
+  assert_contains "$out" "does not serve org/other-model:fastest" "the refusal must say the endpoint does not serve it"
+  assert_unchanged "the unlisted-model refusal"
+  assert_no_grep "POST" "$STUB_DIR/requests.log" "accepting an unlisted id must never ask for a completion"
+  pass "unlisted_models lets a router serve ids its model list leaves out, with no completion, and only on the sailor that sets it"
+}
+
+test_registry_records_auth_env_and_unlisted_models() {
+  local out status
+  stub_reset
+  make_stub_case registry-token "$(stub_map)"
+  out=$(run_real add hf --endpoint https://router.example.test/v1 --models 'org/model:cheapest' --auth-env "$TOKEN_VAR" --unlisted-models --live)
+  status=$?
+  expect_code 0 "$status" "adding an external token sailor must succeed: $out"
+  assert_equals "{\"endpoint\":\"https://router.example.test/v1\",\"status\":\"live\",\"models\":[\"org/model:cheapest\"],\"auth_env\":\"$TOKEN_VAR\",\"unlisted_models\":true}" \
+    "$(dispatch '.sailors.hf')" "add must record auth_env and unlisted_models"
+  out=$(run_real list)
+  assert_contains "$out" "hf status=live endpoint=https://router.example.test/v1 max_concurrent=1 models=org/model:cheapest auth_env=$TOKEN_VAR unlisted_models=true" "list must show both fields"
+  out=$(run_real set hf --no-auth-env --no-unlisted-models)
+  expect_code 0 "$?" "set must remove both fields: $out"
+  assert_equals '{"endpoint":"https://router.example.test/v1","status":"live","models":["org/model:cheapest"]}' "$(dispatch '.sailors.hf')" "set --no-* must remove exactly those fields"
+  run_real set hf --auth-env OTHER_TOKEN >/dev/null
+  assert_equals '"OTHER_TOKEN"' "$(dispatch '.sailors.hf.auth_env')" "set --auth-env must record the variable"
+  out=$(run_real set hf --auth-env 'not-a-name')
+  expect_code 1 "$?" "a malformed variable name must be refused"
+  assert_contains "$out" "refused: sailor hf auth_env must name an environment variable" "the refusal must carry validate's reason"
+
+  make_stub_case registry-validate "$(stub_map | jq '.sailors.tiller.unlisted_models = "yes"')"
+  out=$(run_real validate)
+  expect_code 1 "$?" "a non-boolean unlisted_models must be invalid"
+  assert_equals "sailor tiller unlisted_models must be true or false" "$out" "validate must name the unlisted_models problem"
+
+  make_stub_case registry-mlx "$(stub_map)"
+  jq -n --arg b "$STUB" '{servers: [{id: "router", kind: "openai", baseURL: $b, modelsPath: "/v1/models", healthPath: "/v1/models", enabled: true}]}' > "$CASE_DIR/servers.json"
+  out=$(run_real add hf --from-mlx-serve router --models 'org/routed-model:cheapest' --auth-env "$TOKEN_VAR" --unlisted-models)
+  expect_code 1 "$?" "registering a token sailor without its token must be refused"
+  assert_contains "$out" "refused: sailor hf has no token: $TOKEN_VAR is set in neither" "the refusal must name the variable"
+  [ ! -s "$STUB_DIR/requests.log" ] || fail "a registration without its token must not reach the server"
+  set_token "$SENTINEL"
+  out=$(run_real add hf --from-mlx-serve router --models 'org/routed-model:cheapest' --auth-env "$TOKEN_VAR")
+  expect_code 1 "$?" "an id the server does not list must still be refused without --unlisted-models"
+  out=$(run_real add hf --from-mlx-serve router --models 'org/routed-model:cheapest' --auth-env "$TOKEN_VAR" --unlisted-models --live)
+  expect_code 0 "$?" "--unlisted-models must let --models name an id the server does not list: $out"
+  assert_equals "{\"endpoint\":\"$STUB/v1\",\"status\":\"live\",\"models\":[\"org/routed-model:cheapest\"],\"auth_env\":\"$TOKEN_VAR\",\"unlisted_models\":true}" \
+    "$(dispatch '.sailors.hf')" "the registered sailor must carry the router's endpoint, the routed id, and both fields"
+  assert_equals "GET /v1/models Bearer $SENTINEL" "$(tail -1 "$STUB_DIR/auth.log")" "the registry's model list must be read with the token"
+  out=$(run_real health)
+  assert_contains "$out" "hf up $STUB/v1/models" "the router's health path must answer with the token"
+  assert_no_leak "$out" "registration and health"
+  assert_no_grep "POST" "$STUB_DIR/requests.log" "registration must never ask for a completion"
+  pass "add and set record auth_env and unlisted_models, and add --from-mlx-serve reads a token router's list with the token and takes its routed ids"
+}
+
 test_live_sailor_serving_the_model_passes_check
 test_endpoint_trailing_slash_is_not_doubled
 test_placeholder_is_refused_without_a_probe
@@ -814,5 +1005,10 @@ test_health_probes_the_mlx_serve_health_path
 test_status_answering_agrees_with_the_health_probe
 test_health_probes_every_sailor_at_once_within_the_bound
 test_status_probes_every_sailor_at_once_within_the_bound
+test_token_rides_every_request_and_is_never_printed
+test_missing_token_refuses_naming_only_the_variable
+test_with_token_hands_the_value_to_the_command_alone
+test_unlisted_models_lets_a_router_serve_ids_it_does_not_list
+test_registry_records_auth_env_and_unlisted_models
 
 echo "# all fm-sailor tests passed"

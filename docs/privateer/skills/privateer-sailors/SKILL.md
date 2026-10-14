@@ -28,6 +28,7 @@ Spawn on that one, with that exact sailor and model.
 | `unknown sailor` or `is not listed for sailor` | You read the file wrong | Read the file again and use a sailor and model it lists |
 | `is a placeholder` | The captain has not switched it on | Skip it; never spawn on it |
 | `is at capacity` | It already runs as many tasks as it may | Try the next candidate; it frees up when one of its tasks is cleaned up |
+| `has no token` | The captain has not set the token variable it names | Try the next candidate, and tell the captain which variable that sailor needs in `$FM_HOME/.env` |
 | `is not answering` | Its server is down or unreachable | Try the next candidate |
 | `does not serve` | The server runs but lacks that model | Try the next candidate |
 

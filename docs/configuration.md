@@ -969,6 +969,7 @@ Every Privateer worker launch clears the environment the same way at its command
 
 OpenCode is isolated: the first mate and every worker read and write OpenCode's config, data, state, and cache under `state/privateer/opencode/` in the home, so the captain's own OpenCode logins, global configuration, and sessions are invisible to them.
 Auto-update is off, session sharing is disabled, and the first mate's configuration pins its model to its sailor as the only provider.
+A sailor's token reaches the first mate and each worker the same way it does outside Privateer: read from the home's `.env` inside the session when OpenCode starts, and handed to OpenCode in its environment alone.
 
 The first mate runs in the helm, `state/privateer/helm/`, which `start` renders afresh from the checkout every time and refuses to start without.
 The helm holds the Privateer rulebook, `docs/privateer/AGENTS.md`, as the first mate's only instructions; the `privateer` agent, `docs/privateer/agents/privateer.md`, in place of OpenCode's build prompt and as the default agent, so a turn a plugin starts, such as the session-start digest or a wake, runs as it too; the skills under `docs/privateer/skills/` as its only skills; a copy of the checkout's OpenCode plugins and slash commands (`.opencode/commands/`, when the checkout has them); and a `bin/` that runs the checkout's scripts by their real paths, so each still finds the checkout as its root.
@@ -1295,7 +1296,7 @@ This section is the single owner of the canonical schema and its per-field seman
 ```json
 {
   "sailors": {
-    "<sailor name>": { "title": "<optional display name>", "host": "<optional machine description>", "endpoint": "<http(s) OpenAI-compatible base URL>", "status": "<live|placeholder>", "models": ["<model id>"], "max_concurrent": 1 }
+    "<sailor name>": { "title": "<optional display name>", "host": "<optional machine description>", "endpoint": "<http(s) OpenAI-compatible base URL>", "status": "<live|placeholder>", "models": ["<model id>"], "max_concurrent": 1, "auth_env": "<optional token variable>", "unlisted_models": false }
   },
   "rules": [
     {
@@ -1380,36 +1381,43 @@ See [`docs/examples/crew-dispatch.json`](examples/crew-dispatch.json) for a star
 
 **Named sailors**
 
-A sailor is a named machine serving local models through an OpenAI-compatible endpoint, so ordinary work can run on it instead of a paid model.
+A sailor is a named OpenAI-compatible endpoint that ordinary work can run on: usually a machine serving local models, and sometimes an external inference service.
 `bin/fm-sailor.sh` owns the checks below and its header owns their mechanics.
 
 - `sailors` maps each sailor's name (lowercase letters, digits, and single dashes) to its `endpoint`, its `status`, and the `models` it may be asked for; `title`, `host`, and `max_concurrent` (default 1) are optional.
 - A sailor may also carry `model_settings`, a map from a listed model to that model's own behavior settings, in OpenCode's field names: a `limit` object holding both `context` and `output` (positive whole numbers), and an `options` object of string, number, or boolean values such as `reasoningEffort` (camelCase), `enable_thinking`, `temperature`, `top_p`, and `top_k`.
   `bin/fm-sailor.sh provider-json` emits them under that model, so every worker launch and the Privateer first mate get the same settings from the same place, whatever the home's global OpenCode configuration says; an entry without `model_settings` launches exactly as before.
   Settings change only at the next launch, so a Privateer first mate needs a restart.
+- A sailor that needs a bearer token names the environment variable holding it in `auth_env`, such as `HF_TOKEN`.
+  The value is read at each use, from the environment when set there and otherwise from the home's gitignored `.env`, and every probe and every model request to that sailor sends it as `Authorization: Bearer <value>`.
+  It never enters `config/crew-dispatch.json`, the OpenCode configuration, a command line, a log, a status line, a task record, a brief, or the ledger: the provider entry holds only `{env:<variable>}`, and each launch hands OpenCode the value in its environment through `bin/fm-sailor.sh with-token`.
+  A sailor whose variable is set nowhere is refused by every check, which names the variable and never a value, and reads as down.
+  `tests/fm-sailor-token-live-e2e.test.sh` re-proves the header against the installed OpenCode, and [`verification/local-sailors.md`](verification/local-sailors.md) records the result.
+- `unlisted_models: true` marks an endpoint that serves model ids its model list leaves out, as a router taking provider-routed ids does; the eligibility check then needs that list to answer but not to name the model.
 - A profile with `sailor` must use the `opencode` harness and name a `model` from that sailor's list; `fm-spawn.sh --sailor` then points the worker's OpenCode at that endpoint.
 - Every sailor launch, a Privateer worker's included, folds OpenCode's system prompt into one system message, keeping every part in order.
   OpenCode sends a second system message whenever a plugin adds system text, such as the global AXI plugins under `~/.config/opencode/plugins/`, and a local chat template that allows one leading system message, as Qwen-family templates do, rejects the request.
   The fold is a worktree plugin that `fm-spawn.sh` writes beside the busy-state plugin; it folds what earlier plugins added and what later ones add, because OpenCode runs plugins in an order it does not document.
   A launch without a sailor drops it, and in a Privateer worker, which loads no global plugins, it changes nothing.
 - A `placeholder` sailor is never dispatched, even when something answers at its address; only the captain changes its status to `live`.
-- A `live` sailor is eligible only while `bin/fm-sailor.sh check <sailor> <model>` passes: its endpoint must answer within a few seconds and list the model, and this home must hold fewer than `max_concurrent` tasks on it.
+- A `live` sailor is eligible only while `bin/fm-sailor.sh check <sailor> <model>` passes: it must have its token when it names one, its endpoint must answer within a few seconds and list the model (or only answer, with `unlisted_models`), and this home must hold fewer than `max_concurrent` tasks on it.
   The capacity count is per home, so homes that share one machine each count only their own tasks.
-- `bin/fm-sailor.sh status` shows each live sailor, or every sailor with `--all`: whether it answers the same health probe the watcher uses (below), this home's tasks on it, the server's running and waiting requests when it reports them, and, when its model list answers, each listed model as loaded, unloaded, or missing.
+- No eligibility, status, or health probe ever asks for a completion: each reads only the model list, an mlx-serve health path, or the server's `/metrics` gauges, so watching a pay-per-token sailor spends nothing.
+- `bin/fm-sailor.sh status` shows each live sailor, or every sailor with `--all`: whether it answers the same health probe the watcher uses (below), or `no-token` when its token is missing, this home's tasks on it, the server's running and waiting requests when it reports them, and, when its model list answers, each listed model as loaded, unloaded, unlisted, or missing.
 - The supervision watcher probes every live sailor on the heartbeat's base interval through `bin/fm-sailor.sh health`, at its mlx-serve server's `healthPath` when `~/.mlx-serve/servers.json` lists a server whose `baseURL` the endpoint lies under, and otherwise at the endpoint's model list.
   It wakes firstmate only when a sailor's state changes, with `check: sailor <name> down` or `check: sailor <name> up`; work routed to a down sailor waits or uses `sailor_fallback`, and firstmate tells the captain only when queued work is stuck on it.
   To scale out, add more mlx-serve servers to that registry, each with its own sailor, and every one is watched the same way.
 - `bin/fm-sailor.sh` also edits the map, from the captain's own shell:
-  - `add` registers a sailor, as a `placeholder` unless `--live`.
+  - `add` registers a sailor, as a `placeholder` unless `--live`; `--auth-env <variable>` and `--unlisted-models` record those fields.
   - `add --from-mlx-serve <server-id>` takes the endpoint and the live model list from that server's entry in the local mlx-serve registry, `~/.mlx-serve/servers.json`; it only reads the registry and never loads, unloads, or starts a server.
-  - `set` changes a sailor's endpoint, title, host, capacity, or status; in a Privateer home it refuses to make the first mate's sailor a `placeholder`.
+  - `set` changes a sailor's endpoint, title, host, capacity, status, `auth_env` (`--auth-env`, `--no-auth-env`), or `unlisted_models` (`--unlisted-models`, `--no-unlisted-models`); in a Privateer home it refuses to make the first mate's sailor a `placeholder`.
   - `set-model` adds a model to a sailor, `--replace <old>` also moves every rule and default profile on that sailor from the old model to the new one, and `--first-mate` moves a [Privateer](#privateer-quarantine-configprivateer) first mate onto it.
   - `set-model --model-limit <context>:<output>` and `--model-options '<json object>'` record the model's `model_settings`, each replacing only the field it names; `--replace` drops the old model's settings with it, and `add` takes no such flags, so a new sailor's settings are a hand edit or a following `set-model`.
   - `retire` removes a sailor and every profile naming it, with any rule or default left without a profile.
 - Each edit writes nothing unless the whole result validates and keeps a dated copy of the file it replaces; `set-model --dry-run` only prints the change, and refuses `--warm`, which would load the model.
   `set-model --replace` and `retire` refuse while a task still runs on what they would remove, and `set-model` refuses a model a live sailor does not serve.
   A change reaches each worker at its next spawn, while running workers keep what they launched with; a Privateer session's egress proxy allows a new or moved endpoint only after [`bin/fm-privateer.sh reload`](#how-a-privateer-session-runs).
-- `set-model --warm` asks the model for one token, so a server that loads models on demand loads it now and a failed load shows up then rather than in a worker's first request.
+- `set-model --warm` asks the model for one token, so a server that loads models on demand loads it now and a failed load shows up then rather than in a worker's first request; it is the one request these commands send that a paid endpoint bills.
 - When every sailor candidate a matched rule or default offers is refused, firstmate uses `sailor_fallback` (one profile object or a non-empty array, never itself a sailor), for example Opus 5.5 in a home orchestrated through Claude Code.
 - Without `sailor_fallback`, sailor work waits in the queue until a sailor answers.
   A home that must never reach Anthropic, such as a Privateer home, declares no `sailor_fallback` and no Claude profile at all ([Privateer quarantine](#privateer-quarantine-configprivateer)).
@@ -1429,6 +1437,24 @@ A sailor is a named machine serving local models through an OpenAI-compatible en
   "sailor_fallback": { "harness": "claude", "model": "claude-opus-5-5" }
 }
 ```
+
+**External sailor: Hugging Face Inference**
+
+Hugging Face's Inference Providers router is OpenAI-compatible at `https://router.huggingface.co/v1`, takes `Authorization: Bearer <token>`, and lists its models at `GET /v1/models`.
+It also routes ids its list leaves out, a Hub model id with a provider or policy suffix such as `<org>/<model>:cheapest`, so its sailor sets `unlisted_models`.
+Put a fine-grained token with the Inference Providers permission in the home's gitignored `.env` as `HF_TOKEN=<token>`, and register the sailor with its model ids as configuration:
+
+```json
+{
+  "sailors": {
+    "hf": { "title": "Hugging Face Inference", "endpoint": "https://router.huggingface.co/v1", "status": "live", "models": ["<org>/<model>:cheapest"], "auth_env": "HF_TOKEN", "unlisted_models": true, "max_concurrent": 1 }
+  },
+  "default": { "harness": "opencode", "sailor": "hf", "model": "<org>/<model>:cheapest" }
+}
+```
+
+When `~/.mlx-serve/servers.json` names the router, `bin/fm-sailor.sh add hf --from-mlx-serve <server-id> --models '<org>/<model>:cheapest' --auth-env HF_TOKEN --unlisted-models --live` writes the same entry.
+Hugging Face bills Inference Providers pay-as-you-go, with monthly included credits on some plans, so every worker request and `set-model --warm` counts against them, while the probes above do not.
 
 **Validation and diagnostics**
 
