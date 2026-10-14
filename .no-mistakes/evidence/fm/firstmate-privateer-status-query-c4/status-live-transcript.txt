@@ -1,0 +1,71 @@
+=== 1. no session, no helpers
+
+$ FM_HOME=$LAB bin/fm-privateer.sh status
+stopped
+[exit 0]
+
+=== 2. session running: real opencode TUI in privateer:firstmate on the home's socket
+--- pane (last 15 non-blank lines) before status:
+                                                                                              ▄
+                                                             █▀▀█ █▀▀█ █▀▀█ █▀▀▄ █▀▀▀ █▀▀█ █▀▀█ █▀▀█
+                                                             █  █ █  █ █▀▀▀ █  █ █    █  █ █  █ █▀▀▀
+                                                             ▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀
+                                           ┃
+                                           ┃  Ask anything… "Fix broken tests"
+                                           ┃
+                                           ┃  Build · Qwen3.8 27B TURBO Fable (mlx-serve) MLX Serve (local)
+                                           ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                                                                                           tab agents  ctrl+p commands
+                                                ● Tip Switch to Plan agent for suggestions without making changes
+  ~/.no-mistakes/worktrees/e74e4e411ceb/01M4WW8MNRZAKKQJV62W31T1QV                                                                                     1.18.33
+
+$ FM_HOME=$LAB bin/fm-privateer.sh status
+running
+turn idle
+[exit 0]
+
+$ FM_HOME=$LAB bin/fm-privateer.sh status
+running
+turn idle
+[exit 0]
+
+CHECK home tree unchanged by status (paths+mtime+ctime): yes
+CHECK first mate pane unchanged by status (nothing typed): yes
+CHECK attached clients on the session socket: 0
+
+=== 3. session running, first mate pane inconclusive (blank pane)
+
+$ FM_HOME=$LAB bin/fm-privateer.sh status
+running
+[exit 0]
+
+=== 4. session gone, real egress proxy left behind
+
+$ FM_HOME=$LAB bin/fm-privateer.sh status
+ended, proxy or record writer left behind
+[exit 0]
+CHECK home tree unchanged by status: yes
+CHECK proxy still alive after status (status stops nothing): yes
+
+=== 5. adversarial: stale pid file naming an unrelated live process
+
+$ FM_HOME=$LAB bin/fm-privateer.sh status
+stopped
+[exit 0]
+/Users/cotton/.no-mistakes/evidence/01M4WW8MNRZAKKQJV62W31T1QV/drive-status.sh: line 60: 72613 Terminated: 15          sleep 600
+
+=== 6. after cleanup
+
+$ FM_HOME=$LAB bin/fm-privateer.sh status
+stopped
+[exit 0]
+
+=== 7. guards
+
+$ FM_HOME=$LAB bin/fm-privateer.sh status extra
+usage: fm-privateer.sh check | inside | launch-env | start | attach | stop [--stow] | status | reload | project [<name>|--clear]
+[exit 2]
+
+$ FM_HOME=$LAB bin/fm-privateer.sh status
+fm-privateer: refused: config/privateer is absent; this launcher reports only on a Privateer home
+[exit 1]

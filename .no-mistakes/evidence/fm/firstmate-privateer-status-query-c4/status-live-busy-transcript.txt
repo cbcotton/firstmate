@@ -1,0 +1,60 @@
+$ bin/fm-privateer.sh status   # before any prompt
+running
+turn idle
+[exit 0]
+t+2s: running turn busy
+t+4s: running turn busy
+t+6s: running turn busy
+t+8s: running turn busy
+t+10s: running turn busy
+t+12s: running turn busy
+t+14s: running turn busy
+t+16s: running turn busy
+t+18s: running turn busy
+t+20s: running turn busy
+t+22s: running turn busy
+t+24s: running turn busy
+t+26s: running turn busy
+t+28s: running turn busy
+t+30s: running turn busy
+t+32s: running turn busy
+t+34s: running turn busy
+t+36s: running turn busy
+t+38s: running turn busy
+t+40s: running turn busy
+t+42s: running turn busy
+t+44s: running turn busy
+t+46s: running turn busy
+t+48s: running turn busy
+t+50s: running turn busy
+t+52s: running turn busy
+t+54s: running turn busy
+t+56s: running turn busy
+t+58s: running turn busy
+t+60s: running turn busy
+t+62s: running turn busy
+t+64s: running turn busy
+t+66s: running turn busy
+t+68s: running turn busy
+t+70s: running turn busy
+t+72s: running turn busy
+t+74s: running turn busy
+t+76s: running turn busy
+t+78s: running turn busy
+t+80s: running turn busy
+--- pane footer during a busy read:
+     one hundred eighty-four
+     ▣  Plan · Qwen3.8 27B TURBO Fable (mlx-serve)
+  ┃
+  ┃                                                                                                                     /private/var/folders/3c/
+  ┃                                                                                                                     4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-
+  ┃  Plan · Qwen3.8 27B TURBO Fable (mlx-serve) MLX Serve (local)                                                       scratch.oOdrtE
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+   ⬝⬝⬝⬝⬝⬝⬝⬝  esc interrupt                                                               tab agents  ctrl+p commands    • OpenCode 1.18.33
+--- final pane footer:
+  ┃
+  ┃                                                                                                                     /private/var/folders/3c/
+  ┃                                                                                                                     4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-
+  ┃  Plan · Qwen3.8 27B TURBO Fable (mlx-serve) MLX Serve (local)                                                       scratch.oOdrtE
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+   ⬝⬝⬝⬝⬝⬝⬝⬝  esc interrupt                                                               tab agents  ctrl+p commands    • OpenCode 1.18.33
