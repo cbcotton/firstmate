@@ -1,0 +1,6 @@
+ok - add --from-mlx-serve takes the endpoint and live models from servers.json and the server, never writing the registry or touching the server
+ok - health probes an mlx-serve sailor at its server's healthPath and any other sailor at its model list
+ok - status reads a sailor as answering by the same probe health uses, its mlx-serve healthPath
+ok - health probes every sailor at once, so the whole run stays within about one probe timeout
+ok - status probes every sailor at once, so a down sailor adds no time
+# all fm-sailor tests passed

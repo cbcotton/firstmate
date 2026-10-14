@@ -1,0 +1,28 @@
+### AFTER (af45123b): status, 1 answering + 4 unreachable live sailors + 1 placeholder
+$ env FM_HOME=/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.tlItEI bin/fm-sailor.sh status
+studio live answering endpoint=http://127.0.0.1:18765/v1 tasks=0/2 running=2 waiting=1 models=qwen(loaded),gemma(unloaded)
+down1 live not-answering endpoint=http://10.255.255.1/v1 tasks=0/1
+down2 live not-answering endpoint=http://10.255.255.2/v1 tasks=0/1
+down3 live not-answering endpoint=http://10.255.255.3/v1 tasks=0/1
+down4 live not-answering endpoint=http://10.255.255.4/v1 tasks=0/1
+exit=0 elapsed=3.19s
+
+### BEFORE (1ecebf04 base): same home, same command
+$ env FM_HOME=/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.tlItEI FM_ROOT_OVERRIDE=/Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M4WW381F4FZK7F51NPB86P5H /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/tmp.BVDABGzvOo/fm-sailor.sh status
+studio live answering endpoint=http://127.0.0.1:18765/v1 tasks=0/2 running=2 waiting=1 models=qwen(loaded),gemma(unloaded)
+down1 live not-answering endpoint=http://10.255.255.1/v1 tasks=0/1
+down2 live not-answering endpoint=http://10.255.255.2/v1 tasks=0/1
+down3 live not-answering endpoint=http://10.255.255.3/v1 tasks=0/1
+down4 live not-answering endpoint=http://10.255.255.4/v1 tasks=0/1
+exit=0 elapsed=12.74s
+
+### AFTER: status --all (placeholder included, registry order kept)
+$ env FM_HOME=/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.tlItEI bin/fm-sailor.sh status --all
+studio live answering endpoint=http://127.0.0.1:18765/v1 tasks=0/2 running=2 waiting=1 models=qwen(loaded),gemma(unloaded)
+down1 live not-answering endpoint=http://10.255.255.1/v1 tasks=0/1
+down2 live not-answering endpoint=http://10.255.255.2/v1 tasks=0/1
+down3 live not-answering endpoint=http://10.255.255.3/v1 tasks=0/1
+down4 live not-answering endpoint=http://10.255.255.4/v1 tasks=0/1
+spare placeholder not-answering endpoint=http://10.255.255.5/v1 tasks=0/1
+exit=0 elapsed=3.24s
+

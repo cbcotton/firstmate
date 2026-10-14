@@ -1,0 +1,286 @@
+{
+  "schema": "fm-fleet-snapshot.v1",
+  "generated": "2026-10-14T09:34:34Z",
+  "fm_home": "/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.tlItEI",
+  "roots": {
+    "fm_root": "/Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M4WW381F4FZK7F51NPB86P5H",
+    "state": "/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.tlItEI/state",
+    "data": "/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.tlItEI/data",
+    "config": "/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.tlItEI/config",
+    "projects": "/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.tlItEI/projects"
+  },
+  "backlog": {
+    "path": "/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.tlItEI/data/backlog.md",
+    "present": false,
+    "records": []
+  },
+  "tasks": [
+    {
+      "id": "t1",
+      "kind": "ship",
+      "harness": "",
+      "mode": "",
+      "yolo": "",
+      "branch": null,
+      "project": "",
+      "spawn_gen": null,
+      "backend": "tmux",
+      "remote": null,
+      "paths": {
+        "meta": {
+          "path": "/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.tlItEI/state/t1.meta",
+          "present": true
+        },
+        "status_log": {
+          "path": "/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.tlItEI/state/t1.status",
+          "present": false,
+          "kind": "event_history",
+          "last_event": {
+            "state": "",
+            "note": "",
+            "raw": "",
+            "age_seconds": null
+          }
+        },
+        "worktree": {
+          "path": null,
+          "present": false
+        },
+        "home": {
+          "path": null,
+          "present": false
+        },
+        "report": {
+          "path": "/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.tlItEI/data/t1/report.md",
+          "present": false
+        }
+      },
+      "secondmate_projects": [],
+      "current_state": {
+        "state": "unknown",
+        "source": "none",
+        "detail": "worktree gone (torn down?)",
+        "raw": "state: unknown · source: none · worktree gone (torn down?)",
+        "observed_at": "2026-10-14T09:34:34Z",
+        "freshness": "fresh"
+      },
+      "endpoint": {
+        "target": null,
+        "exists": null,
+        "agent_alive": "not_checked",
+        "status": "unknown",
+        "observed_at": "2026-10-14T09:34:34Z",
+        "freshness": "fresh"
+      },
+      "pr": {
+        "url": null,
+        "source": "absent",
+        "head": null
+      },
+      "hints": {
+        "pending_decision": false,
+        "blocked_event": false,
+        "open_decisions": [],
+        "scout_report_present": false,
+        "last_event_text": "",
+        "decision_card": null
+      },
+      "actions": {
+        "watch": "bin/fm-peek.sh fm-t1",
+        "steer": "bin/fm-send.sh fm-t1 '<instruction>'",
+        "return_channel_note": null
+      },
+      "backlog": null
+    },
+    {
+      "id": "t2",
+      "kind": "ship",
+      "harness": "",
+      "mode": "",
+      "yolo": "",
+      "branch": null,
+      "project": "",
+      "spawn_gen": null,
+      "backend": "tmux",
+      "remote": null,
+      "paths": {
+        "meta": {
+          "path": "/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.tlItEI/state/t2.meta",
+          "present": true
+        },
+        "status_log": {
+          "path": "/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.tlItEI/state/t2.status",
+          "present": false,
+          "kind": "event_history",
+          "last_event": {
+            "state": "",
+            "note": "",
+            "raw": "",
+            "age_seconds": null
+          }
+        },
+        "worktree": {
+          "path": null,
+          "present": false
+        },
+        "home": {
+          "path": null,
+          "present": false
+        },
+        "report": {
+          "path": "/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.tlItEI/data/t2/report.md",
+          "present": false
+        }
+      },
+      "secondmate_projects": [],
+      "current_state": {
+        "state": "unknown",
+        "source": "none",
+        "detail": "worktree gone (torn down?)",
+        "raw": "state: unknown · source: none · worktree gone (torn down?)",
+        "observed_at": "2026-10-14T09:34:34Z",
+        "freshness": "fresh"
+      },
+      "endpoint": {
+        "target": null,
+        "exists": null,
+        "agent_alive": "not_checked",
+        "status": "unknown",
+        "observed_at": "2026-10-14T09:34:34Z",
+        "freshness": "fresh"
+      },
+      "pr": {
+        "url": null,
+        "source": "absent",
+        "head": null
+      },
+      "hints": {
+        "pending_decision": false,
+        "blocked_event": false,
+        "open_decisions": [],
+        "scout_report_present": false,
+        "last_event_text": "",
+        "decision_card": null
+      },
+      "actions": {
+        "watch": "bin/fm-peek.sh fm-t2",
+        "steer": "bin/fm-send.sh fm-t2 '<instruction>'",
+        "return_channel_note": null
+      },
+      "backlog": null
+    }
+  ],
+  "main_inventory": {
+    "valid": true,
+    "reason": null,
+    "orphan_in_flight": [],
+    "unstructured_current_count": 0
+  },
+  "contributions": {
+    "known": 0,
+    "checked": 0,
+    "counts": {
+      "captain": 0,
+      "fleet": 0,
+      "maintainer": 0,
+      "nobody": 0
+    },
+    "unmeasured": 0,
+    "complete": false,
+    "proven_clear": false,
+    "stale_verdicts": 0,
+    "missing_verdicts": 0,
+    "unreadable_records": 1,
+    "valid_until": 900,
+    "captain": [],
+    "captain_omitted": 0
+  },
+  "scout_reports": [],
+  "charts": [],
+  "sailors": [
+    {
+      "name": "studio",
+      "status": "live",
+      "answering": true,
+      "endpoint": "http://127.0.0.1:18765/v1",
+      "tasks": 1,
+      "capacity": 2,
+      "line": "studio live answering endpoint=http://127.0.0.1:18765/v1 tasks=1/2 running=2 waiting=1 models=qwen(loaded),gemma(unloaded)"
+    },
+    {
+      "name": "down1",
+      "status": "live",
+      "answering": false,
+      "endpoint": "http://10.255.255.1/v1",
+      "tasks": 0,
+      "capacity": 1,
+      "line": "down1 live not-answering endpoint=http://10.255.255.1/v1 tasks=0/1"
+    },
+    {
+      "name": "down2",
+      "status": "live",
+      "answering": false,
+      "endpoint": "http://10.255.255.2/v1",
+      "tasks": 1,
+      "capacity": 1,
+      "line": "down2 live not-answering endpoint=http://10.255.255.2/v1 tasks=1/1"
+    },
+    {
+      "name": "down3",
+      "status": "live",
+      "answering": false,
+      "endpoint": "http://10.255.255.3/v1",
+      "tasks": 0,
+      "capacity": 1,
+      "line": "down3 live not-answering endpoint=http://10.255.255.3/v1 tasks=0/1"
+    },
+    {
+      "name": "down4",
+      "status": "live",
+      "answering": false,
+      "endpoint": "http://10.255.255.4/v1",
+      "tasks": 0,
+      "capacity": 1,
+      "line": "down4 live not-answering endpoint=http://10.255.255.4/v1 tasks=0/1"
+    }
+  ],
+  "privateer": {
+    "active": false,
+    "first_mate": null,
+    "active_project": null
+  },
+  "secondmate_current": {
+    "registry": {
+      "present": false,
+      "available": true,
+      "complete": true,
+      "reason": null,
+      "provenance": "registered-table",
+      "path": "/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.tlItEI/data/secondmates.md",
+      "freshness": {
+        "status": "fresh",
+        "observed_at": "2026-10-14T09:34:34Z"
+      },
+      "records": [],
+      "input_truncated": false,
+      "records_truncated": false,
+      "reasons": [],
+      "lines_in_window": 0,
+      "records_in_window": 0
+    },
+    "records": [],
+    "total_registered": 0,
+    "total": 0,
+    "shown": 0,
+    "truncated": 0
+  },
+  "secondmate_landed": {
+    "records": [],
+    "truncated": [],
+    "unreadable": [],
+    "partial": []
+  },
+  "secondmate_guidance": {
+    "note": "For kind=secondmate, bearings selects validated structured state from that registered home; parent events and bounded terminal evidence are fallback-only supplements and never current-state authority."
+  }
+}
