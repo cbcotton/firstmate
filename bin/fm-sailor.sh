@@ -784,7 +784,7 @@ report_effects() {
     echo "first mate: restart the Privateer session to switch (fm-privateer.sh stop, then start; stop waits until no task is in flight, $(task_count) now)"
   fi
   if ! cmp -s <(jq -c '[(.sailors // {})[] | .endpoint] | sort' "$WORK/current.json") <(jq -c '[(.sailors // {})[] | .endpoint] | sort' "$FILE"); then
-    echo "egress: a running Privateer session allows a new endpoint only after fm-privateer.sh stop and start"
+    echo "egress: a running Privateer session allows a new endpoint only after fm-privateer.sh reload"
   fi
   if [ -s "$WORK/after" ]; then
     echo "note: the Privateer quarantine still reports:"
