@@ -306,6 +306,8 @@ test_grades_and_spend_choose_through_pick() {
   expect_code 0 "$?" "--spend must let the paid sailor take this one task"$'\n'"$out"
   track "$out"
   assert_contains "$out" "on lookout/coder" "the paid specialist must take the task with --spend"
+  track "$out"
+  assert_grep 'spend=allowed' "$HOME_DIR/state/$ID.meta" "the spawn must record the spend go the front door passed"
 
   out=$(run_helm scout --rule 1 app weigh the design)
   expect_code 0 "$?" "a rule allowing spend must start the scout"$'\n'"$out"

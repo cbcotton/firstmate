@@ -1481,6 +1481,7 @@ A graded sailor therefore lists exactly one model.
 - A repeated `--grade` raises the floor to the highest one given, which is how the captain asks a stronger sailor for one task; an ungraded sailor is never picked by grade.
 - `facets` optionally lists a sailor's role capabilities as lowercase words; `helm` marks a sailor fit to run the Privateer first mate, and `pick --facet <facet>` keeps only sailors that list it.
 - A sailor marked `"paid": true` bills per token, so it is chosen only when the matched rule says `"spend": "allowed"` or the captain okays spend for that one task; `pick` weighs it only with `--spend`.
+  `fm-spawn.sh` refuses to launch on it without `--spend` too, records `spend=allowed` on the task, and keeps that go when a relaunch stays on the same sailor.
 - When the work's reasoning class exceeds every live sailor's grade, the sailor candidates yield nothing, and `sailor_fallback` applies or the work waits.
 - A grade outside the four, a graded sailor listing several models, a grade profile that names a model or a sailor, or a rule `spend` other than `"allowed"` is a configuration error that `bin/fm-sailor.sh validate` reports.
 

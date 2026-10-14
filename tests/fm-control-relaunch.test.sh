@@ -772,6 +772,20 @@ test_same_harness_relaunch_keeps_the_sailor() {
   pass "fm-control relaunch: a same-harness relaunch keeps the task on its sailor, capacity counting it only once"
 }
 
+test_same_harness_relaunch_keeps_a_paid_sailors_spend() {
+  local dir out rc
+  dir=$(new_case paidsailor rl-paid)
+  add_sailor_task "$dir" rl-paid
+  printf '%s\n' '{"sailors":{"tiller":{"endpoint":"http://127.0.0.1:11234/v1","status":"live","models":["qwen-coder"],"paid":true}}}' \
+    > "$dir/home/config/crew-dispatch.json"
+  printf 'spend=allowed\n' >> "$dir/home/state/rl-paid.meta"
+  out=$(run_control "$dir" rl-paid relaunch --note "same paid sailor"); rc=$?
+  expect_code 0 "$rc" "a same-harness relaunch must keep the spend go the task launched with"$'\n'"$out"
+  [ "$(meta_field "$dir" rl-paid sailor)" = tiller ] || fail "the paid sailor should carry across a same-harness relaunch"
+  [ "$(grep -c '^spend=allowed$' "$dir/home/state/rl-paid.meta")" = 1 ] || fail "the record must keep the spend go exactly once"
+  pass "fm-control relaunch: a same-harness relaunch keeps a paid sailor's recorded spend go"
+}
+
 test_escalation_off_a_sailor_drops_it() {
   local dir out rc
   dir=$(new_case escalate rl-escalate)
@@ -2452,6 +2466,7 @@ test_harness_switch_resolves_a_prefixed_recorded_harness
 test_prefixed_recorded_harness_requires_explicit_replacement
 test_same_harness_relaunch_keeps_the_profile_axes
 test_same_harness_relaunch_keeps_the_sailor
+test_same_harness_relaunch_keeps_a_paid_sailors_spend
 test_escalation_off_a_sailor_drops_it
 test_native_ultra_relaunch_preserves_profile_and_rejects_before_stop
 test_signed_out_worker_account_pin_refuses_before_stop

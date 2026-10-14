@@ -36,8 +36,9 @@
 #      sailor and model;
 #   5. spawn with bin/fm-spawn.sh <id> <project> --scout, or --mode local-only
 #      --yolo <the project's registered yolo> --branch-prefix <prefix> for a
-#      ship, plus --harness opencode --sailor <sailor> --model <model> and the
-#      profile's --effort when it names one.
+#      ship, plus --harness opencode, --spend when spend is allowed,
+#      --sailor <sailor> --model <model>, and the profile's --effort when it
+#      names one.
 # When every candidate is refused, or the spawn refuses, the row stays Queued
 # with its instructions written, and the output names the bin/fm-spawn.sh call
 # of step 5 that starts it, with the candidates in order when none answered.
@@ -359,6 +360,7 @@ launch() {
     args+=(--scout)
   fi
   args+=(--harness opencode)
+  [ -z "$SPEND" ] || args+=(--spend)
   while IFS=$'\x1f' read -r type value model effort; do
     [ -n "$type" ] || continue
     if [ "$type" = grade ]; then

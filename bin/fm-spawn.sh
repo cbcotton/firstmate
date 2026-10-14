@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Spawn a direct report: a crewmate in a treehouse or Orca worktree, or a
 # secondmate in its isolated firstmate home.
-# Usage: fm-spawn.sh <task-id> <project-dir> --mode <no-mistakes|direct-PR|local-only> --yolo <on|off> [--branch-prefix <prefix>] [--harness <name>|harness|launch-command] [--model <name>] [--effort <level>] [--sailor <name>] [--backend <name>]
-#        fm-spawn.sh <task-id> <project-dir> --scout [--harness <name>|harness|launch-command] [--model <name>] [--effort <level>] [--sailor <name>] [--backend <name>]
+# Usage: fm-spawn.sh <task-id> <project-dir> --mode <no-mistakes|direct-PR|local-only> --yolo <on|off> [--branch-prefix <prefix>] [--harness <name>|harness|launch-command] [--model <name>] [--effort <level>] [--sailor <name> [--spend]] [--backend <name>]
+#        fm-spawn.sh <task-id> <project-dir> --scout [--harness <name>|harness|launch-command] [--model <name>] [--effort <level>] [--sailor <name> [--spend]] [--backend <name>]
 #        fm-spawn.sh <task-id> [<firstmate-home>] [--harness <name>|harness|launch-command] [--model <name>] [--effort <level>] [--backend <name>] --secondmate
 #   --mode and --yolo are this task's delivery contract, REQUIRED for every ship
 #   spawn and refused on --scout and --secondmate spawns. Firstmate resolves both
@@ -97,8 +97,12 @@
 #   from config/crew-dispatch.json (docs/configuration.md "Named sailors"). It
 #   requires --harness opencode and a --model listed for that sailor; without
 #   --model it takes the sailor's one listed model and refuses a sailor that
-#   lists several. It refuses before any endpoint, worktree, or record exists unless
-#   `bin/fm-sailor.sh check` passes. The launch's OPENCODE_CONFIG_CONTENT then
+#   lists several. It refuses before any endpoint, worktree, or record exists
+#   unless `bin/fm-sailor.sh pick --sailor <name> --model <model>` passes, so a
+#   sailor marked paid launches only with --spend, which the caller passes when
+#   the matched rule allows spend or the captain okays it for this one task;
+#   the record then gets spend=allowed, and a relaunch that keeps the recorded
+#   sailor keeps it. The launch's OPENCODE_CONFIG_CONTENT then
 #   carries the sailor as its own provider (bin/fm-sailor.sh provider-json),
 #   OpenCode receives --model <sailor>/<model>, any effort is recorded but
 #   omitted because the sailor's server sets reasoning depth, and the record
@@ -709,6 +713,8 @@ HARNESS_SET=0
 MODEL_SET=0
 EFFORT_SET=0
 SAILOR_SET=0
+SPEND=0
+SPEND_SET=0
 BACKEND_SET=0
 MODE_SET=0
 YOLO_SET=0
@@ -800,6 +806,10 @@ for a in "$@"; do
     SAILOR=${a#--sailor=}
     SAILOR_SET=1
     ;;
+  --spend)
+    SPEND=1
+    SPEND_SET=1
+    ;;
   --backend) want_value=backend ;;
   --backend=*)
     BACKEND_ARG=${a#--backend=}
@@ -826,7 +836,7 @@ for a in "$@"; do
     TRACEPARENT_SET=1
     ;;
   --*)
-    echo "error: unknown flag '$a'; accepted flags: --scout --secondmate --relaunch --harness --model --effort --sailor --backend --mode --yolo --branch-prefix --traceparent (the project is a positional argument, never a flag)" >&2
+    echo "error: unknown flag '$a'; accepted flags: --scout --secondmate --relaunch --harness --model --effort --sailor --spend --backend --mode --yolo --branch-prefix --traceparent (the project is a positional argument, never a flag)" >&2
     exit 1
     ;;
   *) POS+=("$a") ;;
@@ -1536,6 +1546,7 @@ if [ "${#POS[@]}" -gt 0 ] && [ "${POS[0]}" != "$idpart" ] && case "$idpart" in *
   [ -z "$MODEL" ] || shared_args+=(--model "$MODEL")
   [ -z "$EFFORT" ] || shared_args+=(--effort "$EFFORT")
   [ -z "$SAILOR" ] || shared_args+=(--sailor "$SAILOR")
+  [ "$SPEND" = 0 ] || shared_args+=(--spend)
   [ -z "$BACKEND_ARG" ] || shared_args+=(--backend "$BACKEND_ARG")
   # One delivery contract applies to every pair in a batch, exactly like the shared
   # harness. Each pair still re-validates it against its own brief, so a batch
@@ -2460,6 +2471,11 @@ if [ "$SAILOR_SET" -eq 0 ] && [ "$RELAUNCH" -eq 1 ] && [ "$HARNESS" = opencode ]
     MODEL=$RELAUNCH_SAILOR_MODEL
   fi
 fi
+# A relaunch on the recorded sailor keeps the spend go it launched with.
+if [ "$SPEND_SET" -eq 0 ] && [ "$RELAUNCH" -eq 1 ] && [ -n "$SAILOR" ] &&
+  [ "$SAILOR" = "$(fm_meta_get "$RELAUNCH_META" sailor)" ] && [ "$(fm_meta_get "$RELAUNCH_META" spend)" = allowed ]; then
+  SPEND=1
+fi
 # OpenCode permission profile (header above; docs/configuration.md "OpenCode
 # permission profile"). Resolved before any endpoint, worktree, or record exists,
 # so an invalid selector refuses the spawn. A secondmate is a firstmate primary
@@ -2475,6 +2491,10 @@ if [ "$HARNESS" = opencode ] && [ "$RAW_LAUNCH" = 0 ] && [ "$KIND" != secondmate
 fi
 SAILOR_PROVIDER_JSON=
 SAILOR_AUTH_ENV=
+[ "$SPEND_SET" -eq 0 ] || [ -n "$SAILOR" ] || {
+  echo "error: --spend applies only with --sailor; it lets a paid sailor take this one task" >&2
+  exit 1
+}
 if [ -n "$SAILOR" ]; then
   [ "$KIND" != secondmate ] || {
     echo "error: --sailor applies to crewmate and scout spawns only; a secondmate runs its own home" >&2
@@ -2484,24 +2504,16 @@ if [ -n "$SAILOR" ]; then
     echo "error: --sailor requires --harness opencode, the one harness that takes a sailor's endpoint" >&2
     exit 1
   }
-  if [ -z "$MODEL" ] || [ "$MODEL" = default ]; then
-    SAILOR_MODELS=$(jq -r --arg s "$SAILOR" '.sailors[$s].models // [] | if type == "array" then .[] else empty end' "$CONFIG/crew-dispatch.json" 2>/dev/null)
-    case "$SAILOR_MODELS" in
-      '')
-        echo "error: --sailor without --model takes the sailor's one model, but config/crew-dispatch.json lists none for sailor $SAILOR" >&2
-        exit 1
-        ;;
-      *$'\n'*)
-        echo "error: --sailor requires --model when the sailor lists several models; $SAILOR lists $(printf '%s' "$SAILOR_MODELS" | paste -sd, - | sed 's/,/, /g')" >&2
-        exit 1
-        ;;
-    esac
-    MODEL=$SAILOR_MODELS
-  fi
-  if ! SAILOR_CHECK=$(FM_HOME="$FM_HOME" FM_CONFIG_OVERRIDE="$CONFIG" FM_STATE_OVERRIDE="$STATE" "$SCRIPT_DIR/fm-sailor.sh" check "$SAILOR" "$MODEL" --task "$ID" 2>&1); then
+  # pick is the one owner of the sailor gates: the one-model rule, the spend
+  # go for a paid sailor, and check.
+  SAILOR_PICK_ARGS=(pick --sailor "$SAILOR" --task "$ID")
+  [ -z "$MODEL" ] || [ "$MODEL" = default ] || SAILOR_PICK_ARGS+=(--model "$MODEL")
+  [ "$SPEND" = 0 ] || SAILOR_PICK_ARGS+=(--spend)
+  if ! SAILOR_CHECK=$(FM_HOME="$FM_HOME" FM_CONFIG_OVERRIDE="$CONFIG" FM_STATE_OVERRIDE="$STATE" "$SCRIPT_DIR/fm-sailor.sh" "${SAILOR_PICK_ARGS[@]}" 2>&1); then
     echo "error: sailor $SAILOR cannot take task $ID: ${SAILOR_CHECK#refused: }" >&2
     exit 1
   fi
+  MODEL=${SAILOR_CHECK#* }
   SAILOR_PROVIDER_JSON=$(FM_CONFIG_OVERRIDE="$CONFIG" FM_STATE_OVERRIDE="$STATE" "$SCRIPT_DIR/fm-sailor.sh" provider-json "$SAILOR" "$MODEL") || {
     echo "error: sailor $SAILOR's OpenCode provider entry could not be built" >&2
     exit 1
@@ -5187,7 +5199,7 @@ SPAWN_META_PATH=$SPAWN_META_TMP
 preserve_relaunch_meta() {
   awk -F= '
     BEGIN {
-      split("window endpoint_task_id worktree project harness kind mode yolo branch tasktmp model effort sailor sandbox account account_provider busy_gen spawn_gen traceparent backend herdr_session herdr_workspace_id herdr_tab_id herdr_pane_id zellij_session zellij_tab_id zellij_pane_id orca_worktree_id terminal cmux_workspace_id cmux_surface_id home projects control_relaunch_tx", keys, " ")
+      split("window endpoint_task_id worktree project harness kind mode yolo branch tasktmp model effort sailor spend sandbox account account_provider busy_gen spawn_gen traceparent backend herdr_session herdr_workspace_id herdr_tab_id herdr_pane_id zellij_session zellij_tab_id zellij_pane_id orca_worktree_id terminal cmux_workspace_id cmux_surface_id home projects control_relaunch_tx", keys, " ")
       for (i in keys) owned[keys[i]] = 1
     }
     !($1 in owned)
@@ -5207,6 +5219,7 @@ spawn_compose_meta() {
   echo "model=${MODEL:-default}"
   echo "effort=${EFFORT:-default}"
   [ -z "$SAILOR" ] || echo "sailor=$SAILOR"
+  [ -z "$SAILOR" ] || [ "$SPEND" = 0 ] || echo "spend=allowed"
   [ "$SAILOR_SANDBOX" = 0 ] || echo "sandbox=seatbelt"
   # The dispatch stamp a task-scoped permission grant binds to
   # (bin/fm-permission-grant.sh): written once, kept across relaunches, so a
