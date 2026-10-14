@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# fm-sailor.sh - named local sailors: the `sailors` map in config/crew-dispatch.json.
+# fm-sailor.sh - named sailors: the `sailors` map in config/crew-dispatch.json.
 #
 # docs/configuration.md ("Crew dispatch profiles", "Named sailors") owns the
 # schema and what firstmate does with each answer. This header owns the checks:

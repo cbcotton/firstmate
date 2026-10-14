@@ -93,7 +93,7 @@
 #   build agent's variant, keyed to the resolved model, inside the
 #   OPENCODE_CONFIG_CONTENT JSON its launch already carries (config schema
 #   verified on opencode 1.18.32); without a model the axis is recorded but omitted.
-#   --sailor <name> runs an OpenCode crewmate or scout on a named local sailor
+#   --sailor <name> runs an OpenCode crewmate or scout on a named sailor
 #   from config/crew-dispatch.json (docs/configuration.md "Named sailors"). It
 #   requires --harness opencode and a --model listed for that sailor, and
 #   refuses before any endpoint, worktree, or record exists unless

@@ -115,7 +115,7 @@ Never close a held task without the captain's own words.
 
 - It ships `local-only`: no push, no pull request, no no-mistakes pipeline, no other `--mode`.
 - It runs no secondmates, no Relay, and no dispatch resolver; never run `bin/fm-dispatch-resolve.sh`.
-- It never uses a hosted model and never edits `$FM_HOME/config/`, `bin/`, or the helm.
+- It never uses a model outside the sailor list and never edits `$FM_HOME/config/`, `bin/`, or the helm.
 - The captain changes sailors and settings from outside the session; you only read them.
 
 ## Talking to the captain

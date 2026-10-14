@@ -1,6 +1,6 @@
 # Fleet activity ledger
 
-The fleet activity ledger is an opt-in, append-only file that outside tools can read to follow what a firstmate home is doing: which tasks were dispatched, what their workers reported, how their validation is going, when a PR became ready for review, what the captain decided, when their work merged, when they were cleaned up, and when a local model server stopped or resumed answering.
+The fleet activity ledger is an opt-in, append-only file that outside tools can read to follow what a firstmate home is doing: which tasks were dispatched, what their workers reported, how their validation is going, when a PR became ready for review, what the captain decided, when their work merged, when they were cleaned up, and when a sailor stopped or resumed answering.
 It is the stable, documented hook for firstmate status; this page is its contract.
 
 ## Turning it on and off
@@ -38,7 +38,7 @@ Readers must ignore members and events they do not recognize, so later versions 
 | `task.cleaned_up`  | none                                           | The task's worker and local copy were removed. |
 | `sailor.state`     | `name`, `state`                                | The supervision monitor sees a live named sailor stop answering or answer again. |
 
-`task.dispatched` members: `kind` is `ship`, `scout`, or `secondmate`; `project` is the project directory name, or `null` for a remote second mate; `harness` names the agent tool; `model` is the requested model, or `null` for the tool's default; `sailor` names the local machine the worker runs on ([named sailors](configuration.md#crew-dispatch-profiles-configcrew-dispatchjson)), or `null` for a worker on a hosted model.
+`task.dispatched` members: `kind` is `ship`, `scout`, or `secondmate`; `project` is the project directory name, or `null` for a remote second mate; `harness` names the agent tool; `model` is the requested model, or `null` for the tool's default; `sailor` names the sailor the worker runs on ([named sailors](configuration.md#crew-dispatch-profiles-configcrew-dispatchjson)), or `null` for a worker on no sailor.
 
 `task.validation` members: `run` is the no-mistakes run id.
 `step` is `review`, `tests`, `docs`, or `pr`, for the run's review, test, document, and pr steps; its other steps are not recorded.
