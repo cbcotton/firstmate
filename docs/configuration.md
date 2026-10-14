@@ -1104,6 +1104,7 @@ It fails unless the session-start digest reaches the model's first answering req
 ### Setting up a home
 
 Create the home with `config/privateer` naming the first mate's sailor and model, `config/crew-harness` holding `opencode`, `config/sailor-sandbox`, and a `config/crew-dispatch.json` naming only local sailors and no `sailor_fallback`; `config/opencode-permission-profile` set to `restricted` is the agreed posture for its sailors.
+Also create the presence flag `config/fleet-ledger` (see the [fleet activity ledger](#fleet-activity-ledger-configfleet-ledger)), because the Privateer Dock board reads the home's `state/fleet-ledger.jsonl` and shows no ledger activity without it.
 Make the home a clone of firstmate that is itself the home, at `forks/<name>` inside the Claude-orchestrated home's checkout, and start it with `FM_HOME=<that clone> <that clone>/bin/fm-privateer.sh start`.
 Its `bin/` is then the home's own, so no worker can rewrite the scripts that govern it; a checkout nested below the home works too, since the session denies its `bin/` as well, and so does pointing `FM_HOME` at the home from a checkout outside it.
 Before creating `forks/`, add a `forks/` line to the Claude-orchestrated checkout's `.git/info/exclude`.
