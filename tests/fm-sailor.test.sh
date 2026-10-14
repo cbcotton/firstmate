@@ -771,6 +771,24 @@ c down http://127.0.0.1:$port/v1/models" "$out" "a sailor that never answers mus
   pass "health probes every sailor at once, so the whole run stays within about one probe timeout"
 }
 
+test_status_probes_every_sailor_at_once_within_the_bound() {
+  local start elapsed out i
+  make_stub_case status-bound "$(jq -n '{sailors: {
+      a: {endpoint: "http://127.0.0.1:1/v1", status: "live", models: ["m"]},
+      b: {endpoint: "http://10.255.255.1/v1", status: "live", models: ["m"]},
+      c: {endpoint: "http://10.255.255.2/v1", status: "live", models: ["m"]},
+      d: {endpoint: "http://10.255.255.3/v1", status: "live", models: ["m"]}}}')"
+  start=$(date +%s)
+  out=$(FM_SAILOR_PROBE_TIMEOUT=2 run_real status)
+  elapsed=$(( $(date +%s) - start ))
+  for i in a b c d; do
+    assert_contains "$out" "$i live not-answering endpoint=" "sailor $i must read not-answering"
+  done
+  assert_equals "a b c d" "$(printf '%s\n' "$out" | cut -d' ' -f1 | tr '\n' ' ' | sed 's/ $//')" "status must keep the registry order"
+  [ "$elapsed" -lt 5 ] || fail "four down sailors took ${elapsed}s, so status did not probe them at once within the 2s bound"
+  pass "status probes every sailor at once, so a down sailor adds no time"
+}
+
 test_live_sailor_serving_the_model_passes_check
 test_endpoint_trailing_slash_is_not_doubled
 test_placeholder_is_refused_without_a_probe
@@ -795,5 +813,6 @@ test_add_from_mlx_serve_reads_the_registry_and_nothing_more
 test_health_probes_the_mlx_serve_health_path
 test_status_answering_agrees_with_the_health_probe
 test_health_probes_every_sailor_at_once_within_the_bound
+test_status_probes_every_sailor_at_once_within_the_bound
 
 echo "# all fm-sailor tests passed"
