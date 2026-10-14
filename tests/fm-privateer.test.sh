@@ -1477,6 +1477,93 @@ test_stop_cleans_up_after_a_session_that_ended() {
   pass "stop still stops the watcher, the egress proxy, and the record writer when the session has already ended"
 }
 
+run_status() {  # <case-dir>: status against the case's home
+  run_launcher "$1" "$(cat "$1/home-path")" "$1/root" status
+}
+
+test_status_reports_a_stopped_session() {
+  local dir out
+  dir=$(stow_case status-stopped)
+  rm -f "$dir/tmux-running"
+  out=$(run_status "$dir")
+  expect_code 0 "$?" "status must answer for a stopped session: $out"
+  [ "$out" = stopped ] || fail "a stopped session must print only stopped, got: $out"
+  pass "status prints stopped when neither the session nor a helper process lives"
+}
+
+test_status_reads_the_turn_without_touching_the_pane() {
+  local dir out
+  dir=$(stow_case status-turn)
+  out=$(run_status "$dir")
+  expect_code 0 "$?" "status must answer for a running session: $out"
+  [ "$out" = $'running\nturn idle' ] || fail "an idle first mate must read running then turn idle, got: $out"
+  : > "$dir/pane-hold-on"
+  out=$(run_status "$dir")
+  [ "$out" = $'running\nturn busy' ] || fail "a busy first mate must read running then turn busy, got: $out"
+  assert_not_contains "$out" "socket" "status must name no socket"
+  assert_no_grep "send-keys" "$dir/tmux.log" "status must type nothing into the pane"
+  assert_no_grep "attach" "$dir/tmux.log" "status must never attach"
+  assert_no_grep "kill-server" "$dir/tmux.log" "status must stop nothing"
+  [ ! -e "$dir/pane-submitted" ] || fail "status must submit nothing to the first mate"
+  pass "status prints running with the first mate's turn, and never attaches, types, or writes"
+}
+
+test_status_omits_an_unreadable_turn() {
+  local dir home root out
+  dir="$TMP_ROOT/status-unread"
+  home=$(make_home status-unread)
+  root="$dir/root"
+  make_checkout "$root"
+  make_launcher_fakebin "$dir" >/dev/null
+  : > "$dir/tmux-running"
+  out=$(run_launcher "$dir" "$home" "$root" status)
+  expect_code 0 "$?" "status must answer when the pane cannot be read: $out"
+  [ "$out" = running ] || fail "an unreadable pane must leave the turn line out, got: $out"
+  pass "status omits the turn line when the pane read is inconclusive"
+}
+
+test_status_reports_helpers_left_behind() {
+  local dir home root out writer port
+  dir="$TMP_ROOT/status-ended"
+  home=$(make_home status-ended)
+  root="$dir/root"
+  make_checkout "$root"
+  make_launcher_fakebin "$dir" >/dev/null
+  make_stub_primary "$dir" >/dev/null
+  out=$(run_launcher "$dir" "$home" "$root" start)
+  expect_code 0 "$?" "start must succeed: $out"
+  out=$(run_launcher "$dir" "$home" "$root" status)
+  assert_contains "$out" running "a started session must read running"
+  # The first mate's window closed and took the server with it.
+  xargs kill < "$dir/tmux-pids" 2>/dev/null
+  rm -f "$dir/tmux-running" "$dir/tmux-pids"
+  out=$(run_launcher "$dir" "$home" "$root" status)
+  expect_code 0 "$?" "status must answer for an ended session: $out"
+  [ "$out" = "ended, proxy or record writer left behind" ] || fail "helpers left behind must be named, got: $out"
+  [ -e "$home/state/privateer/egress/pid" ] || fail "status must leave the proxy's record alone"
+  out=$(run_launcher "$dir" "$home" "$root" stop)
+  expect_code 0 "$?" "stop must clean up: $out"
+  out=$(run_launcher "$dir" "$home" "$root" status)
+  [ "$out" = stopped ] || fail "after cleanup the session must read stopped, got: $out"
+  pass "status names an ended session whose proxy or record writer lives, and reads stopped once cleaned up"
+}
+
+test_status_refuses_without_the_flag_and_takes_no_arguments() {
+  local dir home root out
+  dir="$TMP_ROOT/status-refuse"
+  home=$(make_home status-refuse)
+  root="$dir/root"
+  make_checkout "$root"
+  make_launcher_fakebin "$dir" >/dev/null
+  out=$(run_launcher "$dir" "$home" "$root" status extra)
+  expect_code 2 "$?" "status takes no arguments: $out"
+  rm "$home/config/privateer"
+  out=$(run_launcher "$dir" "$home" "$root" status)
+  expect_code 1 "$?" "status must refuse without config/privateer"
+  assert_contains "$out" "config/privateer is absent" "the refusal must say why"
+  pass "status refuses a home without the flag and takes no arguments"
+}
+
 test_attach_refuses_without_a_session() {
   local dir home root out status
   dir="$TMP_ROOT/attach"
@@ -2662,6 +2749,11 @@ test_stop_stow_refuses_with_work_in_flight_before_any_delivery
 test_stop_stow_timeout_leaves_the_session_running
 test_stop_stow_refuses_when_the_stow_never_starts
 test_stop_cleans_up_after_a_session_that_ended
+test_status_reports_a_stopped_session
+test_status_reads_the_turn_without_touching_the_pane
+test_status_omits_an_unreadable_turn
+test_status_reports_helpers_left_behind
+test_status_refuses_without_the_flag_and_takes_no_arguments
 test_attach_refuses_without_a_session
 test_spawn_refuses_a_claude_harness
 test_spawn_refuses_pipeline_and_pr_delivery
