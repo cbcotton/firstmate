@@ -95,8 +95,9 @@
 #   verified on opencode 1.18.32); without a model the axis is recorded but omitted.
 #   --sailor <name> runs an OpenCode crewmate or scout on a named sailor
 #   from config/crew-dispatch.json (docs/configuration.md "Named sailors"). It
-#   requires --harness opencode and a --model listed for that sailor, and
-#   refuses before any endpoint, worktree, or record exists unless
+#   requires --harness opencode and a --model listed for that sailor; without
+#   --model it takes the sailor's one listed model and refuses a sailor that
+#   lists several. It refuses before any endpoint, worktree, or record exists unless
 #   `bin/fm-sailor.sh check` passes. The launch's OPENCODE_CONFIG_CONTENT then
 #   carries the sailor as its own provider (bin/fm-sailor.sh provider-json),
 #   OpenCode receives --model <sailor>/<model>, any effort is recorded but
@@ -2483,10 +2484,20 @@ if [ -n "$SAILOR" ]; then
     echo "error: --sailor requires --harness opencode, the one harness that takes a sailor's endpoint" >&2
     exit 1
   }
-  [ -n "$MODEL" ] && [ "$MODEL" != default ] || {
-    echo "error: --sailor requires --model naming one of the sailor's models" >&2
-    exit 1
-  }
+  if [ -z "$MODEL" ] || [ "$MODEL" = default ]; then
+    SAILOR_MODELS=$(jq -r --arg s "$SAILOR" '.sailors[$s].models // [] | if type == "array" then .[] else empty end' "$CONFIG/crew-dispatch.json" 2>/dev/null)
+    case "$SAILOR_MODELS" in
+      '')
+        echo "error: --sailor without --model takes the sailor's one model, but config/crew-dispatch.json lists none for sailor $SAILOR" >&2
+        exit 1
+        ;;
+      *$'\n'*)
+        echo "error: --sailor requires --model when the sailor lists several models; $SAILOR lists $(printf '%s' "$SAILOR_MODELS" | paste -sd, - | sed 's/,/, /g')" >&2
+        exit 1
+        ;;
+    esac
+    MODEL=$SAILOR_MODELS
+  fi
   if ! SAILOR_CHECK=$(FM_HOME="$FM_HOME" FM_CONFIG_OVERRIDE="$CONFIG" FM_STATE_OVERRIDE="$STATE" "$SCRIPT_DIR/fm-sailor.sh" check "$SAILOR" "$MODEL" --task "$ID" 2>&1); then
     echo "error: sailor $SAILOR cannot take task $ID: ${SAILOR_CHECK#refused: }" >&2
     exit 1
