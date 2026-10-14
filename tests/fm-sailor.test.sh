@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # tests/fm-sailor.test.sh - named local sailors through bin/fm-sailor.sh:
-# map validation, the placeholder lock, the capacity count, the endpoint probe,
-# and the OpenCode provider fragment, then the warm-up, the status view, and
-# the registry commands, and a sailor's bearer token and unlisted model ids.
-# The first cases use a fake curl that logs every URL it
-# is asked for, so a test can prove a probe did or did not happen; the later
+# map validation, grades, the choice by grade or name, the placeholder lock,
+# the capacity count, the endpoint probe, and the OpenCode provider fragment,
+# then the warm-up, the status view, and the registry commands, and a sailor's
+# bearer token and unlisted model ids. The first cases use a fake curl that
+# logs every URL it is asked for, so a test can prove a probe did or did not
+# happen; the later
 # cases run the real curl against a local HTTP stub standing in for the
 # sailor's model server. docs/configuration.md ("Named sailors") owns the contract.
 set -u
@@ -230,6 +231,128 @@ test_validate_is_silent_without_sailors_and_names_the_first_problem() {
   expect_code 2 "$status" "check must refuse to run on an invalid map"
   assert_contains "$out" "invalid config/crew-dispatch.json - sailor tiller status must be live or placeholder" "check did not name the configuration error"
   pass "validate is silent without sailors, names the first problem otherwise, and check stops on an invalid map"
+}
+
+test_validate_checks_grades_facets_paid_and_spend() {
+  local e='"endpoint":"http://127.0.0.1:1/v1","status":"live"' grades out case json want
+  grades='the grades, lowest first, are deckhand, sailor, specialist, expert'
+  make_case graded "{\"sailors\":{\"t\":{$e,\"models\":[\"m\"],\"grade\":\"expert\",\"facets\":[\"helm\",\"long-context\"],\"paid\":false},\"u\":{$e,\"models\":[\"m\",\"n\"]}},\"rules\":[{\"when\":\"x\",\"spend\":\"allowed\",\"use\":[{\"harness\":\"opencode\",\"grade\":\"sailor\"},{\"harness\":\"opencode\",\"sailor\":\"t\"}]}]}"
+  out=$(run_sailor validate)
+  expect_code 0 "$?" "a graded sailor, a grade profile, a model-less profile on a one-model sailor, and an allowed spend must validate"$'\n'"$out"
+  while IFS='|' read -r case json want; do
+    make_case "bad-$case" "$json"
+    out=$(run_sailor validate)
+    expect_code 1 "$?" "$case must be invalid"
+    assert_equals "$want" "$out" "$case diagnostic mismatch"
+  done <<EOF
+scout-grade|{"sailors":{"t":{$e,"models":["m"],"grade":"scout"}}}|sailor t grade "scout" is not a grade; $grades
+array-grade|{"sailors":{"t":{$e,"models":["m"],"grade":["sailor"]}}}|sailor t grade ["sailor"] is not a grade; $grades
+graded-two-models|{"sailors":{"t":{$e,"models":["m","n"],"grade":"sailor"}}}|sailor t has a grade, which describes one bound model, so it must list exactly one model
+repeated-facet|{"sailors":{"t":{$e,"models":["m"],"facets":["helm","helm"]}}}|sailor t facets must be a list of distinct lowercase words joined by single dashes
+upper-facet|{"sailors":{"t":{$e,"models":["m"],"facets":["Helm"]}}}|sailor t facets must be a list of distinct lowercase words joined by single dashes
+text-paid|{"sailors":{"t":{$e,"models":["m"],"paid":"yes"}}}|sailor t paid must be true or false
+profile-grade|{"default":{"harness":"opencode","grade":"captain"}}|profile grade "captain" is not a grade; $grades
+grade-harness|{"default":{"harness":"claude","grade":"sailor"}}|grade sailor profile must use harness opencode
+grade-model|{"default":{"harness":"opencode","grade":"sailor","model":"m"}}|grade sailor profile names a model; the sailor bin/fm-sailor.sh pick chooses brings its own
+grade-and-sailor|{"sailors":{"t":{$e,"models":["m"]}},"default":{"harness":"opencode","grade":"sailor","sailor":"t"}}|sailor t profile names a grade too; a profile names a sailor or a grade, not both
+modelless-several|{"sailors":{"t":{$e,"models":["m","n"]}},"default":{"harness":"opencode","sailor":"t"}}|sailor t profile names no model, and t lists several; name one
+spend-yes|{"rules":[{"when":"x","spend":"yes","use":{"harness":"opencode","grade":"sailor"}}]}|rule "x" spend must be "allowed" when present
+fallback-grade|{"sailor_fallback":{"harness":"claude","grade":"sailor"}}|sailor_fallback must not name a grade
+EOF
+  make_case set-model-graded '{"sailors":{"t":{"endpoint":"http://127.0.0.1:1/v1","status":"placeholder","models":["qwen-coder"],"grade":"sailor"}}}'
+  out=$(run_sailor set-model t qwen-coder-large)
+  expect_code 1 "$?" "adding a second model to a graded sailor must be refused"
+  assert_contains "$out" "refused: sailor t has a grade, which describes one bound model, so it must list exactly one model" "the graded sailor's second model refusal is missing"
+  assert_equals $'deckhand\nsailor\nspecialist\nexpert' "$(run_sailor grades)" "grades must print the four grades, lowest first, one per line"
+  pass "validate checks each grade, facet list, paid flag, grade profile, model-less profile, rule spend, and fallback, and grades lists the vocabulary"
+}
+
+# GRADED: a deckhand, a paid sailor-grade router listed before a free one, an
+# unanswering specialist, and an ungraded sailor serving two models.
+GRADED='{"sailors":{
+  "bonsai":{"endpoint":"http://127.0.0.1:11235/v1","status":"live","models":["qwen-coder"],"grade":"deckhand","max_concurrent":2},
+  "lookout":{"endpoint":"https://router.example/v1","status":"live","models":["qwen-coder-large"],"grade":"sailor","paid":true},
+  "tiller":{"endpoint":"http://127.0.0.1:11234/v1","status":"live","models":["qwen-coder"],"grade":"sailor","facets":["helm"]},
+  "flint":{"endpoint":"http://flint.local:8000/v1","status":"live","models":["qwen-big"],"grade":"specialist"},
+  "stoker":{"endpoint":"http://stoker.invalid:8000/v1","status":"placeholder","models":["qwen-big"],"grade":"expert"},
+  "old":{"endpoint":"http://127.0.0.1:11234/v1","status":"live","models":["qwen-coder","qwen-coder-large"]}}}'
+
+test_pick_by_grade_takes_the_lowest_sufficient_free_sailor() {
+  local out status
+  make_case pick-grade "$GRADED"
+  out=$(run_sailor pick --grade deckhand)
+  expect_code 0 "$?" "a deckhand floor must pick the deckhand"$'\n'"$out"
+  assert_equals "bonsai qwen-coder" "$out" "the lowest sufficient grade must come first"
+  out=$(run_sailor pick --grade sailor)
+  expect_code 0 "$?" "a sailor floor must pick a sailor-grade sailor"$'\n'"$out"
+  assert_equals "tiller qwen-coder" "$out" "a free sailor must come before a paid one listed earlier"
+  assert_not_contains "$(cat "$CURL_LOG")" "router.example" "a paid sailor must never be probed without --spend"
+  out=$(run_sailor pick --grade deckhand --grade sailor)
+  assert_equals "tiller qwen-coder" "$out" "a repeated --grade must take the highest floor"
+  out=$(run_sailor pick --grade sailor --facet helm)
+  assert_equals "tiller qwen-coder" "$out" "--facet must keep only sailors that list it"
+
+  printf 'harness=opencode\nsailor=tiller\n' > "$CASE_DIR/state/busy-a1.meta"
+  : > "$CURL_LOG"
+  out=$(run_sailor pick --grade sailor)
+  status=$?
+  expect_code 1 "$status" "with the free sailor busy and no spend, the sailor floor must be refused"
+  assert_contains "$out" "refused: no sailor of grade sailor or above can take it now:" "the refusal must name the floor"
+  assert_contains "$out" "  lookout/qwen-coder-large: sailor lookout is paid, and spend is not allowed for this task" "the paid sailor must be named as skipped for spend"
+  assert_contains "$out" "  tiller/qwen-coder: sailor tiller is at capacity (1 of 1 tasks)" "the busy sailor's refusal must be listed"
+  assert_contains "$out" "  flint/qwen-big: sailor flint at http://flint.local:8000/v1 does not serve qwen-big" "a higher grade must be tried after the lower ones"
+  assert_not_contains "$out" "stoker" "a placeholder is never a candidate"
+  assert_not_contains "$(cat "$CURL_LOG")" "router.example" "a paid sailor must never be probed without --spend"
+  out=$(run_sailor pick --grade sailor --spend)
+  expect_code 0 "$?" "--spend must let the paid sailor take the task"$'\n'"$out"
+  assert_equals "lookout qwen-coder-large" "$out" "with spend allowed, the paid sailor of the lowest sufficient grade must be picked"
+  out=$(run_sailor pick --grade sailor --task busy-a1)
+  assert_equals "tiller qwen-coder" "$out" "--task must not count the task being relaunched against its own sailor"
+
+  out=$(run_sailor pick --grade expert)
+  status=$?
+  expect_code 1 "$status" "no live expert must be refused"
+  assert_equals "refused: no live sailor has grade expert or above" "$out" "the empty floor refusal mismatch"
+  out=$(run_sailor pick --grade scout)
+  expect_code 2 "$?" "an unknown grade is a usage error"
+  assert_contains "$out" "unknown grade 'scout'; the grades, lowest first, are deckhand, sailor, specialist, expert" "the unknown grade must name the grades"
+  run_sailor pick >/dev/null
+  expect_code 2 "$?" "pick needs a grade or a sailor"
+  run_sailor pick --grade sailor --model qwen-coder >/dev/null
+  expect_code 2 "$?" "--model needs --sailor"
+  pass "pick by grade takes the lowest sufficient grade, free before paid, a paid sailor only with --spend, and lists every refusal"
+}
+
+test_pick_weighs_one_named_sailor_through_the_same_gates() {
+  local out
+  make_case pick-named "$GRADED"
+  out=$(run_sailor pick --sailor bonsai)
+  expect_code 0 "$?" "a named sailor with one model must be picked on it"$'\n'"$out"
+  assert_equals "bonsai qwen-coder" "$out" "a sailor without --model must use its one model"
+  out=$(run_sailor pick --sailor old --model qwen-coder-large)
+  assert_equals "old qwen-coder-large" "$out" "--model must name the model to weigh"
+  out=$(run_sailor pick --sailor old)
+  expect_code 1 "$?" "a sailor with several models needs --model"
+  assert_equals "refused: sailor old lists several models (qwen-coder, qwen-coder-large); name one with --model" "$out" "the several-models refusal mismatch"
+  out=$(run_sailor pick --sailor bonsai --grade sailor)
+  expect_code 1 "$?" "a sailor below the floor must be refused"
+  assert_equals "refused: sailor bonsai is grade deckhand, below sailor" "$out" "the below-floor refusal mismatch"
+  out=$(run_sailor pick --sailor old --model qwen-coder --grade deckhand)
+  assert_equals "refused: sailor old has no grade, so it cannot meet grade deckhand" "$out" "an ungraded sailor must not meet a floor"
+  out=$(run_sailor pick --sailor tiller --facet vision)
+  assert_equals "refused: sailor tiller has no facet vision" "$out" "a missing facet must be refused"
+  : > "$CURL_LOG"
+  out=$(run_sailor pick --sailor lookout)
+  expect_code 1 "$?" "a paid sailor without --spend must be refused"
+  assert_equals "refused: sailor lookout is paid, and spend is not allowed for this task" "$out" "the paid refusal mismatch"
+  [ ! -s "$CURL_LOG" ] || fail "a paid sailor must be refused before any probe, but curl was called: $(cat "$CURL_LOG")"
+  out=$(run_sailor pick --sailor lookout --spend)
+  assert_equals "lookout qwen-coder-large" "$out" "--spend must let a named paid sailor through"
+  out=$(run_sailor pick --sailor stoker)
+  assert_contains "$out" "refused: sailor stoker is a placeholder" "a named placeholder must be refused by check"
+  out=$(run_sailor pick --sailor nosuch)
+  assert_equals "refused: unknown sailor nosuch" "$out" "an unknown sailor must be refused"
+  pass "pick --sailor weighs one sailor on its one model or --model, through the grade, facet, spend, and check gates"
 }
 
 # --- the local HTTP stub ------------------------------------------------------
@@ -993,6 +1116,9 @@ test_capacity_counts_live_task_records
 test_provider_json_is_the_opencode_provider_entry
 test_model_settings_travel_with_the_model
 test_validate_is_silent_without_sailors_and_names_the_first_problem
+test_validate_checks_grades_facets_paid_and_spend
+test_pick_by_grade_takes_the_lowest_sufficient_free_sailor
+test_pick_weighs_one_named_sailor_through_the_same_gates
 test_check_says_loaded_or_listed
 test_status_shows_answer_tasks_queue_and_models
 test_set_model_replace_moves_every_profile_of_that_sailor
