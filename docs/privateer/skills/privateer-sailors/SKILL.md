@@ -21,7 +21,7 @@ A profile names a `sailor`, sometimes with a `model`, or a `grade`.
 The grades, lowest to highest, are `deckhand`, `sailor`, `specialist`, `expert`; a grade profile takes any sailor of that grade or higher.
 Try them in the order listed, and run `bin/fm-sailor.sh pick --sailor <sailor> --model <model>`, without `--model` when the profile names none, or `bin/fm-sailor.sh pick --grade <grade>` for each until one prints a sailor and a model.
 Spawn on that one, with that exact sailor and model.
-Add `--spend` to `pick` only when the rule says `"spend": "allowed"` or the captain okayed a paid sailor for this one task.
+Add `--spend` to both `pick` and `bin/fm-spawn.sh` only when the rule says `"spend": "allowed"` or the captain okayed a paid sailor for this one task.
 
 ## What each refusal means
 
