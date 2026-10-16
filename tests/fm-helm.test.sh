@@ -2,7 +2,9 @@
 # tests/fm-helm.test.sh - the Privateer front door, bin/fm-helm.sh, through its
 # verbs in a Privateer home, run from inside the home's session. scout and ship
 # file the backlog row, write the instructions with the ask as the captain's
-# intent, take the first sailor that can take the work, and start it through
+# intent, take the first sailor that bin/fm-sailor.sh pick names for a
+# profile, by sailor or by grade, with --grade raising the floor and a paid
+# sailor only with spend allowed, and start it through
 # the real bin/fm-spawn.sh against a fake tmux and treehouse, its record
 # written by the session's real record writer; work no sailor
 # can take waits in the queue, named with the spawn call that starts it; a
@@ -38,6 +40,9 @@ helm_test_cleanup() {
 trap helm_test_cleanup EXIT
 SEALED_REFUSAL='this is a sealed Privateer home; attach with bin/fm-privateer.sh attach, and never drive its session from outside'
 DISPATCH='{"sailors":{"tiller":{"endpoint":"http://127.0.0.1:11234/v1","status":"live","models":["coder"]},"bonsai":{"endpoint":"http://127.0.0.1:11235/v1","status":"live","models":["small"]}},"default":[{"harness":"opencode","sailor":"tiller","model":"coder"},{"harness":"opencode","sailor":"bonsai","model":"small"}]}'
+# GRADED_DISPATCH: a sailor-grade first mate's sailor, a deckhand, and a paid
+# specialist, a rule that allows spend, and a deckhand default.
+GRADED_DISPATCH='{"sailors":{"tiller":{"endpoint":"http://127.0.0.1:11234/v1","status":"live","models":["coder"],"grade":"sailor","max_concurrent":5},"bonsai":{"endpoint":"http://127.0.0.1:11235/v1","status":"live","models":["small"],"grade":"deckhand","max_concurrent":5},"lookout":{"endpoint":"http://127.0.0.1:11236/v1","status":"live","models":["coder"],"grade":"specialist","paid":true,"max_concurrent":5}},"rules":[{"when":"hard asks","spend":"allowed","use":{"harness":"opencode","grade":"specialist"}}],"default":{"harness":"opencode","grade":"deckhand"}}'
 RULES_DISPATCH='{"sailors":{"tiller":{"endpoint":"http://127.0.0.1:11234/v1","status":"live","models":["coder"]},"bonsai":{"endpoint":"http://127.0.0.1:11235/v1","status":"live","models":["small"]}},"rules":[{"when":"reading and reporting only","use":{"harness":"opencode","sailor":"bonsai","model":"small"}}],"default":{"harness":"opencode","sailor":"tiller","model":"coder"}}'
 
 # make_case <name> [<dispatch-json>]: a Privateer home with one registered
@@ -266,6 +271,69 @@ test_dispatch_rules_are_chosen_before_anything_is_written() {
 
 # --- the slash-command form ---------------------------------------------------
 
+test_grades_and_spend_choose_through_pick() {
+  local out status id
+  make_case graded "$GRADED_DISPATCH"
+  out=$(run_helm scout --grade sailor --spend app "map the captain's build")
+  expect_code 1 "$?" "a home with rules must ask for one"$'\n'"$out"
+  assert_contains "$out" "--rule 1: hard asks (grade specialist; spend allowed)" "the rule list must name its grade and that it allows spend"
+  assert_contains "$out" "--rule default (grade deckhand)" "the default must name its grade"
+  assert_contains "$out" "the call: bin/fm-helm.sh scout --rule <n> --grade sailor --spend app 'map the captain'\\''s build'" "the call to repeat must keep --grade and --spend"
+  assert_nothing_filed "a call without a rule"
+
+  out=$(run_helm scout --rule default app survey the tests)
+  expect_code 0 "$?" "a grade profile must start the scout"$'\n'"$out"
+  track "$out"; id=$ID
+  assert_contains "$out" "started: $id, a scout on app, on bonsai/small" "the lowest sufficient grade must take it"
+  assert_grep 'sailor=bonsai' "$HOME_DIR/state/$id.meta" "the task record must name the sailor pick chose"
+
+  out=$(run_helm scout --rule default --grade sailor app survey the tests)
+  expect_code 0 "$?" "--grade must raise the floor"$'\n'"$out"
+  track "$out"
+  assert_contains "$out" "on tiller/coder" "--grade sailor must pass over the deckhand"
+
+  out=$(run_helm ship --rule default --grade specialist app add a flag)
+  status=$?
+  expect_code 0 "$status" "work only a paid sailor can take must be filed"$'\n'"$out"
+  track "$out"; id=$ID
+  assert_contains "$out" "queued: no sailor can take $id now" "a paid sailor without spend must leave the work queued"
+  assert_contains "$out" "  no sailor of grade specialist or above can take it now:" "the queue line must name the floor"
+  assert_contains "$out" "    lookout/coder: sailor lookout is paid, and spend is not allowed for this task" "the queue line must say the paid sailor needs spend"
+  assert_contains "$out" "for the first of these that answers: the sailor bin/fm-sailor.sh pick --grade deckhand --grade specialist names" "the candidates must name the pick call"
+  assert_equals queued "$(row "$id" state)" "the row must stay Queued"
+
+  out=$(run_helm ship --rule default --grade specialist --spend app add a flag)
+  expect_code 0 "$?" "--spend must let the paid sailor take this one task"$'\n'"$out"
+  track "$out"
+  assert_contains "$out" "on lookout/coder" "the paid specialist must take the task with --spend"
+  track "$out"
+  assert_grep 'spend=allowed' "$HOME_DIR/state/$ID.meta" "the spawn must record the spend go the front door passed"
+
+  out=$(run_helm scout --rule 1 app weigh the design)
+  expect_code 0 "$?" "a rule allowing spend must start the scout"$'\n'"$out"
+  track "$out"
+  assert_contains "$out" "on lookout/coder" "a rule that allows spend must reach the paid sailor"
+
+  out=$(opencode_text '--rule default --grade specialist --spend app look around' '--rule default --grade specialist --spend app look around' '--rule default --grade specialist --spend app look around' | run_helm scout --stdin)
+  expect_code 0 "$?" "the slash-command form must take leading --grade and --spend"$'\n'"$out"
+  track "$out"
+  assert_contains "$out" "on lookout/coder" "the slash-command form must pass --grade and --spend on"
+  assert_equals "look around" "$(intent_of "$ID")" "the words after the project must be the ask"
+  pass "grade profiles pick the lowest sufficient sailor, --grade raises the floor, and a paid sailor takes work only with --spend or a rule allowing spend"
+}
+
+test_sailor_profile_without_a_model_uses_its_one_model() {
+  local out
+  make_case modelless '{"sailors":{"tiller":{"endpoint":"http://127.0.0.1:11234/v1","status":"live","models":["coder"]},"bonsai":{"endpoint":"http://127.0.0.1:11235/v1","status":"live","models":["small"]}},"default":[{"harness":"opencode","sailor":"bonsai"}]}'
+  out=$(run_helm scout app survey the tests)
+  expect_code 0 "$?" "a sailor profile without a model must start the scout"$'\n'"$out"
+  track "$out"
+  assert_contains "$out" "sailor: bonsai/small can take it" "the sailor's one model must be used"
+  assert_contains "$out" "started: $ID, a scout on app, on bonsai/small" "the front door must say what started"
+  assert_grep 'model=small' "$HOME_DIR/state/$ID.meta" "the task record must carry the sailor's model"
+  pass "a sailor profile without a model starts the work on the sailor's one model"
+}
+
 test_stdin_keeps_the_captains_words() {
   local out status id words
   make_case stdin
@@ -395,8 +463,10 @@ scout|refused: scout needs a project and the ask
 scout app|refused: scout needs a project and the ask
 scout nosuch go|refused: 'nosuch' is not a registered project with a clone under projects/; the projects here are: app
 scout projects/app go|refused: 'projects/app' is a path; give the name of a project under projects/
-scout --project app go|refused: unknown flag '--project'; scout takes only --rule <n>|default, before the project
-ship --rule=1 app go|refused: unknown flag '--rule=1'; ship takes only --rule <n>|default, before the project
+scout --project app go|refused: unknown flag '--project'; scout takes only --rule <n>|default, --grade <grade>, and --spend, before the project
+ship --rule=1 app go|refused: unknown flag '--rule=1'; ship takes only --rule <n>|default, --grade <grade>, and --spend, before the project
+scout --grade captain app go|refused: --grade takes one of deckhand, sailor, specialist, expert, lowest to highest, not 'captain'
+scout --grade|refused: --grade needs a grade
 ship --rule 0 app go|refused: --rule takes a rule number from 1, or default, not '0'
 ship --rule 3 app go|refused: there is no rule 3; config/crew-dispatch.json declares 0
 scout --rule|refused: --rule needs a rule number or default
@@ -533,6 +603,8 @@ test_scout_files_writes_and_starts
 test_ship_is_local_only_on_the_registered_prefix
 test_work_no_sailor_can_take_waits_in_the_queue
 test_dispatch_rules_are_chosen_before_anything_is_written
+test_grades_and_spend_choose_through_pick
+test_sailor_profile_without_a_model_uses_its_one_model
 test_stdin_keeps_the_captains_words
 test_stdin_words_opencode_changed_are_refused
 test_steer_queue_and_sailors_reach_their_scripts

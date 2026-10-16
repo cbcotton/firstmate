@@ -941,12 +941,62 @@ test_sailor_requires_opencode_and_a_model() {
   status=$?
   expect_code 1 "$status" "a sailor on claude must be refused"
   assert_contains "$out" "error: --sailor requires --harness opencode" "harness refusal missing"
+  jq '.sailors.tiller.models += ["qwen-big"]' "$HOME_DIR/config/crew-dispatch.json" > "$HOME_DIR/config/crew-dispatch.json.new" &&
+    mv "$HOME_DIR/config/crew-dispatch.json.new" "$HOME_DIR/config/crew-dispatch.json"
   out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR" --harness opencode --sailor tiller)
   status=$?
-  expect_code 1 "$status" "a sailor without a model must be refused"
-  assert_contains "$out" "error: --sailor requires --model" "model refusal missing"
+  expect_code 1 "$status" "a sailor listing several models without --model must be refused"
+  assert_contains "$out" "error: sailor tiller cannot take task $id: sailor tiller lists several models (qwen-coder, qwen-big); name one with --model" "model refusal missing"
   [ ! -e "$HOME_DIR/state/$id.meta" ] || fail "a refused sailor spawn must leave no task record"
-  pass "--sailor refuses a non-opencode harness and a missing model"
+  [ ! -s "$LAUNCH_LOG" ] || fail "a refused sailor spawn must launch nothing"
+  pass "--sailor refuses a non-opencode harness, and a missing model when the sailor lists several"
+}
+
+test_paid_sailor_launches_only_with_spend() {
+  local rec id out status
+  id=profile-sailor-paid-s7
+  rec=$(make_spawn_case profile-sailor-paid opencode "$id")
+  read_case_record "$rec"
+  enable_sailors "$HOME_DIR" "$FAKEBIN_DIR" live
+  jq '.sailors.tiller.paid = true' "$HOME_DIR/config/crew-dispatch.json" > "$HOME_DIR/config/crew-dispatch.json.new" &&
+    mv "$HOME_DIR/config/crew-dispatch.json.new" "$HOME_DIR/config/crew-dispatch.json"
+  : > "$CASE_DIR/curl.log"
+
+  out=$(FM_FAKE_CURL_LOG="$CASE_DIR/curl.log" run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR" --harness opencode --model qwen-coder --sailor tiller)
+  status=$?
+  expect_code 1 "$status" "a paid sailor without --spend must refuse the spawn"
+  assert_contains "$out" "error: sailor tiller cannot take task $id: sailor tiller is paid, and spend is not allowed for this task" "the paid refusal is missing"
+  [ ! -e "$HOME_DIR/state/$id.meta" ] || fail "a refused paid sailor spawn must leave no task record"
+  [ ! -s "$LAUNCH_LOG" ] || fail "a refused paid sailor spawn must launch nothing"
+  [ ! -s "$CASE_DIR/curl.log" ] || fail "a paid sailor must be refused before any probe of its endpoint: $(cat "$CASE_DIR/curl.log")"
+
+  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR" --harness claude --model claude-opus-5-5 --spend)
+  status=$?
+  expect_code 1 "$status" "--spend without a sailor must be refused"
+  assert_contains "$out" "error: --spend applies only with --sailor" "the bare --spend refusal is missing"
+
+  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR" --harness opencode --sailor tiller --spend)
+  status=$?
+  expect_code 0 "$status" "--spend must let a paid sailor take this one task"$'\n'"$out"
+  assert_grep "sailor=tiller" "$HOME_DIR/state/$id.meta" "meta missing sailor=tiller"
+  assert_grep "spend=allowed" "$HOME_DIR/state/$id.meta" "the record must keep the spend go for a relaunch"
+  pass "a paid sailor launches only with --spend, which needs a sailor and is recorded on the task"
+}
+
+test_sailor_without_a_model_takes_its_one_model() {
+  local rec id out status
+  id=profile-sailor-bound-s6
+  rec=$(make_spawn_case profile-sailor-bound opencode "$id")
+  read_case_record "$rec"
+  enable_sailors "$HOME_DIR" "$FAKEBIN_DIR" live
+
+  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR" --harness opencode --sailor tiller)
+  status=$?
+  expect_code 0 "$status" "a sailor with one model must spawn without --model"$'\n'"$out"
+  assert_grep "sailor=tiller" "$HOME_DIR/state/$id.meta" "meta missing sailor=tiller"
+  assert_grep "model=qwen-coder" "$HOME_DIR/state/$id.meta" "the record must carry the sailor's one model"
+  assert_contains "$(cat "$LAUNCH_LOG")" "--model 'tiller/qwen-coder'" "OpenCode must be launched on the sailor's one model"
+  pass "--sailor without --model launches on the sailor's one listed model and records it"
 }
 
 # A fake sandbox-exec stands in for macOS's, so the launch shape is pinned on
@@ -2189,6 +2239,8 @@ test_sailor_launch_folds_the_opencode_system_prompt
 test_non_sailor_opencode_launch_drops_the_system_fold
 test_placeholder_sailor_refuses_before_endpoint_or_metadata
 test_sailor_requires_opencode_and_a_model
+test_paid_sailor_launches_only_with_spend
+test_sailor_without_a_model_takes_its_one_model
 test_opencode_restricted_profile_reaches_the_launch_and_brief
 test_opencode_invalid_permission_profile_refuses_before_endpoint_or_metadata
 test_non_opencode_harness_ignores_the_opencode_permission_profile

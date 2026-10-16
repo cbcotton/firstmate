@@ -1188,7 +1188,8 @@ crew_dispatch_validate() {
          elif ($p.effort? != null) then "/default"
          else "" end)
       + (if ($p.effort? != null) then "/" + ($p.effort | tostring) else "" end)
-      + (if ($p.sailor? != null) then "@" + ($p.sailor | tostring) else "" end);
+      + (if ($p.sailor? != null) then "@" + ($p.sailor | tostring) else "" end)
+      + (if ($p.grade? != null) then "@grade:" + ($p.grade | tostring) else "" end);
     def profile_set($value; $selector):
       if ($value | type) == "array" then
         (($selector // "quota-balanced") + "[" + ([$value[] | profile(.)] | join(", ")) + "]")

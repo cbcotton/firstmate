@@ -1,6 +1,6 @@
 ---
 name: privateer-sailors
-description: Load when bin/fm-sailor.sh check or bin/fm-spawn.sh refuses a sailor, when a worker stops because its model server is down or busy, and when the captain asks which sailors can take work.
+description: Load when bin/fm-sailor.sh check, bin/fm-sailor.sh pick, or bin/fm-spawn.sh refuses a sailor, when a worker stops because its model server is down or busy, and when the captain asks which sailors can take work.
 ---
 
 # Sailors
@@ -18,9 +18,11 @@ The captain may rebind a sailor to another model from outside this session, for 
 ## The candidates for a task
 
 The rule you matched, or `default`, has a `use` entry: one profile or a list of profiles.
-Each profile names a `sailor` and a `model`.
-Try them in the order listed, and run `bin/fm-sailor.sh check <sailor> <model>` for each until one prints `ok:`.
+A profile names a `sailor`, sometimes with a `model`, or a `grade`.
+The grades, lowest to highest, are `deckhand`, `sailor`, `specialist`, `expert`; a grade profile takes any sailor of that grade or higher.
+Try them in the order listed, and run `bin/fm-sailor.sh pick --sailor <sailor> --model <model>`, without `--model` when the profile names none, or `bin/fm-sailor.sh pick --grade <grade>` for each until one prints a sailor and a model.
 Spawn on that one, with that exact sailor and model.
+Add `--spend` to both `pick` and `bin/fm-spawn.sh` only when the rule says `"spend": "allowed"` or the captain okayed a paid sailor for this one task.
 
 ## What each refusal means
 
@@ -32,6 +34,9 @@ Spawn on that one, with that exact sailor and model.
 | `has no token` | The captain has not set the token variable it names | Try the next candidate, and tell the captain which variable that sailor needs in `$FM_HOME/.env` |
 | `is not answering` | Its server is down or unreachable | Try the next candidate |
 | `does not serve` | The server runs but lacks that model | Try the next candidate |
+| `has no grade` or `below` | It is weaker than the task's grade | Try the next candidate |
+| `is paid` | It costs money per request | Skip it; only the captain's okay for this task, or a rule allowing spend, adds `--spend` |
+| `lists several models` | The profile must name a model | Read the file again and add `--model` |
 
 ## When no candidate is free
 

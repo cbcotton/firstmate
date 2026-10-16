@@ -4,14 +4,17 @@
 # docs/configuration.md ("Crew dispatch profiles", "Named sailors") owns the
 # schema and what firstmate does with each answer. This header owns the checks:
 # map and reference validation, the placeholder lock, the per-sailor capacity
-# count, the endpoint probe and warm-up, the OpenCode provider fragment, the
-# status view, and the health probe; and the registry commands that edit the
-# map, with their refusals.
+# count, the endpoint probe and warm-up, the choice by grade, the OpenCode
+# provider fragment, the status view, and the health probe; and the registry
+# commands that edit the map, with their refusals.
 #
 # Usage:
 #   fm-sailor.sh validate
 #   fm-sailor.sh list
+#   fm-sailor.sh grades
 #   fm-sailor.sh check <sailor> <model> [--task <id>]
+#   fm-sailor.sh pick (--grade <grade> | --sailor <sailor> [--model <model>])
+#                     [--grade <grade>] [--facet <facet>] [--spend] [--task <id>]
 #   fm-sailor.sh provider-json <sailor> <model>
 #   fm-sailor.sh status [--all]
 #   fm-sailor.sh health
@@ -52,14 +55,25 @@
 # to name the model. validate refuses an auth_env that is not such a name and
 # an unlisted_models that is not true or false.
 #
+# A sailor's optional `grade` is one of deckhand, sailor, specialist, expert,
+# lowest to highest. It describes the sailor's one bound model, so a graded
+# sailor lists exactly one model. Its optional `facets` is a list of distinct
+# lowercase words joined by single dashes, and its optional `paid` is true or
+# false.
+#
 # validate is silent and exits 0 when config/crew-dispatch.json is absent or
 # declares no sailor anywhere; otherwise it checks the `sailors` map, every
-# profile's `sailor` reference (in rules, default, and sailor_fallback), and the
+# profile's `sailor` or `grade` reference (in rules, default, and
+# sailor_fallback, which names neither), each rule's `spend`, and the
 # `sailor_fallback` shape, and prints one reason on stdout with exit 1 when any
-# is malformed. bin/fm-bootstrap.sh reports that reason as a CREW_DISPATCH
-# diagnostic.
+# is malformed. A profile naming a sailor without a model needs that sailor to
+# list exactly one model; a profile naming a grade uses harness opencode and
+# names no model; a rule's `spend`, when present, is "allowed".
+# bin/fm-bootstrap.sh reports that reason as a CREW_DISPATCH diagnostic.
 #
 # list prints one line per sailor: name, status, endpoint, capacity, models.
+#
+# grades prints the grades, lowest first, one per line.
 #
 # check answers "may a worker be dispatched to this sailor and model right
 # now?" in this order, stopping at the first refusal:
@@ -76,6 +90,20 @@
 # the model list carries a `loaded` flag, the ok line says whether the model
 # is loaded or only listed. No probe here or in status or health ever asks
 # for a completion, so none spends a paid endpoint's credits.
+#
+# pick chooses the sailor and model that may take a task now, and prints them
+# as `<sailor> <model>` with exit 0, or prints `refused: ...` and exits 1.
+# With --sailor it weighs that one sailor, on --model or, without it, on its
+# one listed model, and any --grade or --facet is a gate that sailor must
+# meet. Otherwise the candidates are the live sailors whose grade is at least
+# the --grade floor (a repeated --grade takes the highest), lowest sufficient
+# grade first, then free before paid, then in map order; an ungraded sailor is
+# never picked by grade. --facet keeps only sailors whose facets list it. A
+# `paid` sailor is a candidate only with --spend, which the
+# caller passes when the matched rule says "spend": "allowed" or the captain
+# okays spend for this one task. The first candidate that check passes, with
+# --task <id> handed to it, is printed; a refusal lists each candidate's
+# reason.
 #
 # provider-json prints the compact OpenCode `provider` entry for the sailor
 # with just that model, keyed by the sailor's name, for bin/fm-spawn.sh and
@@ -238,9 +266,10 @@
 # Environment: FM_HOME, FM_STATE_OVERRIDE, and FM_CONFIG_OVERRIDE resolve the
 # home exactly as the other bin/ scripts do.
 #
-# Exit status: 0 success, 1 invalid (validate) or refused (check and the
-# registry commands), 2 usage or configuration error (including a missing or
-# unparseable file, an unwritable config/, or missing jq or curl).
+# Exit status: 0 success, 1 invalid (validate) or refused (check, pick, and
+# the registry commands), 2 usage or configuration error (including a missing
+# or unparseable file, an unknown grade, an unwritable config/, or missing jq
+# or curl).
 set -u
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -259,11 +288,14 @@ DRY_RUN=0
 SAILOR_TOKEN=
 # shellcheck source=bin/fm-env-lib.sh
 . "$SCRIPT_DIR/fm-env-lib.sh"
+# The grades, lowest first.
+GRADES='["deckhand","sailor","specialist","expert"]'
 
 usage() {
   cat >&2 <<'EOF'
-usage: fm-sailor.sh validate | list | status [--all] | health
+usage: fm-sailor.sh validate | list | grades | status [--all] | health
        fm-sailor.sh check <sailor> <model> [--task <id>]
+       fm-sailor.sh pick (--grade <grade> | --sailor <sailor> [--model <model>]) [--grade <grade>] [--facet <facet>] [--spend] [--task <id>]
        fm-sailor.sh provider-json <sailor> <model>
        fm-sailor.sh with-token <variable> <env-file> -- <command> [<arg>...]
        fm-sailor.sh add <sailor> (--endpoint <url> --models <ids> | --from-mlx-serve <server-id> [--models <ids>])
@@ -375,11 +407,14 @@ unlisted_models() {  # <sailor>
 validate_file() {
   local err
   jq -e . "$1" >/dev/null 2>&1 || { echo "malformed JSON"; return 1; }
-  err=$(jq -r '
+  err=$(jq -r --argjson grades "$GRADES" '
     def profiles($v): if ($v | type) == "array" then $v elif ($v | type) == "object" then [$v] else [] end;
     def uses: [(.rules // [])[]? | profiles(.use?)[]?] + [profiles(.default?)[]?];
     def safe_text: type == "string" and length > 0 and (test("[[:space:][:cntrl:]\"'"'"'\\\\]") | not);
     def scalar: type == "string" or type == "number" or type == "boolean";
+    def word: type == "string" and test("^[a-z][a-z0-9]*(-[a-z0-9]+)*$");
+    def is_grade: type == "string" and (. as $g | $grades | index($g)) != null;
+    def not_a_grade($who; $g): "\($who) grade \($g | tojson) is not a grade; the grades, lowest first, are \($grades | join(", "))";
     def settings_bad($n; $s):
       ($s.model_settings) as $ms
       | if ($ms | type) != "object" then "sailor \($n) model_settings must be an object"
@@ -404,6 +439,10 @@ validate_file() {
       elif ($s | has("host")) and (($s.host | type) != "string") then "sailor \($n) host must be a string"
       elif ($s | has("auth_env")) and ((($s.auth_env | type) != "string") or ($s.auth_env | test("^[A-Za-z_][A-Za-z0-9_]*$") | not)) then "sailor \($n) auth_env must name an environment variable"
       elif ($s | has("unlisted_models")) and (($s.unlisted_models | type) != "boolean") then "sailor \($n) unlisted_models must be true or false"
+      elif ($s | has("grade")) and ($s.grade | is_grade | not) then not_a_grade("sailor \($n)"; $s.grade)
+      elif ($s | has("grade")) and ($s.models | length) != 1 then "sailor \($n) has a grade, which describes one bound model, so it must list exactly one model"
+      elif ($s | has("facets")) and ((($s.facets | type) != "array") or ($s.facets | all(word) | not) or (($s.facets | unique | length) != ($s.facets | length))) then "sailor \($n) facets must be a list of distinct lowercase words joined by single dashes"
+      elif ($s | has("paid")) and (($s.paid | type) != "boolean") then "sailor \($n) paid must be true or false"
       elif ($s | has("model_settings")) and (settings_bad($n; $s) != "") then settings_bad($n; $s)
       else empty
       end;
@@ -413,15 +452,26 @@ validate_file() {
       | if ($n | type) != "string" then "profile sailor must be a string"
         elif ($map | has($n)) | not then "profile names unknown sailor \($n)"
         elif .harness != "opencode" then "sailor \($n) profile must use harness opencode"
+        elif has("grade") then "sailor \($n) profile names a grade too; a profile names a sailor or a grade, not both"
+        elif (has("model") | not) and ($map[$n].models | length) != 1 then "sailor \($n) profile names no model, and \($n) lists several; name one"
+        elif (has("model") | not) then empty
         elif ($m | type) != "string" then "sailor \($n) profile needs a model"
         elif (($map[$n].models | type) != "array") or (($map[$n].models | index($m)) == null) then "model \($m) is not listed for sailor \($n)"
         else empty
         end;
+    def grade_ref_bad:
+      if (.grade | is_grade | not) then not_a_grade("profile"; .grade)
+      elif .harness != "opencode" then "grade \(.grade) profile must use harness opencode"
+      elif has("model") then "grade \(.grade) profile names a model; the sailor bin/fm-sailor.sh pick chooses brings its own"
+      else empty
+      end;
     (.sailors // {}) as $map
     | if has("sailors") and (.sailors | type) != "object" then "sailors must be an object"
       else
         ([($map | to_entries[] | sailor_bad(.key; .value))]
          + [uses[] | select(type == "object" and has("sailor")) | ref_bad($map)]
+         + [uses[] | select(type == "object" and has("grade") and (has("sailor") | not)) | grade_ref_bad]
+         + [(.rules // [])[]? | select(type == "object" and has("spend") and .spend != "allowed") | "rule \(.when | tojson) spend must be \"allowed\" when present"]
          + (if has("sailor_fallback") then
               (profiles(.sailor_fallback)) as $fb
               | if (.sailor_fallback | type) == "array" and (.sailor_fallback | length) == 0 then ["sailor_fallback needs at least one profile"]
@@ -429,6 +479,7 @@ validate_file() {
                 elif ($fb | any(type != "object")) then ["each sailor_fallback profile must be an object"]
                 elif ($fb | any((.harness | type) != "string" or (.harness | length) == 0)) then ["each sailor_fallback profile needs harness"]
                 elif ($fb | any(has("sailor"))) then ["sailor_fallback must not name a sailor"]
+                elif ($fb | any(has("grade"))) then ["sailor_fallback must not name a grade"]
                 elif ($fb | any((has("model") and ((.model | type) != "string" or (.model | length) == 0)) or (has("effort") and ((.effort | type) != "string" or (.effort | length) == 0)))) then ["sailor_fallback model and effort must be non-empty strings when present"]
                 else [] end
             else [] end))
@@ -569,6 +620,90 @@ cmd_check() {
     *) note= ;;
   esac
   echo "ok: sailor $sailor serves $model at $endpoint ($busy of $max tasks busy$note)"
+}
+
+# grade_rank <grade>: the grade's place, 1 for the lowest; fails for anything
+# else.
+grade_rank() {
+  jq -en --argjson grades "$GRADES" --arg g "$1" '$grades | index($g) | if . == null then halt_error(1) else . + 1 end' 2>/dev/null
+}
+
+# pick_candidates <sailor> <model> <floor> <facet> <spend>: one line per
+# candidate, in the order pick weighs them: `try<TAB><sailor><TAB><model>`, or
+# `skip<TAB><sailor>/<model><TAB><reason>` for one a gate before check refuses.
+pick_candidates() {
+  # shellcheck disable=SC2016 # jq, not the shell, expands the $ names.
+  jq -r --argjson grades "$GRADES" --arg s "$1" --arg m "$2" --argjson floor "$3" --arg facet "$4" --argjson spend "$5" '
+    (if $floor > 0 then $grades[$floor - 1] else "" end) as $fg
+    | def rank: ((.grade // null) as $g | if $g == null then 0 else ($grades | index($g)) + 1 end);
+      def has_facet: $facet == "" or ((.facets // []) | index($facet)) != null;
+      def gates($n; $label):
+        if $floor > 0 and rank == 0 then "skip\t\($label)\tsailor \($n) has no grade, so it cannot meet grade \($fg)"
+        elif rank < $floor then "skip\t\($label)\tsailor \($n) is grade \(.grade), below \($fg)"
+        elif has_facet | not then "skip\t\($label)\tsailor \($n) has no facet \($facet)"
+        elif .paid == true and ($spend | not) then "skip\t\($label)\tsailor \($n) is paid, and spend is not allowed for this task"
+        else empty end;
+    (.sailors // {}) as $map
+    | if $s != "" then
+        $map[$s] as $x
+        | if $x == null then "skip\t\($s)\tunknown sailor \($s)"
+          elif $m == "" and ($x.models | length) != 1 then "skip\t\($s)\tsailor \($s) lists several models (\($x.models | join(", "))); name one with --model"
+          else ($m | if . == "" then $x.models[0] else . end) as $model
+            | ($x | gates($s; "\($s)/\($model)")) // "try\t\($s)\t\($model)"
+          end
+      else
+        [$map | to_entries[] | select(.value.status == "live" and (.value | rank) >= $floor and (.value | has_facet))]
+        | to_entries | map({i: .key, n: .value.key, x: .value.value})
+        | sort_by([(.x | rank), (if .x.paid == true then 1 else 0 end), .i])[]
+        | .n as $n | .x.models[0] as $model
+        | (.x | gates($n; "\($n)/\($model)")) // "try\t\($n)\t\($model)"
+      end' "$FILE"
+}
+
+cmd_pick() {
+  local sailor='' model='' floor=0 facet='' spend=false task='' rank lines kind name third out rc grade
+  local -a reasons=()
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --grade)
+        [ "$#" -ge 2 ] || usage
+        rank=$(grade_rank "$2") || die "unknown grade '$2'; the grades, lowest first, are $(jq -r 'join(", ")' <<<"$GRADES")"
+        [ "$rank" -le "$floor" ] || floor=$rank
+        shift 2
+        ;;
+      --sailor) [ "$#" -ge 2 ] && [ -n "$2" ] || usage; sailor=$2; shift 2 ;;
+      --model) [ "$#" -ge 2 ] && [ -n "$2" ] || usage; model=$2; shift 2 ;;
+      --facet) [ "$#" -ge 2 ] && [ -n "$2" ] || usage; facet=$2; shift 2 ;;
+      --spend) spend=true; shift ;;
+      --task) [ "$#" -ge 2 ] && [ -n "$2" ] || usage; task=$2; shift 2 ;;
+      *) usage ;;
+    esac
+  done
+  [ -n "$sailor" ] || [ "$floor" -gt 0 ] || usage
+  [ -z "$model" ] || [ -n "$sailor" ] || usage
+  load_valid
+  lines=$(pick_candidates "$sailor" "$model" "$floor" "$facet" "$spend") || die "could not read the sailors from config/crew-dispatch.json"
+  while IFS=$'\t' read -r kind name third; do
+    case "$kind" in
+      skip) reasons+=("$name: $third") ;;
+      try)
+        rc=0
+        out=$(cmd_check "$name" "$third" "$task" 2>&1) || rc=$?
+        if [ "$rc" = 0 ]; then
+          printf '%s %s\n' "$name" "$third"
+          return 0
+        fi
+        [ "$rc" = 1 ] || die "${out#fm-sailor: }"
+        reasons+=("$name/$third: ${out#refused: }")
+        ;;
+    esac
+  done <<<"$lines"
+  [ -z "$sailor" ] || refuse "${reasons[0]#*: }"
+  grade=$(jq -r --argjson f "$floor" '.[$f - 1]' <<<"$GRADES")
+  [ "${#reasons[@]}" -gt 0 ] || refuse "no live sailor has grade $grade or above${facet:+ and facet $facet}"
+  echo "refused: no sailor of grade $grade or above${facet:+ with facet $facet} can take it now:"
+  printf '  %s\n' "${reasons[@]}"
+  exit 1
 }
 
 cmd_provider_json() {
@@ -1347,6 +1482,11 @@ case "$1" in
     [ "$#" -eq 1 ] || usage
     cmd_list
     ;;
+  grades)
+    [ "$#" -eq 1 ] || usage
+    need_jq
+    jq -r '.[]' <<<"$GRADES"
+    ;;
   check)
     shift
     [ "$#" -ge 2 ] || usage
@@ -1360,6 +1500,7 @@ case "$1" in
     done
     cmd_check "$sailor" "$model" "$exclude"
     ;;
+  pick) shift; cmd_pick "$@" ;;
   provider-json)
     [ "$#" -eq 3 ] || usage
     cmd_provider_json "$2" "$3"

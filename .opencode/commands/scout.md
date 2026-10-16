@@ -1,5 +1,5 @@
 ---
-description: Start a scout - /scout [<project>] <ask>
+description: Start a scout - /scout [--grade <grade>] [--spend] [<project>] <ask>
 ---
 !`bin/fm-helm.sh scout --stdin 2>&1 <<'FM_HELM_ARGUMENTS'
 $ARGUMENTS

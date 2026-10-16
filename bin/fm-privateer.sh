@@ -39,8 +39,9 @@
 #   - config/launch-env-allowlist must list no ANTHROPIC_*, CLAUDE_*, or
 #     CLAUDECODE name;
 #   - config/crew-dispatch.json must exist and parse, declare no sailor_fallback,
-#     give every rule and default profile the opencode harness and a sailor, and
-#     give every sailor an endpoint that is an http or https URL whose authority
+#     give every rule and default profile the opencode harness and a sailor or a
+#     grade (which bin/fm-sailor.sh pick resolves only to this home's sailors),
+#     and give every sailor an endpoint that is an http or https URL whose authority
 #     (everything up to the first /, ?, or #) carries no userinfo or backslash,
 #     whose host is not, and is not under, anthropic.com, claude.ai, or
 #     claude.com, and that is either private, naming localhost, a loopback,
@@ -486,7 +487,7 @@ dispatch_violations() {
     def profile_name($p): ($p.harness // "no harness" | tostring) + (if $p.model? then "/" + ($p.model | tostring) else "" end);
     (if has("sailor_fallback") then ["config/crew-dispatch.json declares sailor_fallback; Privateer work queues when every sailor is down instead of falling back"] else [] end)
     + [uses[] | select(type == "object") | select(.harness != "opencode") | "config/crew-dispatch.json profile " + profile_name(.) + " uses a harness other than opencode"]
-    + [uses[] | select(type == "object") | select(.harness == "opencode" and (has("sailor") | not)) | "config/crew-dispatch.json profile " + profile_name(.) + " names no sailor, so it would run on the captain'"'"'s own OpenCode providers"]
+    + [uses[] | select(type == "object") | select(.harness == "opencode" and (has("sailor") | not) and (has("grade") | not)) | "config/crew-dispatch.json profile " + profile_name(.) + " names no sailor or grade, so it would run on the captain'"'"'s own OpenCode providers"]
     + (if has("sailors") and (.sailors | type) != "object" then ["config/crew-dispatch.json sailors must be an object"]
        elif (.sailors // {} | length) == 0 then ["config/crew-dispatch.json names no sailors"]
        else [] end)
