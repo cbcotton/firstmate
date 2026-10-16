@@ -8,6 +8,7 @@ description: Load when bin/fm-sailor.sh check or bin/fm-spawn.sh refuses a sailo
 A sailor is a model server, local or external, listed under `sailors` in `$FM_HOME/config/crew-dispatch.json`.
 Every worker runs on one sailor and one of its models; nothing here ever falls back to a model outside that list.
 You only read the sailor list: the captain adds, changes, and retires sailors from outside this session.
+The captain may rebind a sailor to another model from outside this session, for example in MLX Serve, so its model can change between tasks; read the list again before choosing.
 
 ## See the sailors
 

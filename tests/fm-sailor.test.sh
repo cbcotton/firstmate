@@ -983,6 +983,277 @@ test_registry_records_auth_env_and_unlisted_models() {
   pass "add and set record auth_env and unlisted_models, and add --from-mlx-serve reads a token router's list with the token and takes its routed ids"
 }
 
+# --- the slot registry --------------------------------------------------------
+#
+# sync probes nothing, so these cases run with the fake curl, whose empty log
+# proves it, against a scratch slot registry and mlx-serve registry.
+
+HAND_MAP='{"sailors":{
+  "tiller":{"endpoint":"http://127.0.0.1:11234/v1","status":"live","models":["qwen-coder"]},
+  "bonsai-1":{"endpoint":"http://127.0.0.1:11310/v1","status":"live","models":["bonsai-2bit"],"max_concurrent":3}},
+ "rules":[
+  {"when":"small clear work","use":[{"harness":"opencode","sailor":"bonsai-1","model":"bonsai-2bit"}]},
+  {"when":"tiller only","use":{"harness":"opencode","sailor":"tiller","model":"qwen-coder"}},
+  {"when":"mixed","use":[{"harness":"opencode","sailor":"tiller","model":"qwen-coder"},{"harness":"claude","model":"claude-sonnet-5-5"}]}],
+ "default":[{"harness":"claude","model":"claude-sonnet-5-5"}],
+ "sailor_fallback":{"harness":"claude","model":"claude-opus-5-5"}}'
+
+# make_sync_case <name> <map-json>: a home holding <map-json> whose
+# config/sailor-registry names REGISTRY, beside three mlx-serve servers.
+make_sync_case() {
+  make_case "$1" "$2"
+  cp "$CASE_DIR/config/crew-dispatch.json" "$CASE_DIR/original.json"
+  REGISTRY="$CASE_DIR/sailors.json"
+  printf '# slot registry\n%s\n' "$REGISTRY" > "$CASE_DIR/config/sailor-registry"
+  jq -n '{servers: [
+      {id: "mlx-serve", name: "MLX Serve", kind: "mlx-serve", baseURL: "http://127.0.0.1:11234", enabled: true},
+      {id: "bonsai-1", name: "Bonsai", baseURL: "http://127.0.0.1:11310/"},
+      {id: "hf-inference", name: "Hugging Face", kind: "openai", baseURL: "https://router.huggingface.co"}]}' > "$CASE_DIR/servers.json"
+}
+
+# slot_registry [<jq-filter>]: write REGISTRY, edited by <jq-filter>: tiller is
+# the Privateer first mate's slot, bonsai-1 is shared by both homes, lookout is
+# a paid routed placeholder with a token, and stoker is blank.
+slot_registry() {
+  jq -n --arg h "$CASE_DIR" '{schema: 1,
+    homes: {firstmate: $h, privateer: "/nonexistent/privateer"},
+    privateer_first_mate: "tiller",
+    slots: {
+      tiller: {title: "Tiller", server: "mlx-serve", model: "qwen-coder", grade: "sailor", facets: ["helm"], capacity: 1,
+               homes: {privateer: 1}, status: "live", model_settings: {"qwen-coder": {limit: {context: 131072, output: 16384}}}},
+      "bonsai-1": {title: "Bonsai 1", server: "bonsai-1", model: "bonsai-2bit", grade: "deckhand", capacity: 3,
+                   homes: {firstmate: 2, privateer: 1}, status: "live"},
+      lookout: {title: "Lookout", server: "hf-inference", model: "org/model:cheapest", grade: "sailor", paid: true,
+                auth_env: "HF_TOKEN", unlisted_models: true, capacity: 2, homes: {firstmate: 1, privateer: 1}, status: "placeholder"},
+      stoker: {title: "Stoker"}}}' | jq "${1:-.}" > "$REGISTRY"
+}
+
+run_sync() {
+  PATH="$FAKEBIN:$PATH" FM_FAKE_CURL_LOG="$CURL_LOG" FM_HOME="$CASE_DIR" \
+    FM_CONFIG_OVERRIDE="$CASE_DIR/config" FM_STATE_OVERRIDE="$CASE_DIR/state" \
+    FM_MLX_SERVE_SERVERS="$CASE_DIR/servers.json" "$SAILOR" "$@" 2>&1
+}
+
+test_sync_projects_this_homes_share_of_each_bound_slot() {
+  local out status
+  make_sync_case sync "$HAND_MAP"
+  slot_registry
+  cp "$REGISTRY" "$CASE_DIR/registry.orig"
+  cp "$CASE_DIR/servers.json" "$CASE_DIR/servers.orig"
+  out=$(run_sync sync "$REGISTRY" --home firstmate --dry-run)
+  expect_code 0 "$?" "a dry run must succeed: $out"
+  assert_contains "$out" '+    "lookout": {' "a dry run must show the change"
+  assert_contains "$out" "dry run: nothing written" "a dry run must say it wrote nothing"
+  assert_unchanged "the dry run"
+
+  out=$(run_sync sync "$REGISTRY" --home firstmate)
+  status=$?
+  expect_code 0 "$status" "a sync from a well-formed registry must succeed: $out"
+  assert_equals '["bonsai-1","lookout"]' "$(dispatch '.sailors | keys_unsorted')" "the home must get exactly its shared bound slots, in registry order"
+  assert_equals '{"title":"Bonsai 1","host":"Bonsai","endpoint":"http://127.0.0.1:11310/v1","status":"live","models":["bonsai-2bit"],"max_concurrent":2,"grade":"deckhand"}' \
+    "$(dispatch '.sailors["bonsai-1"]')" "a bound slot must become a sailor on its server's baseURL plus /v1, with the home's share as its capacity"
+  assert_equals '{"title":"Lookout","host":"Hugging Face","endpoint":"https://router.huggingface.co/v1","status":"placeholder","models":["org/model:cheapest"],"max_concurrent":1,"grade":"sailor","paid":true,"auth_env":"HF_TOKEN","unlisted_models":true}' \
+    "$(dispatch '.sailors.lookout')" "a keyed, routed, paid placeholder must keep every field the registry gives it"
+  assert_equals '["small clear work","mixed"]' "$(dispatch '[.rules[].when]')" "a rule left without a profile must go, as retire removes it"
+  assert_equals '[{"harness":"claude","model":"claude-sonnet-5-5"}]' "$(dispatch '.rules[1].use')" "a shared rule must keep its other profiles"
+  assert_equals "$(jq -c '[.default, .sailor_fallback]' "$CASE_DIR/original.json")" "$(dispatch '[.default, .sailor_fallback]')" "sync must leave the rest of the file alone"
+  assert_contains "$out" "synced home firstmate from $REGISTRY: bonsai-1, lookout" "sync must name the sailors it gave the home"
+  assert_contains "$out" "removed sailor tiller, which $REGISTRY no longer gives this home" "sync must report a sailor it removed"
+  assert_contains "$out" 'removed rule "tiller only", which offered only tiller' "sync must report a rule it emptied"
+  assert_contains "$out" "workers: the change applies from each worker's next spawn" "sync must say when workers switch"
+  assert_equals 1 "$(backups | awk 'END { print NR }')" "sync must keep one dated copy of the file it replaced"
+  run_sync validate >/dev/null || fail "the projected map must validate"
+  [ ! -s "$CURL_LOG" ] || fail "sync must probe nothing, but curl was called: $(cat "$CURL_LOG")"
+  cmp -s "$CASE_DIR/registry.orig" "$REGISTRY" || fail "sync must never write the slot registry"
+  cmp -s "$CASE_DIR/servers.orig" "$CASE_DIR/servers.json" || fail "sync must never write the mlx-serve registry"
+
+  out=$(run_sync sync "$REGISTRY" --home firstmate)
+  expect_code 0 "$?" "a second sync must succeed: $out"
+  assert_contains "$out" "this home's sailors already match $REGISTRY; nothing written" "a second sync must change nothing"
+  assert_equals 1 "$(backups | awk 'END { print NR }')" "a sync that changes nothing must not write"
+
+  out=$(run_sync set bonsai-1 --host "this Mac")
+  expect_code 0 "$?" "a hand edit must still work in a registry-managed home: $out"
+  assert_contains "$out" "note: this home's sailors follow $REGISTRY (config/sailor-registry), so the next sync rewrites them from it" "a hand edit must warn that sync rewrites it"
+  run_sync sync "$REGISTRY" --home firstmate >/dev/null
+  assert_equals '"Bonsai"' "$(dispatch '.sailors["bonsai-1"].host')" "the next sync must rewrite the hand edit"
+  pass "sync gives a home its share of each bound slot, drops the rest as retire does, probes nothing, and changes nothing when already in step"
+}
+
+test_sync_runs_only_where_the_home_hands_its_sailors_to_that_registry() {
+  local out
+  make_sync_case syncgate "$HAND_MAP"
+  slot_registry
+  rm "$CASE_DIR/config/sailor-registry"
+  out=$(run_sync sync "$REGISTRY" --home firstmate)
+  expect_code 1 "$?" "a home without config/sailor-registry must be refused"
+  assert_contains "$out" "refused: this home's sailors are managed by hand, since config/sailor-registry is absent" "hand-managed refusal missing"
+  cp "$REGISTRY" "$CASE_DIR/other.json"
+  printf '%s\n' "$CASE_DIR/other.json" > "$CASE_DIR/config/sailor-registry"
+  out=$(run_sync sync "$REGISTRY" --home firstmate)
+  expect_code 1 "$?" "another registry must be refused"
+  assert_contains "$out" "refused: this home follows the slot registry $CASE_DIR/other.json (config/sailor-registry), not $REGISTRY" "other-registry refusal missing"
+  printf 'sailors.json\n' > "$CASE_DIR/config/sailor-registry"
+  out=$(run_sync sync "$REGISTRY" --home firstmate)
+  expect_code 1 "$?" "a relative registry path must be refused"
+  assert_contains "$out" "config/sailor-registry must name the slot registry by an absolute path or one starting ~/" "relative-path refusal missing"
+  # shellcheck disable=SC2088 # the literal ~/ is what the file holds.
+  printf '~/sailors.json\n' > "$CASE_DIR/config/sailor-registry"
+  out=$(HOME="$CASE_DIR" run_sync sync "$REGISTRY" --home firstmate --dry-run)
+  expect_code 0 "$?" "a registry path under ~/ must be read from HOME: $out"
+  printf '%s\n' "$REGISTRY" > "$CASE_DIR/config/sailor-registry"
+  out=$(run_sync sync "$REGISTRY" --home ghost)
+  expect_code 1 "$?" "a home key the registry does not name must be refused"
+  assert_contains "$out" "refused: the slot registry names no home ghost" "unknown-home refusal missing"
+  slot_registry ".homes.firstmate = \"$TMP_ROOT\""
+  out=$(run_sync sync "$REGISTRY" --home firstmate)
+  expect_code 1 "$?" "a home key naming another directory must be refused"
+  assert_contains "$out" "refused: the slot registry's home firstmate is $TMP_ROOT, not this home ($CASE_DIR)" "wrong-home refusal missing"
+  assert_unchanged "the gate refusals"
+  run_sync sync "$REGISTRY" >/dev/null
+  expect_code 2 "$?" "sync without --home is a usage error"
+
+  rm "$CASE_DIR/config/sailor-registry"
+  out=$(run_sync set bonsai-1 --host "this Mac")
+  expect_code 0 "$?" "a hand edit must succeed in a hand-managed home: $out"
+  assert_not_contains "$out" "config/sailor-registry" "a hand-managed home must not mention a registry"
+  pass "sync runs only in a home whose config/sailor-registry names that registry and whose registry home key is this home"
+}
+
+test_sync_refuses_a_malformed_registry_naming_the_slot() {
+  local out filter want
+  make_sync_case syncbad "$HAND_MAP"
+  while IFS='~' read -r filter want; do
+    slot_registry "$filter"
+    out=$(run_sync sync "$REGISTRY" --home firstmate)
+    expect_code 1 "$?" "registry edit $filter must be refused: $out"
+    assert_contains "$out" "refused: $want" "registry edit $filter must be refused with its reason"
+  done <<EOF
+.schema = 2~the slot registry must be an object with schema 1
+.slots.stoker.server = "mlx-serve"~slot stoker needs both a server and a model, or neither
+.slots.lookout.server = "ghost"~slot lookout names server ghost, which $CASE_DIR/servers.json does not list
+.slots["bonsai-1"].homes.firstmate = 3~slot bonsai-1 shares 4 tasks among its homes, above its capacity of 3
+.slots["bonsai-1"].homes.firstmate = 1.5~slot bonsai-1 shares must be whole numbers
+.slots.tiller.capacity = 0~slot tiller capacity must be a positive whole number
+.slots.tiller.homes.dock = 0~slot tiller gives a share to home dock, which the registry homes do not name
+.slots.lookout.grade = "scout"~slot lookout grade scout is not one of deckhand, sailor, specialist, expert
+.slots.tiller.facets = "helm"~slot tiller facets must be a list of names
+.slots.stoker.grade = "scout"~slot stoker grade scout is not one of deckhand, sailor, specialist, expert
+.slots.stoker.facets = "helm"~slot stoker facets must be a list of names
+.slots.lookout.model = "two words"~sailor lookout models must be non-empty strings without spaces or quotes
+EOF
+  slot_registry
+  jq '.servers[0].baseURL = "ftp://127.0.0.1"' "$CASE_DIR/servers.json" > "$CASE_DIR/servers.tmp" && mv "$CASE_DIR/servers.tmp" "$CASE_DIR/servers.json"
+  out=$(run_sync sync "$REGISTRY" --home firstmate)
+  expect_code 1 "$?" "a server with a non-http baseURL must be refused"
+  assert_contains "$out" "refused: slot tiller is on server mlx-serve, whose baseURL ftp://127.0.0.1 is not an http(s) URL" "baseURL refusal missing"
+  printf '{"schema": 1,' > "$REGISTRY"
+  out=$(run_sync sync "$REGISTRY" --home firstmate)
+  expect_code 1 "$?" "a registry that does not parse must be refused"
+  assert_contains "$out" "refused: the slot registry $REGISTRY is not valid JSON" "parse refusal missing"
+  assert_unchanged "the registry refusals"
+  [ ! -s "$CURL_LOG" ] || fail "a refused sync must probe nothing"
+  pass "sync refuses a malformed registry as a whole, naming the slot, even one this home has no share of"
+}
+
+test_sync_refuses_to_strand_a_running_task_or_a_rule() {
+  local out
+  make_sync_case syncbusy "$HAND_MAP"
+  slot_registry
+  fm_write_meta "$CASE_DIR/state/busy-t1.meta" harness=opencode sailor=tiller model=qwen-coder
+  out=$(run_sync sync "$REGISTRY" --home firstmate)
+  expect_code 1 "$?" "removing a sailor a task runs on must be refused"
+  assert_contains "$out" "refused: task(s) busy-t1 run on tiller, which $REGISTRY no longer gives this home; sync once they land" "busy-removal refusal missing"
+  rm "$CASE_DIR/state/busy-t1.meta"
+
+  slot_registry '.slots["bonsai-1"].model = "bonsai-3bit"'
+  fm_write_meta "$CASE_DIR/state/busy-b1.meta" harness=opencode sailor=bonsai-1 model=bonsai-2bit
+  out=$(run_sync sync "$REGISTRY" --home firstmate)
+  expect_code 1 "$?" "rebinding a slot under a running task's model must be refused"
+  assert_contains "$out" "refused: task(s) busy-b1 run bonsai-1/bonsai-2bit, which $REGISTRY no longer lists" "busy-model refusal missing"
+  rm "$CASE_DIR/state/busy-b1.meta"
+  out=$(run_sync sync "$REGISTRY" --home firstmate)
+  expect_code 1 "$?" "a rule naming the old model must be refused"
+  assert_contains "$out" 'refused: rule "small clear work" names bonsai-1/bonsai-2bit, which the slot registry no longer gives this home; change it by hand first' "stale-rule refusal missing"
+  jq '.rules |= map(select(.when != "small clear work")) | .default = [{harness: "opencode", sailor: "bonsai-1", model: "bonsai-2bit"}]' \
+    "$CASE_DIR/original.json" > "$CASE_DIR/config/crew-dispatch.json"
+  cp "$CASE_DIR/config/crew-dispatch.json" "$CASE_DIR/original.json"
+  out=$(run_sync sync "$REGISTRY" --home firstmate)
+  expect_code 1 "$?" "a default naming the old model must be refused"
+  assert_contains "$out" "refused: the default names bonsai-1/bonsai-2bit, which the slot registry no longer gives this home" "stale-default refusal missing"
+  assert_unchanged "the stranding refusals"
+
+  slot_registry
+  fm_write_meta "$CASE_DIR/state/busy-b1.meta" harness=opencode sailor=bonsai-1 model=bonsai-2bit
+  out=$(run_sync sync "$REGISTRY" --home firstmate)
+  expect_code 0 "$?" "a task on a sailor and model the registry keeps must not block sync: $out"
+  pass "sync refuses to remove a sailor or model a task runs on, and to leave a rule or default on a model the slot no longer serves"
+}
+
+# make_privateer_sync_case <name>: a Privateer home on the main home's two
+# local sailors, whose first mate runs on tiller, keyed privateer in REGISTRY.
+make_privateer_sync_case() {
+  make_sync_case "$1" "$(jq -c '.rules = [{when: "Any Privateer worker task", use: [{harness: "opencode", sailor: "bonsai-1", model: "bonsai-2bit"}]}]
+    | .default = .rules[0].use | del(.sailor_fallback)' <<<"$HAND_MAP")"
+  printf '# first mate\ntiller/qwen-coder\n' > "$CASE_DIR/config/privateer"
+  printf 'opencode\n' > "$CASE_DIR/config/crew-harness"
+  : > "$CASE_DIR/config/sailor-sandbox"
+  FM_HOME="$CASE_DIR" "$ROOT/bin/fm-privateer.sh" check >/dev/null 2>&1 ||
+    fail "the Privateer fixture must pass the quarantine: $(FM_HOME="$CASE_DIR" "$ROOT/bin/fm-privateer.sh" check 2>&1)"
+}
+
+PRIVATEER_KEY='.homes.privateer = .homes.firstmate | .homes.firstmate = "/nonexistent/firstmate"'
+
+test_sync_in_a_privateer_home_moves_the_first_mate_and_keeps_the_quarantine() {
+  local out filter want
+  make_privateer_sync_case syncpv
+  slot_registry "$PRIVATEER_KEY"
+  out=$(run_sync sync "$REGISTRY" --home privateer)
+  expect_code 0 "$?" "a sync into a Privateer home must succeed: $out"
+  assert_equals '["tiller","bonsai-1","lookout"]' "$(dispatch '.sailors | keys_unsorted')" "the Privateer home must get every slot shared with it"
+  assert_equals '[1,1,1]' "$(dispatch '[.sailors[].max_concurrent]')" "each sailor must carry this home's share"
+  assert_equals '# first mate
+tiller/qwen-coder' "$(cat "$CASE_DIR/config/privateer")" "an unchanged first mate must leave config/privateer alone"
+  assert_contains "$out" "egress: a running Privateer session allows a new endpoint only after fm-privateer.sh reload" "a new endpoint must ask for a reload"
+  FM_HOME="$CASE_DIR" "$ROOT/bin/fm-privateer.sh" check >/dev/null 2>&1 || fail "the home must pass the quarantine after sync"
+
+  slot_registry "$PRIVATEER_KEY"' | .slots.tiller.model = "qwen-next" | .slots.tiller.model_settings = {"qwen-next": {limit: {context: 65536, output: 8192}}}'
+  out=$(run_sync sync "$REGISTRY" --home privateer)
+  expect_code 0 "$?" "rebinding the first mate's slot must succeed: $out"
+  assert_equals '# first mate
+tiller/qwen-next' "$(cat "$CASE_DIR/config/privateer")" "the first mate line must follow its slot, keeping the comment"
+  assert_contains "$out" "wrote config/privateer" "sync must say it wrote config/privateer"
+  assert_contains "$out" "first mate: restart the Privateer session to switch" "a first-mate rebind must ask for a restart"
+  assert_not_contains "$out" "egress:" "a rebind on the same endpoint must not ask for a reload"
+  FM_HOME="$CASE_DIR" "$ROOT/bin/fm-privateer.sh" check >/dev/null 2>&1 || fail "the home must pass the quarantine after the rebind"
+
+  cp "$CASE_DIR/config/crew-dispatch.json" "$CASE_DIR/original.json"
+  cp "$CASE_DIR/config/privateer" "$CASE_DIR/privateer.orig"
+  rm -f "$CASE_DIR/config/"*.bak-*
+  while IFS='~' read -r filter want; do
+    slot_registry "$PRIVATEER_KEY | .slots.tiller.model = \"qwen-next\" | .slots.tiller.model_settings = {} | $filter"
+    out=$(run_sync sync "$REGISTRY" --home privateer)
+    expect_code 1 "$?" "registry edit $filter must be refused in a Privateer home: $out"
+    assert_contains "$out" "refused: $want" "registry edit $filter must be refused with its reason"
+  done <<'EOF'
+.privateer_first_mate = "bonsai-1"~slot bonsai-1 lacks the helm facet the first mate needs
+.privateer_first_mate = "stoker"~slot stoker is blank, and the first mate runs only on a bound slot
+.privateer_first_mate = "ghost"~privateer_first_mate names ghost, which is not a slot
+.slots.tiller.homes = {}~slot tiller gives home privateer no share, so the first mate cannot run on it
+.slots.tiller.status = "placeholder"~slot tiller is a placeholder, and the first mate runs only on a live sailor
+del(.privateer_first_mate) | .slots.tiller.status = "placeholder"~the first mate runs on tiller/qwen-next, and the first mate runs only on a live sailor
+.slots.lookout.auth_env = "ANTHROPIC_API_KEY"~the change would break this home's Privateer quarantine:
+EOF
+  slot_registry "$PRIVATEER_KEY"' | .slots.tiller.model = "qwen-next" | .slots.tiller.model_settings = {}'
+  jq '.servers[2].baseURL = "https://api.anthropic.com"' "$CASE_DIR/servers.json" > "$CASE_DIR/servers.tmp" && mv "$CASE_DIR/servers.tmp" "$CASE_DIR/servers.json"
+  out=$(run_sync sync "$REGISTRY" --home privateer)
+  expect_code 1 "$?" "a slot on an Anthropic host must be refused in a Privateer home"
+  assert_contains "$out" "sailor lookout has endpoint 'https://api.anthropic.com/v1', on an Anthropic or Claude host" "the refusal must carry the quarantine's own reason"
+  assert_unchanged "the Privateer refusals"
+  cmp -s "$CASE_DIR/privateer.orig" "$CASE_DIR/config/privateer" || fail "a refused sync must leave config/privateer alone"
+  pass "in a Privateer home sync moves the first mate with its helm slot, refuses a first mate it cannot run, and keeps the quarantine"
+}
+
 test_live_sailor_serving_the_model_passes_check
 test_endpoint_trailing_slash_is_not_doubled
 test_placeholder_is_refused_without_a_probe
@@ -1013,5 +1284,10 @@ test_missing_token_refuses_naming_only_the_variable
 test_with_token_hands_the_value_to_the_command_alone
 test_unlisted_models_lets_a_router_serve_ids_it_does_not_list
 test_registry_records_auth_env_and_unlisted_models
+test_sync_projects_this_homes_share_of_each_bound_slot
+test_sync_runs_only_where_the_home_hands_its_sailors_to_that_registry
+test_sync_refuses_a_malformed_registry_naming_the_slot
+test_sync_refuses_to_strand_a_running_task_or_a_rule
+test_sync_in_a_privateer_home_moves_the_first_mate_and_keeps_the_quarantine
 
 echo "# all fm-sailor tests passed"

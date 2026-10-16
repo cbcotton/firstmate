@@ -29,6 +29,7 @@
 #                    [--model-limit <context>:<output>] [--model-options <json>]
 #                    [--warm] [--dry-run]
 #   fm-sailor.sh retire <sailor>
+#   fm-sailor.sh sync <registry> --home <key> [--dry-run]
 #
 # `model_settings` maps a listed model id to {limit, options}: limit holds both
 # context and output and nothing else, each a positive whole number; options is an object of
@@ -120,7 +121,7 @@
 # sailors answer.
 #
 # The registry commands edit config/crew-dispatch.json and nothing else,
-# except that set-model --first-mate also writes config/privateer. Each builds
+# except that set-model --first-mate and sync also write config/privateer. Each builds
 # the whole changed file first and writes nothing unless it passes `validate`
 # and, in a Privateer home (config/privateer present), unless
 # bin/fm-privateer.sh check, the one owner of the quarantine rules, reports no
@@ -134,7 +135,9 @@
 # shell. A change reaches each worker at its next spawn; running workers keep
 # what they launched with. A Privateer session keeps its first mate's model
 # until it is stopped and started again, and its egress allowlist until the
-# captain runs bin/fm-privateer.sh reload.
+# captain runs bin/fm-privateer.sh reload. In a home whose
+# config/sailor-registry exists, add, set, set-model, and retire add a note
+# after a write that the next sync rewrites the sailors from the slot registry.
 #
 # add registers a new sailor, a `placeholder` unless --live. It refuses a name
 # already in the map. --from-mlx-serve <server-id> reads that server's entry in
@@ -188,6 +191,50 @@
 # left with no profile is removed, as is a default left empty, and each is
 # reported. It refuses while any task record carries sailor=<name>.
 #
+# sync rewrites this home's sailors from a slot registry, the JSON file MLX
+# Serve keeps beside the mlx-serve registry, and in a Privateer home the first
+# mate line of config/privateer. It runs only in a home whose
+# config/sailor-registry names <registry> (its first line that is not a
+# comment, an absolute path or one starting ~/); without that file the home's
+# sailors are managed by hand and sync refuses. It reads from the registry:
+# `schema`, which must be 1; `homes`, which must map <key> to this home's
+# directory; `slots`, each a pre-named sailor that is blank (neither `server`
+# nor `model`) or bound to one `server`, an id in the mlx-serve registry, and
+# one `model`, with optional `title`, `status` (default placeholder),
+# `capacity` (default 1), `homes` (each home's share of that capacity, whole
+# numbers summing to at most it), `grade` (one of SAILOR_GRADES below),
+# `facets` (names), `paid`, `auth_env`, `unlisted_models`, and
+# `model_settings`; and `privateer_first_mate`, a slot name. A bound slot with
+# a share for <key> becomes the sailor of the same name, in registry order:
+# endpoint the server's baseURL plus /v1, host the server's name, models
+# [model], max_concurrent the share, and the other fields copied as given.
+# Every other sailor leaves the map with every rule and default profile naming
+# it, as retire removes them, and each removal is reported. In a home with
+# config/privateer, privateer_first_mate becomes the first mate line
+# <slot>/<model>, written as set-model --first-mate writes it; elsewhere it is
+# ignored. sync reads the mlx-serve registry only for each server's baseURL
+# and name, probes nothing, and never writes the slot registry, the mlx-serve
+# registry, .env, or the Keychain. --dry-run prints the change and writes
+# nothing. It refuses, writing nothing:
+#   - without config/sailor-registry, when it names another file, or when
+#     `homes` does not map <key> to this home;
+#   - a registry that is not schema 1 JSON with `homes` and `slots` objects,
+#     a privateer_first_mate that is not a string, and, naming the slot, a server
+#     without a model or a model without a server, a server the mlx-serve
+#     registry does not list exactly once or whose baseURL is not http(s), a
+#     capacity or share that is not a whole number, a share for a home
+#     `homes` does not name, shares above the capacity, a grade outside
+#     SAILOR_GRADES, or facets that are not a list of names;
+#   - a sailor leaving the map while a task record carries sailor=<it>, or a
+#     model leaving a sailor while one carries sailor=<it> and model=<that>;
+#   - a rule or default profile naming a sailor that stays, with a model it
+#     no longer lists;
+#   - in a Privateer home, a privateer_first_mate that is not a slot, or is
+#     blank, not shared with <key>, without the `helm` facet, or a
+#     placeholder, and a first mate line left on a placeholder sailor;
+#   - whatever validate or the Privateer check refuses, as for every registry
+#     command.
+#
 # Environment: FM_HOME, FM_STATE_OVERRIDE, and FM_CONFIG_OVERRIDE resolve the
 # home exactly as the other bin/ scripts do.
 #
@@ -203,7 +250,10 @@ STATE="${FM_STATE_OVERRIDE:-$FM_HOME/state}"
 CONFIG="${FM_CONFIG_OVERRIDE:-$FM_HOME/config}"
 FILE="$CONFIG/crew-dispatch.json"
 FLAG="$CONFIG/privateer"
+REGISTRY_FLAG="$CONFIG/sailor-registry"
 SERVERS_FILE="${FM_MLX_SERVE_SERVERS:-$HOME/.mlx-serve/servers.json}"
+# The grades a sailor slot may carry, lowest reasoning class first.
+SAILOR_GRADES='["deckhand","sailor","specialist","expert"]'
 WORK=
 DRY_RUN=0
 SAILOR_TOKEN=
@@ -224,6 +274,7 @@ usage: fm-sailor.sh validate | list | status [--all] | health
        fm-sailor.sh set-model <sailor> <model> [--replace <old>] [--first-mate] [--model-limit <context>:<output>]
                     [--model-options <json>] [--warm] [--dry-run]
        fm-sailor.sh retire <sailor>
+       fm-sailor.sh sync <registry> --home <key> [--dry-run]
 EOF
   exit 2
 }
@@ -668,6 +719,67 @@ first_mate_line() {
   sed -e 's/#.*//' "$FLAG" 2>/dev/null | awk 'NF { print $1; exit }'
 }
 
+# first_mate_rewrite <sailor>/<model>: config/privateer with that first mate
+# line in place of the current one, keeping every comment.
+first_mate_rewrite() {
+  awk -v v="$1" '
+    { line = $0; sub(/#.*/, "", line) }
+    !done && line ~ /[^[:space:]]/ { print v; done = 1; next }
+    { print }
+    END { if (!done) print v }' "$FLAG"
+}
+
+# expand_home <path>: <path>, with a leading ~/ read as $HOME/.
+expand_home() {
+  case "$1" in
+    \~/*) printf '%s\n' "$HOME/${1#\~/}" ;;
+    *) printf '%s\n' "$1" ;;
+  esac
+}
+
+# registry_path: the slot registry config/sailor-registry names, or empty when
+# the file is absent or names nothing.
+registry_path() {
+  [ -f "$REGISTRY_FLAG" ] || return 0
+  sed -e 's/#.*//' "$REGISTRY_FLAG" 2>/dev/null |
+    awk 'NF { sub(/^[[:space:]]+/, ""); sub(/[[:space:]]+$/, ""); print; exit }'
+}
+
+# hand_edit_note: after a written hand edit in a home whose sailors follow a
+# slot registry, say that the next sync rewrites them.
+hand_edit_note() {
+  local path
+  [ "$WROTE_DISPATCH$WROTE_PRIVATEER" != 00 ] || return 0
+  path=$(registry_path)
+  [ -n "$path" ] || return 0
+  echo "note: this home's sailors follow $path (config/sailor-registry), so the next sync rewrites them from it"
+}
+
+# STRIP_JQ: jq definitions for removing every profile that names a sailor in
+# $gone, with any rule or default left without a profile (retire and sync).
+# shellcheck disable=SC2016 # jq, not the shell, expands the $ names.
+STRIP_JQ='
+  def profiles($v): if ($v | type) == "array" then $v elif ($v | type) == "object" then [$v] else [] end;
+  def gone: type == "object" and ((.sailor | type) == "string") and (.sailor as $n | any($gone[]; . == $n));
+  def strip: if type == "array" then map(select(gone | not)) elif gone then [] else . end;
+  def emptied: type == "array" and length == 0;
+  def drop_gone:
+    (if (.rules | type) == "array" then
+       .rules |= map(if type == "object" and has("use") and ((.use | emptied) | not) and (.use | strip | emptied) then empty
+                     elif type == "object" and has("use") then .use |= strip
+                     else . end)
+     else . end)
+    | (if has("default") and ((.default | emptied) | not) and (.default | strip | emptied) then del(.default)
+       elif has("default") then .default |= strip
+       else . end);
+  def emptied_report:
+    [(.rules // [])[]? | select(type == "object")
+     | select((profiles(.use?) | length) > 0 and (profiles(.use?) | all(gone)))
+     | "removed rule \"\(.when)\", which offered only \([profiles(.use?)[].sailor] | unique | join(", "))"]
+    + (if (profiles(.default?) | length) > 0 and (profiles(.default?) | all(gone))
+       then ["removed the default, which offered only \([profiles(.default?)[].sailor] | unique | join(", "))"] else [] end);
+'
+
 privateer_check() {  # <config-dir>
   FM_HOME="$FM_HOME" FM_STATE_OVERRIDE="$STATE" FM_CONFIG_OVERRIDE="$1" "$SCRIPT_DIR/fm-privateer.sh" check 2>&1
 }
@@ -887,6 +999,7 @@ cmd_add() {
   commit || true
   echo "added sailor $name ($status) at $endpoint serving $(jq -r 'join(",")' <<<"$models_array")"
   report_effects
+  hand_edit_note
 }
 
 cmd_set() {
@@ -944,6 +1057,7 @@ cmd_set() {
     [ "$runs" = 0 ] || echo "note: $runs task(s) still run on $name; as a placeholder it takes no new work"
   fi
   report_effects
+  hand_edit_note
 }
 
 cmd_set_model() {
@@ -1007,11 +1121,7 @@ cmd_set_model() {
         | (if has("default") then .default |= fix else . end)
       end'
   if [ "$first_mate" = 1 ]; then
-    awk -v v="$name/$model" '
-      { line = $0; sub(/#.*/, "", line) }
-      !done && line ~ /[^[:space:]]/ { print v; done = 1; next }
-      { print }
-      END { if (!done) print v }' "$FLAG" > "$WORK/privateer"
+    first_mate_rewrite "$name/$model" > "$WORK/privateer"
   fi
   guard_candidate
   if [ "$status" = live ]; then
@@ -1039,10 +1149,11 @@ cmd_set_model() {
   [ "$state" != unloaded ] || echo "note: $name lists $model but has not loaded it, so the first request loads it; rerun with --warm to load it now"
   [ "$state" != warmed ] || echo "$name has loaded $model"
   report_effects
+  hand_edit_note
 }
 
 cmd_retire() {
-  local name ids removed
+  local name ids removed gone
   [ "$#" -eq 1 ] || usage
   name=$1
   case "$name" in '' | -*) usage ;; esac
@@ -1054,31 +1165,174 @@ cmd_retire() {
     def profiles($v): if ($v | type) == "array" then $v elif ($v | type) == "object" then [$v] else [] end;
     [((.rules // [])[]? | profiles(.use?)[]?), profiles(.default?)[]?
      | select(type == "object" and .sailor == $s)] | length' "$FILE")
-  jq -r --arg s "$name" '
-    def profiles($v): if ($v | type) == "array" then $v elif ($v | type) == "object" then [$v] else [] end;
-    def gone: type == "object" and .sailor == $s;
-    ([(.rules // [])[]? | select(type == "object")
-      | select((profiles(.use?) | length) > 0 and (profiles(.use?) | all(gone)))
-      | "removed rule \"\(.when)\", which offered only \($s)"]
-     + (if (profiles(.default?) | length) > 0 and (profiles(.default?) | all(gone))
-        then ["removed the default, which offered only \($s)"] else [] end))[]' "$FILE" > "$WORK/emptied"
-  # shellcheck disable=SC2016 # jq, not the shell, expands the $ names.
-  compose --arg s "$name" '
-    def gone: type == "object" and .sailor == $s;
-    def strip: if type == "array" then map(select(gone | not)) elif gone then [] else . end;
-    def emptied: type == "array" and length == 0;
-    del(.sailors[$s])
-    | (if (.rules | type) == "array" then
-         .rules |= map(if type == "object" and has("use") and ((.use | emptied) | not) and (.use | strip | emptied) then empty
-                       elif type == "object" and has("use") then .use |= strip
-                       else . end)
-       else . end)
-    | (if has("default") and ((.default | emptied) | not) and (.default | strip | emptied) then del(.default)
-       elif has("default") then .default |= strip
-       else . end)'
+  gone=$(jq -nc --arg s "$name" '[$s]')
+  jq -r --argjson gone "$gone" "$STRIP_JQ emptied_report[]" "$FILE" > "$WORK/emptied"
+  compose --argjson gone "$gone" "$STRIP_JQ del(.sailors[\$gone[0]]) | drop_gone"
   guard_candidate
   commit || true
   echo "retired sailor $name and the $removed profile(s) naming it"
+  cat "$WORK/emptied"
+  report_effects
+  hand_edit_note
+}
+
+# registry_problem <registry-json> <servers-json>: the first reason the slot
+# registry cannot be projected, or nothing.
+registry_problem() {
+  jq -nr --argjson reg "$1" --argjson srv "$2" --argjson grades "$SAILOR_GRADES" --arg file "$SERVERS_FILE" '
+    def whole: type == "number" and . == floor;
+    def name: type == "string" and test("^[a-z][a-z0-9]*(-[a-z0-9]+)*$");
+    [$srv.servers[]? | select(type == "object")] as $servers
+    | def slot_bad($homes; $n; $s):
+        [$servers[] | select(.id? == $s.server)] as $match
+        | (($s.homes // {}) | if type == "object" then . else {} end) as $shares
+        | ((($shares | keys) - ($homes | keys)) | first) as $stray
+        | ($s.capacity // 1) as $cap
+        | if ($s | has("server")) != ($s | has("model")) then "slot \($n) needs both a server and a model, or neither"
+          elif ($s | has("grade")) and (($s.grade | type) != "string" or ($grades | index($s.grade)) == null) then "slot \($n) grade \($s.grade | tostring) is not one of \($grades | join(", "))"
+          elif ($s | has("facets")) and (($s.facets | type) != "array" or ([$s.facets[] | name] | all | not)) then "slot \($n) facets must be a list of names"
+          elif ($s | has("server")) | not then empty
+          elif ($match | length) == 0 then "slot \($n) names server \($s.server | tostring), which \($file) does not list"
+          elif ($match | length) > 1 then "slot \($n) names server \($s.server), which \($file) lists more than once"
+          elif ($match[0].baseURL | type) != "string" or ($match[0].baseURL | test("^https?://[^/]") | not) then "slot \($n) is on server \($s.server), whose baseURL \($match[0].baseURL | tostring) is not an http(s) URL"
+          elif ($s.model | type) != "string" or ($s.model | length) == 0 then "slot \($n) model must be a non-empty string"
+          elif ($s | has("capacity")) and (($s.capacity | whole and . >= 1) | not) then "slot \($n) capacity must be a positive whole number"
+          elif ($s | has("homes")) and (($s.homes | type) != "object") then "slot \($n) homes must map home names to shares"
+          elif ([$shares[] | whole and . >= 0] | all | not) then "slot \($n) shares must be whole numbers"
+          elif $stray != null then "slot \($n) gives a share to home \($stray), which the registry homes do not name"
+          elif ([$shares[]] | add // 0) > $cap then "slot \($n) shares \([$shares[]] | add) tasks among its homes, above its capacity of \($cap)"
+          else empty
+          end;
+    $reg
+    | if type != "object" or .schema != 1 then "the slot registry must be an object with schema 1"
+      elif (.homes | type) != "object" then "the slot registry needs a homes object"
+      elif (.slots | type) != "object" then "the slot registry needs a slots object"
+      elif has("privateer_first_mate") and ((.privateer_first_mate | type) != "string") then "privateer_first_mate must name a slot"
+      else
+        .homes as $homes
+        | [.slots | to_entries[] | if (.value | type) != "object" then "slot \(.key) must be an object" else slot_bad($homes; .key; .value) end]
+        | first // empty
+      end'
+}
+
+# slot_projection <registry-json> <servers-json> <key>: the sailors map home
+# <key> gets from the slot registry (see the header).
+slot_projection() {
+  jq -nc --argjson reg "$1" --argjson srv "$2" --arg key "$3" '
+    [$srv.servers[]? | select(type == "object")] as $servers
+    | $reg.slots | to_entries
+    | map(select((.value | has("server")) and (((.value.homes // {})[$key] // 0) > 0))
+          | .key as $n | .value as $s
+          | [$servers[] | select(.id? == $s.server)][0] as $x
+          | {key: $n, value: (
+              (if $s | has("title") then {title: $s.title} else {} end)
+              + (if ($x.name | type) == "string" then {host: $x.name} else {} end)
+              + {endpoint: (($x.baseURL | sub("/$"; "")) + "/v1"), status: ($s.status // "placeholder"), models: [$s.model], max_concurrent: $s.homes[$key]}
+              + reduce ("grade", "facets", "paid", "auth_env", "unlisted_models", "model_settings") as $f
+                  ({}; if $s | has($f) then . + {($f): $s[$f]} else . end))})
+    | from_entries'
+}
+
+cmd_sync() {
+  local registry key='' managed reg srv='{}' err home_dir new gone stale s m ids line fm names
+  [ "$#" -ge 3 ] || usage
+  registry=$1
+  shift
+  case "$registry" in '' | -*) usage ;; esac
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --home) [ "$#" -ge 2 ] && [ -n "$2" ] || usage; key=$2; shift 2 ;;
+      --dry-run) DRY_RUN=1; shift ;;
+      *) usage ;;
+    esac
+  done
+  [ -n "$key" ] || usage
+  begin_edit
+  managed=$(registry_path)
+  [ -n "$managed" ] ||
+    refuse "this home's sailors are managed by hand, since config/sailor-registry is absent; write the slot registry's path into it to hand them to sync"
+  managed=$(expand_home "$managed")
+  case "$managed" in
+    /*) ;;
+    *) refuse "config/sailor-registry must name the slot registry by an absolute path or one starting ~/, not '$managed'" ;;
+  esac
+  [ -f "$registry" ] || refuse "no slot registry at $registry"
+  [ "$registry" -ef "$managed" ] || refuse "this home follows the slot registry $managed (config/sailor-registry), not $registry"
+  reg=$(jq -ce . "$registry" 2>/dev/null) || refuse "the slot registry $registry is not valid JSON"
+  if jq -e '.slots | type == "object" and any(.[]; type == "object" and has("server"))' <<<"$reg" >/dev/null 2>&1; then
+    [ -f "$SERVERS_FILE" ] || refuse "no mlx-serve registry at $SERVERS_FILE"
+    srv=$(jq -ce . "$SERVERS_FILE" 2>/dev/null) || srv='{}'
+    jq -e '.servers | type == "array"' <<<"$srv" >/dev/null 2>&1 || refuse "$SERVERS_FILE holds no servers list"
+  fi
+  err=$(registry_problem "$reg" "$srv") || die "could not read the slot registry $registry"
+  [ -z "$err" ] || refuse "$err"
+  home_dir=$(jq -r --arg k "$key" '.homes[$k] | strings' <<<"$reg")
+  [ -n "$home_dir" ] || refuse "the slot registry names no home $key"
+  home_dir=$(expand_home "$home_dir")
+  [ -d "$home_dir" ] && [ "$home_dir" -ef "$FM_HOME" ] || refuse "the slot registry's home $key is $home_dir, not this home ($FM_HOME)"
+
+  new=$(slot_projection "$reg" "$srv" "$key") || die "could not project the slot registry $registry"
+  # shellcheck disable=SC2016 # jq, not the shell, expands the $ names.
+  while IFS=$'\t' read -r s m; do
+    if [ -z "$m" ]; then
+      ids=$(sailor_tasks "$s" "" | paste -sd, -)
+      [ -z "$ids" ] || refuse "task(s) $ids run on $s, which $registry no longer gives this home; sync once they land"
+    else
+      ids=$(sailor_tasks "$s" "" "$m" | paste -sd, -)
+      [ -z "$ids" ] || refuse "task(s) $ids run $s/$m, which $registry no longer lists, and relaunching them needs it listed; sync once they land"
+    fi
+  done < <(jq -r --argjson new "$new" '
+    (.sailors // {}) | to_entries[] | .key as $s
+    | if ($new | has($s)) then (.value.models[] | select(. as $m | ($new[$s].models | index($m)) == null) | "\($s)\t\(.)")
+      else "\($s)\t" end' "$FILE")
+  # shellcheck disable=SC2016 # jq, not the shell, expands the $ names.
+  stale=$(jq -r --argjson new "$new" '
+    def profiles($v): if ($v | type) == "array" then $v elif ($v | type) == "object" then [$v] else [] end;
+    [((.rules // [])[]? | select(type == "object") | "rule \"\(.when)\"" as $w | profiles(.use?)[]? | [$w, .]),
+     (profiles(.default?)[]? | ["the default", .])]
+    | map(select(.[1] | type == "object" and (.sailor | type) == "string" and (.model | type) == "string")
+          | select(.[1].sailor as $s | .[1].model as $m | ($new | has($s)) and (($new[$s].models | index($m)) == null)))
+    | map("\(.[0]) names \(.[1].sailor)/\(.[1].model), which the slot registry no longer gives this home; change it by hand first")
+    | first // empty' "$FILE")
+  [ -z "$stale" ] || refuse "$stale"
+
+  if privateer_on; then
+    line=$(first_mate_line)
+    fm=$(jq -r '.privateer_first_mate // empty' <<<"$reg")
+    if [ -n "$fm" ]; then
+      # shellcheck disable=SC2016 # jq, not the shell, expands the $ names.
+      err=$(jq -r --arg f "$fm" --arg k "$key" '
+        .slots[$f] as $s
+        | if $s == null then "privateer_first_mate names \($f), which is not a slot"
+          elif ($s | has("server")) | not then "slot \($f) is blank, and the first mate runs only on a bound slot"
+          elif ((($s.homes // {})[$k] // 0) > 0) | not then "slot \($f) gives home \($k) no share, so the first mate cannot run on it"
+          elif (($s.facets // []) | index("helm")) == null then "slot \($f) lacks the helm facet the first mate needs"
+          elif ($s.status // "placeholder") != "live" then "slot \($f) is a placeholder, and the first mate runs only on a live sailor"
+          else empty
+          end' <<<"$reg")
+      [ -z "$err" ] || refuse "$err"
+      line="$fm/$(jq -r --arg f "$fm" '.slots[$f].model' <<<"$reg")"
+      first_mate_rewrite "$line" > "$WORK/privateer"
+    fi
+    if [ -n "$line" ] && [ "$(jq -r --arg s "${line%%/*}" '.[$s].status // empty' <<<"$new")" = placeholder ]; then
+      refuse "the first mate runs on $line, and the first mate runs only on a live sailor"
+    fi
+  fi
+
+  gone=$(jq -c --argjson new "$new" '[(.sailors // {}) | keys_unsorted[] | select(. as $s | $new | has($s) | not)]' "$FILE")
+  jq -r --argjson gone "$gone" "$STRIP_JQ emptied_report[]" "$FILE" > "$WORK/emptied"
+  # shellcheck disable=SC2016 # jq, not the shell, expands the $ names.
+  compose --argjson new "$new" --argjson gone "$gone" "$STRIP_JQ"'
+    (if $new == {} and (has("sailors") | not) then . else .sailors = $new end) | drop_gone'
+  guard_candidate
+  if ! commit; then
+    echo "this home's sailors already match $registry; nothing written"
+    return 0
+  fi
+  [ "$DRY_RUN" = 0 ] || return 0
+  names=$(jq -r 'keys_unsorted | join(", ")' <<<"$new")
+  echo "synced home $key from $registry: ${names:-no sailors}"
+  jq -r --arg r "$registry" '.[] | "removed sailor \(.), which \($r) no longer gives this home"' <<<"$gone"
   cat "$WORK/emptied"
   report_effects
 }
@@ -1129,6 +1383,7 @@ case "$1" in
   set) shift; cmd_set "$@" ;;
   set-model) shift; cmd_set_model "$@" ;;
   retire) shift; cmd_retire "$@" ;;
+  sync) shift; cmd_sync "$@" ;;
   -h | --help)
     sed -n '2,/^set -u/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'
     ;;
