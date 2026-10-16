@@ -1,0 +1,64 @@
+$ fm-fleet-snapshot.sh --json | jq .sailors
+rc=0
+[
+  {
+    "name": "tiller",
+    "status": "live",
+    "answering": true,
+    "endpoint": "http://127.0.0.1:18777/v1",
+    "tasks": 0,
+    "capacity": 1,
+    "grade": "specialist",
+    "line": "tiller live answering endpoint=http://127.0.0.1:18777/v1 tasks=0/1 grade=specialist models=qwen-coder(listed)"
+  },
+  {
+    "name": "bonsai",
+    "status": "live",
+    "answering": true,
+    "endpoint": "http://127.0.0.1:18777/v1",
+    "tasks": 0,
+    "capacity": 2,
+    "grade": "deckhand",
+    "line": "bonsai live answering endpoint=http://127.0.0.1:18777/v1 tasks=0/2 grade=deckhand models=qwen-small(listed)"
+  },
+  {
+    "name": "plain",
+    "status": "live",
+    "answering": true,
+    "endpoint": "http://127.0.0.1:18777/v1",
+    "tasks": 0,
+    "capacity": 1,
+    "grade": null,
+    "line": "plain live answering endpoint=http://127.0.0.1:18777/v1 tasks=0/1 models=qwen-coder(listed),qwen-big(listed)"
+  },
+  {
+    "name": "ghost",
+    "status": "live",
+    "answering": false,
+    "endpoint": "http://127.0.0.1:18778/v1",
+    "tasks": 0,
+    "capacity": 1,
+    "grade": "expert",
+    "line": "ghost live not-answering endpoint=http://127.0.0.1:18778/v1 tasks=0/1 grade=expert"
+  },
+  {
+    "name": "ghostplain",
+    "status": "live",
+    "answering": false,
+    "endpoint": "http://127.0.0.1:18778/v1",
+    "tasks": 0,
+    "capacity": 1,
+    "grade": null,
+    "line": "ghostplain live not-answering endpoint=http://127.0.0.1:18778/v1 tasks=0/1"
+  },
+  {
+    "name": "keyed",
+    "status": "live",
+    "answering": null,
+    "endpoint": "http://127.0.0.1:18777/v1",
+    "tasks": 0,
+    "capacity": 1,
+    "grade": "sailor",
+    "line": "keyed live no-token endpoint=http://127.0.0.1:18777/v1 tasks=0/1 grade=sailor auth_env=FM_LAB_NOPE_TOKEN"
+  }
+]

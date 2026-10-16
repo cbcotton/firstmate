@@ -1,0 +1,10 @@
+. "$EV/srv/run.sh"
+L=bin/fm-fleet-ledger.sh
+echo '$ fm-fleet-ledger.sh dispatched t-graded ship proj opencode qwen-coder tiller specialist'; r $L dispatched t-graded ship proj opencode qwen-coder tiller specialist; echo "rc=$?"
+echo '$ fm-fleet-ledger.sh dispatched t-ungraded ship proj opencode qwen-coder plain ""'; r $L dispatched t-ungraded ship proj opencode qwen-coder plain ""; echo "rc=$?"
+echo '$ fm-fleet-ledger.sh dispatched t-legacy ship proj opencode qwen-coder plain   (old 7-arg form)'; r $L dispatched t-legacy ship proj opencode qwen-coder plain; echo "rc=$?"
+echo '$ fm-fleet-ledger.sh dispatched t-nosailor ship proj claude opus   (no sailor)'; r $L dispatched t-nosailor ship proj claude opus; echo "rc=$?"
+echo '$ fm-fleet-ledger.sh dispatched t-extra ship proj opencode m s g EXTRA   (adversarial 9 args)'; r $L dispatched t-extra ship proj opencode m s g EXTRA; echo "rc=$?"
+echo '$ fm-fleet-ledger.sh dispatched t-short ship proj opencode   (adversarial 5 args)'; r $L dispatched t-short ship proj opencode; echo "rc=$?"
+echo; echo "--- task.dispatched events in $LAB/state/fleet-ledger.jsonl ---"
+jq -c "select(.event==\"task.dispatched\")" "$LAB/state/fleet-ledger.jsonl"

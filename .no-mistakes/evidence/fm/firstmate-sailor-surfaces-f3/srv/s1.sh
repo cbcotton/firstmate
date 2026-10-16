@@ -1,0 +1,5 @@
+. "$EV/srv/run.sh"
+echo '$ fm-sailor.sh validate'; r bin/fm-sailor.sh validate; echo "rc=$?"
+echo '$ fm-sailor.sh list'; r bin/fm-sailor.sh list; echo "rc=$?"
+echo '$ fm-sailor.sh status --all'; r bin/fm-sailor.sh status --all; echo "rc=$?"
+echo '$ fm-sailor.sh status (live only)'; r bin/fm-sailor.sh status; echo "rc=$?"

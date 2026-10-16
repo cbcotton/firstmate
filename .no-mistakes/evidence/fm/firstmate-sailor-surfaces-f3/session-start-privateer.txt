@@ -1,0 +1,13 @@
+PRIVATEER
+================================================================================
+first mate: tiller/qwen-coder
+delivery: local-only (a ready branch waits for the captain; nothing is pushed)
+sailors:
+  tiller live answering endpoint=http://127.0.0.1:18777/v1 tasks=0/1 grade=specialist models=qwen-coder(listed)
+  bonsai live answering endpoint=http://127.0.0.1:18777/v1 tasks=0/2 grade=deckhand models=qwen-small(listed)
+  plain live answering endpoint=http://127.0.0.1:18777/v1 tasks=0/1 models=qwen-coder(listed),qwen-big(listed)
+  ghost live not-answering endpoint=http://127.0.0.1:18778/v1 tasks=0/1 grade=expert
+  ghostplain live not-answering endpoint=http://127.0.0.1:18778/v1 tasks=0/1
+  keyed live no-token endpoint=http://127.0.0.1:18777/v1 tasks=0/1 grade=sailor auth_env=FM_LAB_NOPE_TOKEN
+front door: bin/fm-helm.sh helm
+

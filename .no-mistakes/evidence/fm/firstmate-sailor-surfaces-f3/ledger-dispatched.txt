@@ -1,0 +1,20 @@
+$ fm-fleet-ledger.sh dispatched t-graded ship proj opencode qwen-coder tiller specialist
+rc=0
+$ fm-fleet-ledger.sh dispatched t-ungraded ship proj opencode qwen-coder plain ""
+rc=0
+$ fm-fleet-ledger.sh dispatched t-legacy ship proj opencode qwen-coder plain   (old 7-arg form)
+rc=0
+$ fm-fleet-ledger.sh dispatched t-nosailor ship proj claude opus   (no sailor)
+rc=0
+$ fm-fleet-ledger.sh dispatched t-extra ship proj opencode m s g EXTRA   (adversarial 9 args)
+usage: fm-fleet-ledger.sh dispatched <task> <kind> <project> <harness> <model> [<sailor> [<grade>]] | pr_ready <task> <url> | merged <task> pr <url> | merged <task> local | cleaned_up <task> | capture | appended <config> <state>/<task>.status | validation <task> <run> <step> <outcome> [<step> <outcome>]... | decided <task> <answer> | sailor_state <sailor> up|down
+rc=2
+$ fm-fleet-ledger.sh dispatched t-short ship proj opencode   (adversarial 5 args)
+usage: fm-fleet-ledger.sh dispatched <task> <kind> <project> <harness> <model> [<sailor> [<grade>]] | pr_ready <task> <url> | merged <task> pr <url> | merged <task> local | cleaned_up <task> | capture | appended <config> <state>/<task>.status | validation <task> <run> <step> <outcome> [<step> <outcome>]... | decided <task> <answer> | sailor_state <sailor> up|down
+rc=2
+
+--- task.dispatched events in /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.j7Lsgu/state/fleet-ledger.jsonl ---
+{"v":1,"ts":1792143593,"event":"task.dispatched","task":"t-graded","kind":"ship","project":"proj","harness":"opencode","model":"qwen-coder","sailor":"tiller","grade":"specialist"}
+{"v":1,"ts":1792143593,"event":"task.dispatched","task":"t-ungraded","kind":"ship","project":"proj","harness":"opencode","model":"qwen-coder","sailor":"plain","grade":null}
+{"v":1,"ts":1792143593,"event":"task.dispatched","task":"t-legacy","kind":"ship","project":"proj","harness":"opencode","model":"qwen-coder","sailor":"plain","grade":null}
+{"v":1,"ts":1792143593,"event":"task.dispatched","task":"t-nosailor","kind":"ship","project":"proj","harness":"claude","model":"opus","sailor":null,"grade":null}

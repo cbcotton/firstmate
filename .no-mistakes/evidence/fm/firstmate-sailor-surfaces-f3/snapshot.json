@@ -1,0 +1,146 @@
+{
+  "schema": "fm-fleet-snapshot.v1",
+  "generated": "2026-10-16T09:39:25Z",
+  "fm_home": "/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.j7Lsgu",
+  "roots": {
+    "fm_root": "/Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M5214PES17RXBRYDHGNESNVD",
+    "state": "/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.j7Lsgu/state",
+    "data": "/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.j7Lsgu/data",
+    "config": "/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.j7Lsgu/config",
+    "projects": "/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.j7Lsgu/projects"
+  },
+  "backlog": {
+    "path": "/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.j7Lsgu/data/backlog.md",
+    "present": false,
+    "records": []
+  },
+  "tasks": [],
+  "main_inventory": {
+    "valid": true,
+    "reason": null,
+    "orphan_in_flight": [],
+    "unstructured_current_count": 0
+  },
+  "contributions": {
+    "known": 0,
+    "checked": 0,
+    "counts": {
+      "captain": 0,
+      "fleet": 0,
+      "maintainer": 0,
+      "nobody": 0
+    },
+    "unmeasured": 0,
+    "complete": false,
+    "proven_clear": false,
+    "stale_verdicts": 0,
+    "missing_verdicts": 0,
+    "unreadable_records": 1,
+    "valid_until": 900,
+    "captain": [],
+    "captain_omitted": 0
+  },
+  "scout_reports": [],
+  "charts": [],
+  "sailors": [
+    {
+      "name": "tiller",
+      "status": "live",
+      "answering": true,
+      "endpoint": "http://127.0.0.1:18777/v1",
+      "tasks": 0,
+      "capacity": 1,
+      "grade": "specialist",
+      "line": "tiller live answering endpoint=http://127.0.0.1:18777/v1 tasks=0/1 grade=specialist models=qwen-coder(listed)"
+    },
+    {
+      "name": "bonsai",
+      "status": "live",
+      "answering": true,
+      "endpoint": "http://127.0.0.1:18777/v1",
+      "tasks": 0,
+      "capacity": 2,
+      "grade": "deckhand",
+      "line": "bonsai live answering endpoint=http://127.0.0.1:18777/v1 tasks=0/2 grade=deckhand models=qwen-small(listed)"
+    },
+    {
+      "name": "plain",
+      "status": "live",
+      "answering": true,
+      "endpoint": "http://127.0.0.1:18777/v1",
+      "tasks": 0,
+      "capacity": 1,
+      "grade": null,
+      "line": "plain live answering endpoint=http://127.0.0.1:18777/v1 tasks=0/1 models=qwen-coder(listed),qwen-big(listed)"
+    },
+    {
+      "name": "ghost",
+      "status": "live",
+      "answering": false,
+      "endpoint": "http://127.0.0.1:18778/v1",
+      "tasks": 0,
+      "capacity": 1,
+      "grade": "expert",
+      "line": "ghost live not-answering endpoint=http://127.0.0.1:18778/v1 tasks=0/1 grade=expert"
+    },
+    {
+      "name": "ghostplain",
+      "status": "live",
+      "answering": false,
+      "endpoint": "http://127.0.0.1:18778/v1",
+      "tasks": 0,
+      "capacity": 1,
+      "grade": null,
+      "line": "ghostplain live not-answering endpoint=http://127.0.0.1:18778/v1 tasks=0/1"
+    },
+    {
+      "name": "keyed",
+      "status": "live",
+      "answering": null,
+      "endpoint": "http://127.0.0.1:18777/v1",
+      "tasks": 0,
+      "capacity": 1,
+      "grade": "sailor",
+      "line": "keyed live no-token endpoint=http://127.0.0.1:18777/v1 tasks=0/1 grade=sailor auth_env=FM_LAB_NOPE_TOKEN"
+    }
+  ],
+  "privateer": {
+    "active": false,
+    "first_mate": null,
+    "active_project": null
+  },
+  "secondmate_current": {
+    "registry": {
+      "present": false,
+      "available": true,
+      "complete": true,
+      "reason": null,
+      "provenance": "registered-table",
+      "path": "/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.j7Lsgu/data/secondmates.md",
+      "freshness": {
+        "status": "fresh",
+        "observed_at": "2026-10-16T09:39:25Z"
+      },
+      "records": [],
+      "input_truncated": false,
+      "records_truncated": false,
+      "reasons": [],
+      "lines_in_window": 0,
+      "records_in_window": 0
+    },
+    "records": [],
+    "total_registered": 0,
+    "total": 0,
+    "shown": 0,
+    "truncated": 0
+  },
+  "secondmate_landed": {
+    "records": [],
+    "truncated": [],
+    "unreadable": [],
+    "partial": []
+  },
+  "secondmate_guidance": {
+    "note": "For kind=secondmate, bearings selects validated structured state from that registered home; parent events and bounded terminal evidence are fallback-only supplements and never current-state authority."
+  }
+}

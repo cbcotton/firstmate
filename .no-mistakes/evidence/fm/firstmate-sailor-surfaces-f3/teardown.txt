@@ -1,0 +1,23 @@
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.j7Lsgu
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+teardown: reaping leaked worktree process(es) for graded-scout-s1: 5814 6663
+teardown: force-killing leaked worktree process(es) for graded-scout-s1: 5814
+A new version of treehouse is available: v2.3.0 → v3.1.4
+Run "treehouse update" to update
+
+🌳 Worktree returned to pool.
+teardown graded-scout-s1 complete (window primary:fm-graded-scout-s1, worktree /Users/cotton/.treehouse/demo-654b8f/1/demo)
+Backlog: graded-scout-s1 just finished (this home keeps no markdown backlog at /private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-lab.j7Lsgu/data/backlog.md). Update /private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-lab.j7Lsgu/data/backlog.md - move graded-scout-s1 to Done, keep Done to the 10 most recent, then re-scan Queued and dispatch only work whose blockers are gone and date is due.
+rc=0
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.j7Lsgu
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+teardown: reaping leaked worktree process(es) for plain-scout-s2: 7286 8433
+teardown: force-killing leaked worktree process(es) for plain-scout-s2: 7286
+A new version of treehouse is available: v2.3.0 → v3.1.4
+Run "treehouse update" to update
+
+🌳 Worktree returned to pool.
+teardown plain-scout-s2 complete (window primary:fm-plain-scout-s2, worktree /Users/cotton/.treehouse/demo-654b8f/2/demo)
+Backlog: plain-scout-s2 just finished (this home keeps no markdown backlog at /private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-lab.j7Lsgu/data/backlog.md). Update /private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-lab.j7Lsgu/data/backlog.md - move plain-scout-s2 to Done, keep Done to the 10 most recent, then re-scan Queued and dispatch only work whose blockers are gone and date is due.
+rc=0
+DONE

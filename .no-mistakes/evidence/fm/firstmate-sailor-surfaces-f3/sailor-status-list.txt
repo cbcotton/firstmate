@@ -1,0 +1,26 @@
+$ fm-sailor.sh validate
+rc=0
+$ fm-sailor.sh list
+tiller status=live endpoint=http://127.0.0.1:18777/v1 max_concurrent=1 grade=specialist models=qwen-coder
+bonsai status=live endpoint=http://127.0.0.1:18777/v1 max_concurrent=2 grade=deckhand models=qwen-small
+plain status=live endpoint=http://127.0.0.1:18777/v1 max_concurrent=1 models=qwen-coder,qwen-big
+ghost status=live endpoint=http://127.0.0.1:18778/v1 max_concurrent=1 grade=expert models=qwen-big
+ghostplain status=live endpoint=http://127.0.0.1:18778/v1 max_concurrent=1 models=qwen-big
+keyed status=live endpoint=http://127.0.0.1:18777/v1 max_concurrent=1 grade=sailor models=qwen-big auth_env=FM_LAB_NOPE_TOKEN
+rc=0
+$ fm-sailor.sh status --all
+tiller live answering endpoint=http://127.0.0.1:18777/v1 tasks=0/1 grade=specialist models=qwen-coder(listed)
+bonsai live answering endpoint=http://127.0.0.1:18777/v1 tasks=0/2 grade=deckhand models=qwen-small(listed)
+plain live answering endpoint=http://127.0.0.1:18777/v1 tasks=0/1 models=qwen-coder(listed),qwen-big(listed)
+ghost live not-answering endpoint=http://127.0.0.1:18778/v1 tasks=0/1 grade=expert
+ghostplain live not-answering endpoint=http://127.0.0.1:18778/v1 tasks=0/1
+keyed live no-token endpoint=http://127.0.0.1:18777/v1 tasks=0/1 grade=sailor auth_env=FM_LAB_NOPE_TOKEN
+rc=0
+$ fm-sailor.sh status (live only)
+tiller live answering endpoint=http://127.0.0.1:18777/v1 tasks=0/1 grade=specialist models=qwen-coder(listed)
+bonsai live answering endpoint=http://127.0.0.1:18777/v1 tasks=0/2 grade=deckhand models=qwen-small(listed)
+plain live answering endpoint=http://127.0.0.1:18777/v1 tasks=0/1 models=qwen-coder(listed),qwen-big(listed)
+ghost live not-answering endpoint=http://127.0.0.1:18778/v1 tasks=0/1 grade=expert
+ghostplain live not-answering endpoint=http://127.0.0.1:18778/v1 tasks=0/1
+keyed live no-token endpoint=http://127.0.0.1:18777/v1 tasks=0/1 grade=sailor auth_env=FM_LAB_NOPE_TOKEN
+rc=0

@@ -1,0 +1,19 @@
+$ fm-spawn.sh graded-scout-s1 $LAB/projects/demo --scout --harness opencode --model qwen-coder --sailor tiller
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.j7Lsgu
+spawned graded-scout-s1 harness=opencode kind=scout sailor=tiller window=primary:fm-graded-scout-s1 worktree=/Users/cotton/.treehouse/demo-654b8f/1/demo
+rc=0
+$ fm-spawn.sh plain-scout-s2 $LAB/projects/demo --scout --harness opencode --model qwen-coder --sailor plain
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.j7Lsgu
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  watcher supervision needs Stop-owned automatic recovery; inspect the hook registration and startup status before ending the turn.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+spawned plain-scout-s2 harness=opencode kind=scout sailor=plain window=primary:fm-plain-scout-s2 worktree=/Users/cotton/.treehouse/demo-654b8f/2/demo
+rc=0
+--- task.dispatched events ---
+{"v":1,"ts":1792143635,"event":"task.dispatched","task":"graded-scout-s1","kind":"scout","project":"demo","harness":"opencode","model":"qwen-coder","sailor":"tiller","grade":"specialist"}
+{"v":1,"ts":1792143640,"event":"task.dispatched","task":"plain-scout-s2","kind":"scout","project":"demo","harness":"opencode","model":"qwen-coder","sailor":"plain","grade":null}
+DONE
