@@ -1189,6 +1189,8 @@ registry_problem() {
         | ((($shares | keys) - ($homes | keys)) | first) as $stray
         | ($s.capacity // 1) as $cap
         | if ($s | has("server")) != ($s | has("model")) then "slot \($n) needs both a server and a model, or neither"
+          elif ($s | has("grade")) and (($s.grade | type) != "string" or ($grades | index($s.grade)) == null) then "slot \($n) grade \($s.grade | tostring) is not one of \($grades | join(", "))"
+          elif ($s | has("facets")) and (($s.facets | type) != "array" or ([$s.facets[] | name] | all | not)) then "slot \($n) facets must be a list of names"
           elif ($s | has("server")) | not then empty
           elif ($match | length) == 0 then "slot \($n) names server \($s.server | tostring), which \($file) does not list"
           elif ($match | length) > 1 then "slot \($n) names server \($s.server), which \($file) lists more than once"
@@ -1199,8 +1201,6 @@ registry_problem() {
           elif ([$shares[] | whole and . >= 0] | all | not) then "slot \($n) shares must be whole numbers"
           elif $stray != null then "slot \($n) gives a share to home \($stray), which the registry homes do not name"
           elif ([$shares[]] | add // 0) > $cap then "slot \($n) shares \([$shares[]] | add) tasks among its homes, above its capacity of \($cap)"
-          elif ($s | has("grade")) and (($s.grade | type) != "string" or ($grades | index($s.grade)) == null) then "slot \($n) grade \($s.grade | tostring) is not one of \($grades | join(", "))"
-          elif ($s | has("facets")) and (($s.facets | type) != "array" or ([$s.facets[] | name] | all | not)) then "slot \($n) facets must be a list of names"
           else empty
           end;
     $reg

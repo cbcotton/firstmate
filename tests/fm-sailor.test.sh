@@ -1138,6 +1138,8 @@ test_sync_refuses_a_malformed_registry_naming_the_slot() {
 .slots.tiller.homes.dock = 0~slot tiller gives a share to home dock, which the registry homes do not name
 .slots.lookout.grade = "scout"~slot lookout grade scout is not one of deckhand, sailor, specialist, expert
 .slots.tiller.facets = "helm"~slot tiller facets must be a list of names
+.slots.stoker.grade = "scout"~slot stoker grade scout is not one of deckhand, sailor, specialist, expert
+.slots.stoker.facets = "helm"~slot stoker facets must be a list of names
 .slots.lookout.model = "two words"~sailor lookout models must be non-empty strings without spaces or quotes
 EOF
   slot_registry
