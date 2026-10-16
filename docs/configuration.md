@@ -11,6 +11,7 @@ Start with the directory layout, then use the setting reference for the behavior
 | Task windows and worker tools | [Runtime backend](#runtime-backend-configbackend--fm_backend) and [harness support](#harness-support) |
 | Worker permissions, accounts, or environment | [Claude permission mode](#claude-permission-mode-configclaude-permission-mode), [OpenCode permission profile](#opencode-permission-profile-configopencode-permission-profile), [worker account pin](#worker-account-pin-configclaude-account-configpi-account), and [worker launch environment](#worker-launch-environment-configlaunch-env-allowlist) |
 | A home that never reaches Anthropic | [Privateer quarantine](#privateer-quarantine-configprivateer) |
+| Sailors bound to models in MLX Serve | [Sailor slot registry](#sailor-slot-registry-configsailor-registry) |
 | Backlog, preferences, and memory | [Backlog backend](#backlog-backend-taskstoml--configbacklog-backend), [captain preferences](#captain-preferences-datacaptainmd--datacaptain-sharedmd), and [startup memory budget](#startup-memory-budget-configstartup-memory-budget) |
 | Supervision and presentation | [Pi supervision branch](#pi-supervision-branch), [supervision host](#supervision-host-configsupervision-host), and [Calm preference](#calm-preference-configcalm) |
 | Persistent secondmates | [Secondmate routes](#secondmate-routes-datasecondmatesmd) |
@@ -1120,6 +1121,7 @@ The flag is not inherited, because a Privateer home spawns no secondmate.
 Change sailors and models with the [named sailor](#crew-dispatch-profiles-configcrew-dispatchjson) commands of `bin/fm-sailor.sh`, from the captain's own shell, because `config/` is unwritable inside the session.
 In a Privateer home each command refuses a change that `bin/fm-privateer.sh check` would report.
 `bin/fm-sailor.sh set-model <sailor> <model> --first-mate` also rewrites the first mate line of `config/privateer`.
+A home that hands its sailors to the [sailor slot registry](#sailor-slot-registry-configsailor-registry) takes them, and its first mate's slot, from `bin/fm-sailor.sh sync` instead, run the same way.
 The first mate switches models only once the session is stopped and started again; the egress proxy allows a new or moved endpoint after [`bin/fm-privateer.sh reload`](#how-a-privateer-session-runs).
 
 ## Worker account pin (config/claude-account, config/pi-account)
@@ -1415,6 +1417,7 @@ A sailor is a named OpenAI-compatible endpoint that ordinary work can run on: us
   - `set-model` adds a model to a sailor, `--replace <old>` also moves every rule and default profile on that sailor from the old model to the new one, and `--first-mate` moves a [Privateer](#privateer-quarantine-configprivateer) first mate onto it.
   - `set-model --model-limit <context>:<output>` and `--model-options '<json object>'` record the model's `model_settings`, each replacing only the field it names; `--replace` drops the old model's settings with it, and `add` takes no such flags, so a new sailor's settings are a hand edit or a following `set-model`.
   - `retire` removes a sailor and every profile naming it, with any rule or default left without a profile.
+  - `sync` rewrites the whole map from the [sailor slot registry](#sailor-slot-registry-configsailor-registry), in a home that hands its sailors to it.
 - Each edit writes nothing unless the whole result validates and keeps a dated copy of the file it replaces; `set-model --dry-run` only prints the change, and refuses `--warm`, which would load the model.
   `set-model --replace` and `retire` refuse while a task still runs on what they would remove, and `set-model` refuses a model a live sailor does not serve.
   A change reaches each worker at its next spawn, while running workers keep what they launched with; a Privateer session's egress proxy allows a new or moved endpoint only after [`bin/fm-privateer.sh reload`](#how-a-privateer-session-runs).
@@ -1469,6 +1472,32 @@ Hugging Face bills Inference Providers pay-as-you-go, with monthly included cred
 **Inheritance**
 
 Secondmate homes inherit this file from the primary, so a secondmate's own crewmates apply the same dispatch profile behavior.
+
+### Sailor slot registry (config/sailor-registry)
+
+A sailor slot is a pre-named sailor that is either blank or bound to one model on one server, so the models behind a fixed set of names can change for every home on the machine at once.
+The slots live in one slot registry, `~/.mlx-serve/sailors.json` beside MLX Serve's server list, written from outside every session; the MLX Serve project owns that file, and this section covers only what firstmate reads from it.
+Each home projects the registry into its own `config/crew-dispatch.json` with `bin/fm-sailor.sh sync <registry> --home <key>`, so every check, probe, sandbox, egress rule, and Privateer rule under [named sailors](#crew-dispatch-profiles-configcrew-dispatchjson) keeps applying unchanged.
+The script's header owns the fields `sync` reads, the projection, and every refusal.
+
+**Handing a home's sailors to the registry**
+
+- The local, gitignored `config/sailor-registry` holds the slot registry's path, absolute or starting `~/`.
+- While it is absent the home's sailors are managed by hand and `sync` refuses, so the registry never rewrites a home that has not opted in.
+- While it is present `sync` takes the home's sailors from that registry alone; `add`, `set`, `set-model`, and `retire` still work, and each says that the next `sync` rewrites what it changed.
+- It is not inherited: a secondmate inherits the primary's projected `config/crew-dispatch.json` instead.
+
+**What a home gets**
+
+- The registry's `homes` maps each home's key to its directory, and `sync` refuses a key that does not map to the home it runs in.
+- A bound slot with a share for the home becomes the sailor of the same name: its server's `baseURL` from `~/.mlx-serve/servers.json` plus `/v1`, that one model, and the home's share as `max_concurrent`.
+- The shares of one slot sum to at most its capacity, so homes on one machine never promise its server more parallel tasks than it carries.
+- A slot's `grade` (`deckhand`, `sailor`, `specialist`, or `expert`, lowest first), `facets`, `paid`, `auth_env`, `unlisted_models`, and `model_settings` reach the sailor as given, and a slot without a `status` is a `placeholder`.
+- A blank slot, or one without a share for the home, is absent from its map, and a sailor that leaves the map takes the rules and default profiles naming it, as `retire` does.
+- `sync` refuses rather than strand work: while a task runs on a sailor or model it would remove, and while a rule or default names a slot with a model the slot no longer serves.
+- In a [Privateer home](#privateer-quarantine-configprivateer) the registry's `privateer_first_mate` names the first mate's slot, which must be bound, live, shared with that home, and carry the `helm` facet; `sync` writes its `<slot>/<model>` into `config/privateer`.
+- Like every edit above, `sync` writes nothing unless the whole result passes `validate` and, in a Privateer home, `bin/fm-privateer.sh check`, keeps dated copies, and says when the change applies; `--dry-run` only prints it.
+- `sync` probes no server and never writes the registry, the server list, `.env`, or the Keychain; a keyed slot's token is read from the environment or the home's `.env`, as for any sailor.
 
 ## Typed dispatch resolution (.env TYPESAFE_API_KEY)
 
