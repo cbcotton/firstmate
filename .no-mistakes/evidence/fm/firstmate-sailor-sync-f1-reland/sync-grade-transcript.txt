@@ -1,0 +1,8 @@
+$ sync with bound slot grade=scout (blank slot grade=scout)
+refused: slot a grade scout is not one of deckhand, sailor, specialist, expert
+[exit 1]
+$ sync with bound slot grade=expert (blank slot grade=scout)
+wrote config/crew-dispatch.json (previous copy: crew-dispatch.json.bak-20261016-100436)
+synced home firstmate from /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.bgoQ66/sailors.json: a
+workers: the change applies from each worker's next spawn; running workers keep what they launched with
+[exit 0]

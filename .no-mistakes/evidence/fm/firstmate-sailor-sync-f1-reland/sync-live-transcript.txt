@@ -1,0 +1,174 @@
+== 1. hand-managed home (no config/sailor-registry) is refused
+
+$ /Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M51VQE6Z9MKS3Q0P14FTWFCH/bin/fm-sailor.sh sync /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.Mg71fU/sailors.json --home firstmate
+refused: this home's sailors are managed by hand, since config/sailor-registry is absent; write the slot registry's path into it to hand them to sync
+[exit 1]
+== 2. dry run
+
+$ /Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M51VQE6Z9MKS3Q0P14FTWFCH/bin/fm-sailor.sh sync /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.Mg71fU/sailors.json --home firstmate --dry-run
+--- config/crew-dispatch.json
++++ config/crew-dispatch.json (after)
+@@ -1,23 +1,35 @@
+ {
+   "sailors": {
+-    "tiller": {
++    "helmsman": {
++      "title": "Helmsman",
++      "host": "MLX Serve",
+       "endpoint": "http://127.0.0.1:11234/v1",
+       "status": "live",
+       "models": [
+         "qwen-coder"
++      ],
++      "max_concurrent": 1,
++      "grade": "specialist",
++      "facets": [
++        "helm"
+       ]
++    },
++    "obliteratus": {
++      "title": "Obliteratus",
++      "host": "Hugging Face",
++      "endpoint": "https://router.huggingface.co/v1",
++      "status": "placeholder",
++      "models": [
++        "OBLITERATUS/Qwen3.8-27B-OBLITERATED:cheapest"
++      ],
++      "max_concurrent": 1,
++      "grade": "expert",
++      "paid": true,
++      "auth_env": "HF_TOKEN",
++      "unlisted_models": true
+     }
+   },
+-  "rules": [
+-    {
+-      "when": "tiller only",
+-      "use": {
+-        "harness": "opencode",
+-        "sailor": "tiller",
+-        "model": "qwen-coder"
+-      }
+-    }
+-  ],
++  "rules": [],
+   "default": [
+     {
+       "harness": "claude",
+dry run: nothing written
+[exit 0]
+== 2b. stale rule naming tiller -> rule dropped as retire would; sync
+
+$ /Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M51VQE6Z9MKS3Q0P14FTWFCH/bin/fm-sailor.sh sync /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.Mg71fU/sailors.json --home firstmate
+wrote config/crew-dispatch.json (previous copy: crew-dispatch.json.bak-20261016-100418)
+synced home firstmate from /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.Mg71fU/sailors.json: helmsman, obliteratus
+removed sailor tiller, which /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.Mg71fU/sailors.json no longer gives this home
+removed rule "tiller only", which offered only tiller
+workers: the change applies from each worker's next spawn; running workers keep what they launched with
+[exit 0]
+-- resulting crew-dispatch.json
+{
+  "sailors": {
+    "helmsman": {
+      "title": "Helmsman",
+      "host": "MLX Serve",
+      "endpoint": "http://127.0.0.1:11234/v1",
+      "status": "live",
+      "models": [
+        "qwen-coder"
+      ],
+      "max_concurrent": 1,
+      "grade": "specialist",
+      "facets": [
+        "helm"
+      ]
+    },
+    "obliteratus": {
+      "title": "Obliteratus",
+      "host": "Hugging Face",
+      "endpoint": "https://router.huggingface.co/v1",
+      "status": "placeholder",
+      "models": [
+        "OBLITERATUS/Qwen3.8-27B-OBLITERATED:cheapest"
+      ],
+      "max_concurrent": 1,
+      "grade": "expert",
+      "paid": true,
+      "auth_env": "HF_TOKEN",
+      "unlisted_models": true
+    }
+  },
+  "rules": [],
+  "default": [
+    {
+      "harness": "claude",
+      "model": "claude-sonnet-5-5"
+    }
+  ]
+}
+crew-dispatch.json
+crew-dispatch.json.bak-20261016-100418
+sailor-registry
+== 3. idempotent re-sync
+
+$ /Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M51VQE6Z9MKS3Q0P14FTWFCH/bin/fm-sailor.sh sync /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.Mg71fU/sailors.json --home firstmate
+this home's sailors already match /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.Mg71fU/sailors.json; nothing written
+[exit 0]
+== 4. downstream: validate / status of placeholder
+
+$ /Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M51VQE6Z9MKS3Q0P14FTWFCH/bin/fm-sailor.sh validate
+[exit 0]
+
+$ /Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M51VQE6Z9MKS3Q0P14FTWFCH/bin/fm-sailor.sh check obliteratus OBLITERATUS/Qwen3.8-27B-OBLITERATED:cheapest
+refused: sailor obliteratus is a placeholder; it is dispatched only after the captain marks it live
+[exit 1]
+== 5. adversarial: rebind helmsman model while a task runs on it
+
+$ /Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M51VQE6Z9MKS3Q0P14FTWFCH/bin/fm-sailor.sh sync /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.Mg71fU/sailors.json --home firstmate
+refused: task(s) busy-1 run helmsman/qwen-coder, which /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.Mg71fU/sailors.json no longer lists, and relaunching them needs it listed; sync once they land
+[exit 1]
+crew-dispatch.json unchanged after refusal
+== 6. adversarial: shares above capacity, bad grade, unknown server
+
+$ /Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M51VQE6Z9MKS3Q0P14FTWFCH/bin/fm-sailor.sh sync /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.Mg71fU/sailors.json --home firstmate
+refused: slot helmsman shares 6 tasks among its homes, above its capacity of 2
+[exit 1]
+
+$ /Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M51VQE6Z9MKS3Q0P14FTWFCH/bin/fm-sailor.sh sync /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.Mg71fU/sailors.json --home firstmate
+this home's sailors already match /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.Mg71fU/sailors.json; nothing written
+[exit 0]
+
+$ /Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M51VQE6Z9MKS3Q0P14FTWFCH/bin/fm-sailor.sh sync /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.Mg71fU/sailors.json --home firstmate
+refused: slot obliteratus names server nope, which /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.Mg71fU/servers.json does not list
+[exit 1]
+== 7. Privateer home: first mate follows helm slot; refuses non-helm
+
+$ /Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M51VQE6Z9MKS3Q0P14FTWFCH/bin/fm-privateer.sh check
+[exit 0]
+
+$ /Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M51VQE6Z9MKS3Q0P14FTWFCH/bin/fm-sailor.sh sync /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.Mg71fU/sailors.json --home privateer
+wrote config/crew-dispatch.json (previous copy: crew-dispatch.json.bak-20261016-100418)
+wrote config/privateer (previous copy: privateer.bak-20261016-100418)
+synced home privateer from /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.Mg71fU/sailors.json: helmsman, obliteratus
+workers: the change applies from each worker's next spawn; running workers keep what they launched with
+first mate: restart the Privateer session to switch (fm-privateer.sh stop, then start; stop waits until no task is in flight, 0 now)
+[exit 0]
+-- config/privateer
+# first mate
+helmsman/qwen-next
+
+$ /Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M51VQE6Z9MKS3Q0P14FTWFCH/bin/fm-privateer.sh check
+[exit 0]
+
+$ /Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M51VQE6Z9MKS3Q0P14FTWFCH/bin/fm-sailor.sh sync /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.Mg71fU/sailors.json --home privateer
+refused: slot obliteratus lacks the helm facet the first mate needs
+[exit 1]
+
+$ /Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M51VQE6Z9MKS3Q0P14FTWFCH/bin/fm-sailor.sh sync /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.Mg71fU/sailors.json --home privateer
+refused: slot spare is blank, and the first mate runs only on a bound slot
+[exit 1]
+-- config/privateer after refusals
+# first mate
+helmsman/qwen-next
+
+lab removed: yes

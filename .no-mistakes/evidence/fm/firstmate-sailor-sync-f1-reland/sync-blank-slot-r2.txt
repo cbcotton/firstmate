@@ -1,0 +1,28 @@
+
+## blank slot spare = {"title":"Spare","facets":"helm"}
+$ fm-sailor.sh sync $REG --home firstmate
+refused: slot spare facets must be a list of names
+[exit 1]
+crew-dispatch.json unchanged
+
+## blank slot spare = {"title":"Spare","facets":["helm",3]}
+$ fm-sailor.sh sync $REG --home firstmate
+refused: slot spare facets must be a list of names
+[exit 1]
+crew-dispatch.json unchanged
+
+## blank slot spare = {"title":"Spare","grade":7}
+$ fm-sailor.sh sync $REG --home firstmate
+refused: slot spare grade 7 is not one of deckhand, sailor, specialist, expert
+[exit 1]
+crew-dispatch.json unchanged
+
+## blank slot spare = {"title":"Spare","grade":"deckhand","facets":["helm"]}
+$ fm-sailor.sh sync $REG --home firstmate
+wrote config/crew-dispatch.json (previous copy: crew-dispatch.json.bak-20261016-100720)
+synced home firstmate from /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.kIsC2Y/sailors.json: helmsman
+workers: the change applies from each worker's next spawn; running workers keep what they launched with
+[exit 0]
+sailors now: ["helmsman"]
+
+lab removed: yes
