@@ -1,0 +1,34 @@
+ok - a live sailor serving the model passes check after one probe of <endpoint>/models
+ok - the probe URL joins an endpoint with a trailing slash cleanly
+ok - a placeholder sailor is refused before anything is probed, even if its address answers
+ok - a sailor whose endpoint does not answer is refused
+ok - a sailor whose endpoint does not list the model is refused
+ok - a model outside the sailor's list and an unknown sailor are refused without a probe
+ok - capacity counts live task records per sailor and excludes the task being relaunched
+ok - provider-json prints the OpenCode provider entry for exactly that sailor and model
+ok - model_settings rides provider-json under its model, an entry without it is unchanged, and validate refuses every malformed shape
+ok - validate is silent without sailors, names the first problem otherwise, and check stops on an invalid map
+ok - validate checks each grade, facet list, paid flag, grade profile, model-less profile, rule spend, and fallback, and grades lists the vocabulary
+ok - pick by grade takes the lowest sufficient grade, free before paid, a paid sailor only with --spend, and lists every refusal
+ok - pick --sailor weighs one sailor on its one model or --model, through the grade, facet, spend, and check gates
+ok - check says whether the model is loaded or only listed, and never loads it
+ok - status shows each sailor's answer, tasks, server queue, and every model as loaded, unloaded, listed, or missing
+ok - set-model --replace moves every rule and default profile of that sailor, leaves other sailors alone, and keeps a dated backup
+ok - set-model refuses an unserved model, a failed warm-up, a replace under a running task, and misplaced flags, writing nothing, and --dry-run only prints
+ok - set-model records limit and options, merges per field, drops them on --replace, and refuses malformed values
+ok - set-model tells a loaded model from one the server only lists, and --warm loads it
+ok - in a Privateer home set-model --first-mate moves the first mate's line, and any change the quarantine would report is refused
+ok - in a Privateer home the first mate's sailor cannot be parked, and only changes to what the first mate uses ask for a restart
+ok - retire refuses a sailor with a task on it, and otherwise removes it, its profiles, and every rule or default left empty
+ok - add registers a placeholder with the given fields and refuses a taken or malformed one; set changes only the given fields
+ok - add --from-mlx-serve takes the endpoint and live models from servers.json and the server, never writing the registry or touching the server
+ok - health probes an mlx-serve sailor at its server's healthPath and any other sailor at its model list
+ok - status reads a sailor as answering by the same probe health uses, its mlx-serve healthPath
+ok - health probes every sailor at once, so the whole run stays within about one probe timeout
+ok - status probes every sailor at once, so a down sailor adds no time
+ok - a token sailor's every probe carries its bearer token, the environment's over .env's, while output and files never hold it and local sailors send none
+ok - a token sailor without a usable token is refused, down, and no-token, naming its variable and never a value, and is never probed
+ok - with-token puts the token in the command's environment, the environment's over the file's, and refuses naming the variable
+ok - unlisted_models lets a router serve ids its model list leaves out, with no completion, and only on the sailor that sets it
+ok - add and set record auth_env and unlisted_models, and add --from-mlx-serve reads a token router's list with the token and takes its routed ids
+# all fm-sailor tests passed

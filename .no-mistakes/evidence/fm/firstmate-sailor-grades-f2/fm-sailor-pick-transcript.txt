@@ -1,0 +1,62 @@
+$ fm-sailor.sh validate
+[exit 0]
+
+$ fm-sailor.sh grades
+deckhand
+sailor
+specialist
+expert
+[exit 0]
+
+$ fm-sailor.sh pick --grade deckhand
+deck-1 Qwen3.8-27B-TURBO-Fable-Cold-Fusion-735-882-Heretic-Uncensored-NM-DAU-mlx-oQ8e-1M
+[exit 0]
+
+$ fm-sailor.sh pick --grade sailor
+spec-free Qwen3.8-27B-TURBO-Fable-Cold-Fusion-735-882-Heretic-Uncensored-NM-DAU-mlx-oQ8e-1M
+[exit 0]
+
+$ fm-sailor.sh pick --grade specialist --spend
+spec-free Qwen3.8-27B-TURBO-Fable-Cold-Fusion-735-882-Heretic-Uncensored-NM-DAU-mlx-oQ8e-1M
+[exit 0]
+
+$ fm-sailor.sh pick --grade expert
+refused: no live sailor has grade expert or above
+[exit 1]
+
+$ fm-sailor.sh pick --grade expert --spend
+refused: no live sailor has grade expert or above
+[exit 1]
+
+$ fm-sailor.sh pick --grade sailor --facet helm
+spec-free Qwen3.8-27B-TURBO-Fable-Cold-Fusion-735-882-Heretic-Uncensored-NM-DAU-mlx-oQ8e-1M
+[exit 0]
+
+$ fm-sailor.sh pick --grade sailor --grade expert
+refused: no live sailor has grade expert or above
+[exit 1]
+
+$ fm-sailor.sh pick --grade wizard
+fm-sailor: unknown grade 'wizard'; the grades, lowest first, are deckhand, sailor, specialist, expert
+[exit 2]
+
+$ fm-sailor.sh pick --sailor spec-paid
+refused: sailor spec-paid is paid, and spend is not allowed for this task
+[exit 1]
+
+$ fm-sailor.sh pick --sailor spec-paid --spend
+spec-paid Qwen3.8-27B-TURBO-Fable-Cold-Fusion-735-882-Heretic-Uncensored-NM-DAU-mlx-oQ8e-1M
+[exit 0]
+
+$ fm-sailor.sh pick --sailor deck-1
+deck-1 Qwen3.8-27B-TURBO-Fable-Cold-Fusion-735-882-Heretic-Uncensored-NM-DAU-mlx-oQ8e-1M
+[exit 0]
+
+$ fm-sailor.sh pick --sailor ungraded
+refused: sailor ungraded lists several models (Qwen3.8-27B-TURBO-Fable-Cold-Fusion-735-882-Heretic-Uncensored-NM-DAU-mlx-oQ8e-1M, other); name one with --model
+[exit 1]
+
+$ fm-sailor.sh pick --sailor deck-1 --grade specialist
+refused: sailor deck-1 is grade deckhand, below specialist
+[exit 1]
+

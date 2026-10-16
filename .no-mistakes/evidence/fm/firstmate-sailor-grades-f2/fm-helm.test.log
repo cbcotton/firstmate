@@ -1,0 +1,15 @@
+ok - scout files the row, writes the ask as the captain's intent, and starts the scout on the first sailor that can take it
+ok - ship starts a local-only ship on the project's registered branch prefix and merge authority
+ok - work no sailor can take waits in the queue with its instructions, and the spawn call it names starts it on the sailor that answers
+ok - a home with dispatch rules is asked to choose one, with each condition and the call to repeat, before anything is written, and --rule starts the work on that rule's sailors
+ok - grade profiles pick the lowest sufficient sailor, --grade raises the floor, and a paid sailor takes work only with --spend or a rule allowing spend
+ok - a sailor profile without a model starts the work on the sailor's one model
+ok - the --stdin form keeps the captain's words exactly, quotes, $, ;, and newlines included, and takes a leading --rule
+ok - words OpenCode changed or cut, at a backtick or a $ followed by $, &, ', or a backtick, are refused by name before anything is written
+ok - steer sends the text as a durable record, queue shows the backlog without tasks-axi's hints, sailors shows every sailor, and wake presents what waits
+ok - helm runs the session start and then names the front door's commands
+ok - land runs the guarded local merge and passes its refusal through
+ok - every malformed call is refused with what was wrong and the accepted forms, before anything is written
+ok - scout and ship default to the active project, an explicit project wins, and a malformed value is not used
+ok - the front door refuses a home without the quarantine and a caller outside the home's session
+# all fm-helm tests passed

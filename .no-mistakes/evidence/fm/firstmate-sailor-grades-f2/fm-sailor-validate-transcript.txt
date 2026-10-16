@@ -1,0 +1,69 @@
+## mutation: unknown sailor grade
+$ fm-sailor.sh validate
+sailor deck-1 grade "wizard" is not a grade; the grades, lowest first, are deckhand, sailor, specialist, expert
+[exit 1]
+
+$ fm-bootstrap.sh | grep CREW_DISPATCH
+CREW_DISPATCH: invalid config/crew-dispatch.json - sailor deck-1 grade "wizard" is not a grade; the grades, lowest first, are deckhand, sailor, specialist, expert
+
+## mutation: graded sailor with two models
+$ fm-sailor.sh validate
+sailor deck-1 has a grade, which describes one bound model, so it must list exactly one model
+[exit 1]
+
+$ fm-bootstrap.sh | grep CREW_DISPATCH
+CREW_DISPATCH: invalid config/crew-dispatch.json - sailor deck-1 has a grade, which describes one bound model, so it must list exactly one model
+
+## mutation: facets not words
+$ fm-sailor.sh validate
+sailor deck-1 facets must be a list of distinct lowercase words joined by single dashes
+[exit 1]
+
+$ fm-bootstrap.sh | grep CREW_DISPATCH
+CREW_DISPATCH: invalid config/crew-dispatch.json - sailor deck-1 facets must be a list of distinct lowercase words joined by single dashes
+
+## mutation: rule spend not allowed
+$ fm-sailor.sh validate
+rule "rote edits" spend must be "allowed" when present
+[exit 1]
+
+$ fm-bootstrap.sh | grep CREW_DISPATCH
+CREW_DISPATCH: invalid config/crew-dispatch.json - rule "rote edits" spend must be "allowed" when present
+
+## mutation: profile names unknown grade
+$ fm-sailor.sh validate
+profile grade "admiral" is not a grade; the grades, lowest first, are deckhand, sailor, specialist, expert
+[exit 1]
+
+$ fm-bootstrap.sh | grep CREW_DISPATCH
+CREW_DISPATCH: invalid config/crew-dispatch.json - profile grade "admiral" is not a grade; the grades, lowest first, are deckhand, sailor, specialist, expert
+
+## mutation: grade profile names a model
+$ fm-sailor.sh validate
+grade deckhand profile names a model; the sailor bin/fm-sailor.sh pick chooses brings its own
+[exit 1]
+
+$ fm-bootstrap.sh | grep CREW_DISPATCH
+CREW_DISPATCH: invalid config/crew-dispatch.json - grade deckhand profile names a model; the sailor bin/fm-sailor.sh pick chooses brings its own
+
+## mutation: sailor_fallback names a grade
+$ fm-sailor.sh validate
+sailor_fallback must not name a grade
+[exit 1]
+
+$ fm-bootstrap.sh | grep CREW_DISPATCH
+CREW_DISPATCH: invalid config/crew-dispatch.json - sailor_fallback must not name a grade
+
+## mutation: profile sailor without model, sailor lists several
+$ fm-sailor.sh validate
+sailor ungraded profile names no model, and ungraded lists several; name one
+[exit 1]
+
+$ fm-bootstrap.sh | grep CREW_DISPATCH
+CREW_DISPATCH: invalid config/crew-dispatch.json - sailor ungraded profile names no model, and ungraded lists several; name one
+
+## restored good config
+$ fm-sailor.sh validate
+[exit 0]
+
+## refusal lists each candidate's reason (deck-1 at capacity via a busy task record)

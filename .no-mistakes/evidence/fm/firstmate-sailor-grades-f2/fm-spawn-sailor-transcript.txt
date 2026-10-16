@@ -1,0 +1,32 @@
+$ fm-spawn.sh scout-paid-a2 /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.IF4JT0/proj --scout --harness opencode --sailor spec-paid
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.IF4JT0
+error: sailor spec-paid cannot take task scout-paid-a2: sailor spec-paid is paid, and spend is not allowed for this task
+[exit 1]
+
+$ fm-spawn.sh scout-paid-a2 /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.IF4JT0/proj --scout --harness claude --spend
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.IF4JT0
+error: --spend applies only with --sailor; it lets a paid sailor take this one task
+[exit 1]
+
+$ fm-spawn.sh scout-bound-a1 /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.IF4JT0/proj --scout --harness opencode --sailor deck-1
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.IF4JT0
+spawned scout-bound-a1 harness=opencode kind=scout sailor=deck-1 window=primary:fm-scout-bound-a1 worktree=/Users/cotton/.treehouse/proj-ce424c/1/proj
+[exit 0]
+
+DONE
+
+## state/scout-bound-a1.meta (sailor/model fields)
+harness=opencode
+kind=scout
+model=Qwen3.8-27B-TURBO-Fable-Cold-Fusion-735-882-Heretic-Uncensored-NM-DAU-mlx-oQ8e-1M
+sailor=deck-1
+
+## OpenCode pane of the spawned scout (tail)
+     - README.md
+     ▣  Build · Qwen3.8-27B-TURBO-Fable-Cold-Fusion-735-882-Heretic-Uncensored-NM-DAU-mlx-oQ8e-1M · 23.3s
+  ┃
+  ┃
+  ┃
+  ┃  Build · Qwen3.8-27B-TURBO-Fable-Cold-Fusion-735-882-Heretic-Uncensored-NM-DAU-mlx-oQ8e-1M deck-1                                                           ~/.treehouse/proj-ce424c/1/proj
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+   /Users/cotton/.treehouse/proj-ce424c/1/proj                                                                                        14.0K  ctrl+p commands    • OpenCode 1.18.33
