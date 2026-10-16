@@ -12,8 +12,8 @@ The captain may rebind a sailor to another model from outside this session, for 
 
 ## See the sailors
 
-- `bin/fm-sailor.sh status` shows each live sailor: whether it answers, its tasks against its capacity, and which models are loaded.
-- `bin/fm-sailor.sh list` shows every sailor with its endpoint, capacity, and models.
+- `bin/fm-sailor.sh status` shows each live sailor: whether it answers, its tasks against its capacity, its grade when it has one, and which models are loaded.
+- `bin/fm-sailor.sh list` shows every sailor with its endpoint, capacity, grade when it has one, and models.
 
 ## The candidates for a task
 
