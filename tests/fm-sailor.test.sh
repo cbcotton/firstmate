@@ -845,6 +845,21 @@ stoker down http://127.0.0.1:1/v1/models" "$out" "an mlx-serve sailor must be pr
   pass "health probes an mlx-serve sailor at its server's healthPath and any other sailor at its model list"
 }
 
+test_status_and_list_show_the_grade_of_a_graded_sailor_only() {
+  local out
+  stub_reset
+  make_stub_case grade "$(stub_map | jq 'del(.rules) | .sailors.tiller.models = ["qwen-coder"] | .sailors.tiller.grade = "specialist"')"
+  out=$(run_real status)
+  assert_equals "tiller live answering endpoint=$STUB/v1 tasks=0/1 grade=specialist models=qwen-coder(loaded)" "$out" "a graded sailor's status line must carry its grade"
+  out=$(run_real status --all)
+  assert_contains "$out" "flint placeholder not-answering endpoint=http://127.0.0.1:1/v1 tasks=0/1" "an ungraded sailor's status line must omit grade"
+  assert_not_contains "$out" "flint placeholder not-answering endpoint=http://127.0.0.1:1/v1 tasks=0/1 grade" "an ungraded sailor's status line must omit grade"
+  out=$(run_real list)
+  assert_contains "$out" "tiller status=live endpoint=$STUB/v1 max_concurrent=1 grade=specialist models=qwen-coder" "a graded sailor's list line must carry its grade"
+  assert_contains "$out" "flint status=placeholder endpoint=http://127.0.0.1:1/v1 max_concurrent=1 models=qwen-coder" "an ungraded sailor's list line must omit grade"
+  pass "status and list carry grade=<grade> for a graded sailor and omit it for an ungraded one"
+}
+
 test_status_answering_agrees_with_the_health_probe() {
   local out
   stub_reset
@@ -1402,6 +1417,7 @@ test_retire_refuses_busy_sailors_and_removes_emptied_rules
 test_add_and_set_edit_one_sailor
 test_add_from_mlx_serve_reads_the_registry_and_nothing_more
 test_health_probes_the_mlx_serve_health_path
+test_status_and_list_show_the_grade_of_a_graded_sailor_only
 test_status_answering_agrees_with_the_health_probe
 test_health_probes_every_sailor_at_once_within_the_bound
 test_status_probes_every_sailor_at_once_within_the_bound

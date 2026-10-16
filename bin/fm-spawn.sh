@@ -2491,6 +2491,7 @@ if [ "$HARNESS" = opencode ] && [ "$RAW_LAUNCH" = 0 ] && [ "$KIND" != secondmate
 fi
 SAILOR_PROVIDER_JSON=
 SAILOR_AUTH_ENV=
+SAILOR_GRADE=
 [ "$SPEND_SET" -eq 0 ] || [ -n "$SAILOR" ] || {
   echo "error: --spend applies only with --sailor; it lets a paid sailor take this one task" >&2
   exit 1
@@ -2519,6 +2520,7 @@ if [ -n "$SAILOR" ]; then
     exit 1
   }
   SAILOR_AUTH_ENV=$(jq -r --arg s "$SAILOR" '.sailors[$s].auth_env // empty' "$CONFIG/crew-dispatch.json")
+  SAILOR_GRADE=$(jq -r --arg s "$SAILOR" '.sailors[$s].grade // empty' "$CONFIG/crew-dispatch.json")
 fi
 # Sailor sandbox (header above; docs/configuration.md "Sailor sandbox"). The
 # wrapper's paths need the task's copy, so only its availability is proven here,
@@ -5906,7 +5908,7 @@ SPAWN_ACCOUNT=
 [ -z "$WORKER_ACCOUNT" ] || SPAWN_ACCOUNT=" account=$WORKER_ACCOUNT_DECLARED"
 [ -z "$WORKER_ACCOUNT_PROVIDER" ] || SPAWN_ACCOUNT="$SPAWN_ACCOUNT account_provider=$WORKER_ACCOUNT_PROVIDER"
 # Opt-in fleet activity ledger (docs/fleet-ledger.md); off costs one file test.
-[ ! -e "$CONFIG/fleet-ledger" ] || [ "$RELAUNCH" -eq 1 ] || FM_HOME=$FM_HOME FM_STATE_OVERRIDE=$STATE FM_CONFIG_OVERRIDE=$CONFIG "$SCRIPT_DIR/fm-fleet-ledger.sh" dispatched "$ID" "$KIND" "${PROJ_ABS##*/}" "$HARNESS" "$MODEL" "$SAILOR" || true
+[ ! -e "$CONFIG/fleet-ledger" ] || [ "$RELAUNCH" -eq 1 ] || FM_HOME=$FM_HOME FM_STATE_OVERRIDE=$STATE FM_CONFIG_OVERRIDE=$CONFIG "$SCRIPT_DIR/fm-fleet-ledger.sh" dispatched "$ID" "$KIND" "${PROJ_ABS##*/}" "$HARNESS" "$MODEL" "$SAILOR" "$SAILOR_GRADE" || true
 SPAWN_SAILOR=
 [ -z "$SAILOR" ] || SPAWN_SAILOR=" sailor=$SAILOR"
 [ "$SAILOR_SANDBOX" = 0 ] || SPAWN_SAILOR="$SPAWN_SAILOR sandbox=seatbelt"

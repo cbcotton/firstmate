@@ -74,9 +74,10 @@
 #   scout_reports[]: present data/<id>/report.md pointers.
 #   charts[]: {project,path,data} for each data/charts/<project>.json, sorted by
 #     project; data is the file's parsed JSON. Empty when the directory is absent.
-#   sailors[]: {name,status,answering,endpoint,tasks,capacity,line} - one row per
+#   sailors[]: {name,status,answering,endpoint,tasks,capacity,grade,line} - one row per
 #     live named sailor, parsed from bin/fm-sailor.sh status (which owns the
-#     probe and the line); line is its raw text. answering is the result of
+#     probe and the line); line is its raw text, and grade is the sailor's
+#     grade or null when ungraded. answering is the result of
 #     the health probe behind the watcher's `check: sailor` wakes: true, false,
 #     or null when the line is unrecognized. Empty when the home declares no
 #     sailors. privateer: {active,first_mate,active_project} - active is true
@@ -2035,6 +2036,7 @@ sailors_json() {
          answering:(if $f[2] == "answering" then true elif $f[2] == "not-answering" then false else null end),
          endpoint:($f | map(select(startswith("endpoint=")))[0] // null | if . then ltrimstr("endpoint=") else null end),
          tasks:($tc[0] | tonumber? // null), capacity:($tc[1] // null | tonumber? // null),
+         grade:($f | map(select(startswith("grade=")))[0] // null | if . then ltrimstr("grade=") else null end),
          line:$line})'
 }
 
