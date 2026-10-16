@@ -810,12 +810,16 @@ printf '%s' '{"object":"list","data":[{"id":"qwen-coder"}]}'
 SH
   chmod +x "$fakebin/curl"
   out=$(PATH="$fakebin:$PATH" FM_HOME="$home" "$SNAPSHOT" --json)
-  assert_equals '[{"name":"tiller","status":"live","answering":true,"tasks":0,"capacity":1}]' \
-    "$(printf '%s' "$out" | jq -c '[.sailors[] | {name,status,answering,tasks,capacity}]')" \
+  assert_equals '[{"name":"tiller","status":"live","answering":true,"tasks":0,"capacity":1,"grade":null}]' \
+    "$(printf '%s' "$out" | jq -c '[.sailors[] | {name,status,answering,tasks,capacity,grade}]')" \
     "the snapshot must list each live sailor with its answer and capacity, and leave a placeholder out"
   assert_equals '{"active":true,"first_mate":"tiller/qwen-coder","active_project":"constellation"}' \
     "$(printf '%s' "$out" | jq -c '.privateer')" \
     "the snapshot must name the first mate and the active project in a Privateer home"
+  jq '.sailors.tiller.grade = "specialist"' "$home/config/crew-dispatch.json" > "$home/config/crew-dispatch.json.new" \
+    && mv "$home/config/crew-dispatch.json.new" "$home/config/crew-dispatch.json"
+  out=$(PATH="$fakebin:$PATH" FM_HOME="$home" "$SNAPSHOT" --json)
+  assert_equals '"specialist"' "$(printf '%s' "$out" | jq -c '.sailors[0].grade')" "a graded sailor's snapshot row must carry its grade"
   printf '%s\n' 'nosuch' > "$home/config/active-project"
   out=$(PATH="$fakebin:$PATH" FM_HOME="$home" "$SNAPSHOT" --json)
   assert_equals null "$(printf '%s' "$out" | jq -c '.privateer.active_project')" \

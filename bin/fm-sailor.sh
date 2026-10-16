@@ -71,7 +71,8 @@
 # names no model; a rule's `spend`, when present, is "allowed".
 # bin/fm-bootstrap.sh reports that reason as a CREW_DISPATCH diagnostic.
 #
-# list prints one line per sailor: name, status, endpoint, capacity, models.
+# list prints one line per sailor: name, status, endpoint, capacity, grade (a
+# graded sailor only), models.
 #
 # grades prints the grades, lowest first, one per line.
 #
@@ -131,8 +132,10 @@
 # and, when GET <endpoint>/models answers, each listed model as loaded,
 # unloaded (listed with loaded=false), listed (the server reports no loaded
 # flag), unlisted (left out of the list of a sailor with unlisted_models), or
-# missing. A sailor missing its token is not probed: its line reads no-token
-# in place of the answer and ends with auth_env=<variable>. Every sailor is
+# missing. A graded sailor's line carries grade=<grade> right after its tasks,
+# and an ungraded sailor's line omits it. A sailor missing its token is not
+# probed: its line reads no-token in place of the answer and ends with
+# auth_env=<variable>. Every sailor is
 # probed at once, so the run takes about one probe timeout however many are
 # down. It exits 0 whatever the sailors answer.
 #
@@ -501,7 +504,7 @@ cmd_list() {
   need_jq
   load_file
   jq -r '(.sailors // {}) | to_entries[]
-    | "\(.key) status=\(.value.status) endpoint=\(.value.endpoint) max_concurrent=\(.value.max_concurrent // 1) models=\(.value.models | join(","))\(if .value.auth_env then " auth_env=\(.value.auth_env)" else "" end)\(if .value.unlisted_models then " unlisted_models=true" else "" end)"' "$FILE"
+    | "\(.key) status=\(.value.status) endpoint=\(.value.endpoint) max_concurrent=\(.value.max_concurrent // 1)\(if .value.grade then " grade=\(.value.grade)" else "" end) models=\(.value.models | join(","))\(if .value.auth_env then " auth_env=\(.value.auth_env)" else "" end)\(if .value.unlisted_models then " unlisted_models=true" else "" end)"' "$FILE"
 }
 
 # sailor_load <sailor> <model>: shared lookup for check and provider-json.
@@ -718,17 +721,19 @@ cmd_provider_json() {
 
 # status_line <sailor> <url>: the one status line for a sailor.
 status_line() {
-  local name=$1 url=$2 status endpoint max busy body queue models m state states
+  local name=$1 url=$2 status endpoint max busy body queue models m state states grade
   status=$(sailor_field "$name" '.status')
+  grade=$(sailor_field "$name" '.grade')
+  grade=${grade:+ grade=$grade}
   endpoint=$(sailor_field "$name" '.endpoint')
   max=$(sailor_field "$name" '.max_concurrent')
   busy=$(busy_count "$name" "")
   if ! sailor_auth "$name"; then
-    echo "$name $status no-token endpoint=$endpoint tasks=$busy/${max:-1} auth_env=$AUTH_ENV"
+    echo "$name $status no-token endpoint=$endpoint tasks=$busy/${max:-1}$grade auth_env=$AUTH_ENV"
     return 0
   fi
   if ! probe_up "$url"; then
-    echo "$name $status not-answering endpoint=$endpoint tasks=$busy/${max:-1}"
+    echo "$name $status not-answering endpoint=$endpoint tasks=$busy/${max:-1}$grade"
     return 0
   fi
   queue=$(server_queue "$endpoint")
@@ -741,7 +746,7 @@ status_line() {
       states="$states${states:+,}$m($state)"
     done <<<"$models"
   fi
-  echo "$name $status answering endpoint=$endpoint tasks=$busy/${max:-1}${queue:+ $queue}${states:+ models=$states}"
+  echo "$name $status answering endpoint=$endpoint tasks=$busy/${max:-1}$grade${queue:+ $queue}${states:+ models=$states}"
 }
 
 cmd_status() {

@@ -827,6 +827,8 @@ test_opencode_sailor_launch_points_at_the_sailor() {
   assert_grep "dispatched_at=" "$HOME_DIR/state/$id.meta" "a fresh spawn must stamp its dispatch for task-scoped permission grants"
   assert_equals '"tiller"' "$(jq -c 'select(.event == "task.dispatched") | .sailor' "$HOME_DIR/state/fleet-ledger.jsonl")" \
     "the ledger's dispatch record must name the sailor so the widget and phone can show it"
+  assert_equals 'null' "$(jq -c 'select(.event == "task.dispatched") | .grade' "$HOME_DIR/state/fleet-ledger.jsonl")" \
+    "an ungraded sailor's dispatch record must carry a null grade"
   launch=$(cat "$LAUNCH_LOG")
   # The title carries a quote, so the provider entry must close and reopen the
   # launch's single-quoted assignment around it.

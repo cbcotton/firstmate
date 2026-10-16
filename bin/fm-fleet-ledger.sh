@@ -25,7 +25,7 @@
 #                                health)
 #
 # Usage:
-#   fm-fleet-ledger.sh dispatched <task> <kind> <project> <harness> <model> [<sailor>]
+#   fm-fleet-ledger.sh dispatched <task> <kind> <project> <harness> <model> [<sailor> [<grade>]]
 #   fm-fleet-ledger.sh pr_ready <task> <url>
 #   fm-fleet-ledger.sh merged <task> pr <url>
 #   fm-fleet-ledger.sh merged <task> local
@@ -86,7 +86,7 @@ LOCK="$STATE/.fleet-ledger.lock"
 TEXT_MAX_CHARS=2000
 
 usage() {
-  echo "usage: fm-fleet-ledger.sh dispatched <task> <kind> <project> <harness> <model> [<sailor>] | pr_ready <task> <url> | merged <task> pr <url> | merged <task> local | cleaned_up <task> | capture | appended <config> <state>/<task>.status | validation <task> <run> <step> <outcome> [<step> <outcome>]... | decided <task> <answer> | sailor_state <sailor> up|down" >&2
+  echo "usage: fm-fleet-ledger.sh dispatched <task> <kind> <project> <harness> <model> [<sailor> [<grade>]] | pr_ready <task> <url> | merged <task> pr <url> | merged <task> local | cleaned_up <task> | capture | appended <config> <state>/<task>.status | validation <task> <run> <step> <outcome> [<step> <outcome>]... | decided <task> <answer> | sailor_state <sailor> up|down" >&2
   exit 2
 }
 
@@ -96,7 +96,7 @@ task_ok() {
 
 cmd=${1:-}
 case "$cmd" in
-  dispatched) { { [ "$#" -eq 6 ] || [ "$#" -eq 7 ]; } && task_ok "$2"; } || usage ;;
+  dispatched) { { [ "$#" -ge 6 ] && [ "$#" -le 8 ]; } && task_ok "$2"; } || usage ;;
   pr_ready) { [ "$#" -eq 3 ] && task_ok "$2" && [ -n "$3" ]; } || usage ;;
   merged)
     task_ok "${2:-}" || usage
@@ -295,8 +295,8 @@ case "$cmd" in
   dispatched)
     rm -f -- "$(offset_path "$2")" "$(validation_path "$2")"
     append task.dispatched "$2" \
-      '{kind: ($kind | n), project: ($project | n), harness: ($harness | n), model: ($model | n), sailor: ($sailor | n)}' \
-      --arg kind "$3" --arg project "$4" --arg harness "$5" --arg model "$6" --arg sailor "${7:-}" || rc=1
+      '{kind: ($kind | n), project: ($project | n), harness: ($harness | n), model: ($model | n), sailor: ($sailor | n), grade: ($grade | n)}' \
+      --arg kind "$3" --arg project "$4" --arg harness "$5" --arg model "$6" --arg sailor "${7:-}" --arg grade "${8:-}" || rc=1
     ;;
   pr_ready)
     capture_task "$2" || rc=1

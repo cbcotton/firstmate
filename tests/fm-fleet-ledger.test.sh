@@ -100,7 +100,7 @@ test_flag_on_records_the_task_lifecycle() {
     || fail "every record must carry v, ts, event, and task: $(cat "$HOME_DIR/state/fleet-ledger.jsonl")"
   rows=$(ledger_rows '[.event, .task] + (del(.v, .ts, .event, .task) | to_entries | map(.value))')
   assert_equals "$(cat <<EOF
-["task.dispatched","$TASK","ship","sample","claude",null,null]
+["task.dispatched","$TASK","ship","sample","claude",null,null,null]
 ["task.status","$TASK","working",null," setup done"]
 ["task.status","$TASK","needs-decision","pick-one"," choose \"a\"\\\\b or c"]
 ["task.status","$TASK","resolved","pick-one"," [key=pick-one]  chose a"]
@@ -372,11 +372,14 @@ test_dispatched_names_the_sailor_or_null() {
   make_case on-sailor on
   in_home "$ROOT/bin/fm-fleet-ledger.sh" dispatched sailor-a1 ship sample opencode qwen-coder tiller \
     || fail "a dispatch record with a sailor was refused"
+  in_home "$ROOT/bin/fm-fleet-ledger.sh" dispatched graded-c1 ship sample opencode qwen-coder tiller specialist \
+    || fail "a dispatch record with a sailor grade was refused"
   in_home "$ROOT/bin/fm-fleet-ledger.sh" dispatched hosted-b1 scout sample claude "" \
     || fail "the six-argument dispatch form must still be accepted"
-  rows=$(ledger_rows 'select(.event == "task.dispatched") | [.task, .harness, .model, .sailor]')
-  assert_equals '["sailor-a1","opencode","qwen-coder","tiller"]
-["hosted-b1","claude",null,null]' "$rows" "dispatch sailor rows"
+  rows=$(ledger_rows 'select(.event == "task.dispatched") | [.task, .harness, .model, .sailor, .grade]')
+  assert_equals '["sailor-a1","opencode","qwen-coder","tiller",null]
+["graded-c1","opencode","qwen-coder","tiller","specialist"]
+["hosted-b1","claude",null,null,null]' "$rows" "dispatch sailor rows"
   pass "flag on: a dispatch record names the worker's sailor, or null for a worker on a hosted model"
 }
 

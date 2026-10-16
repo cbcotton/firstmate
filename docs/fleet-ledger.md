@@ -29,7 +29,7 @@ Readers must ignore members and events they do not recognize, so later versions 
 
 | Event              | Extra members                                  | Written when |
 | ------------------ | ---------------------------------------------- | ------------ |
-| `task.dispatched`  | `kind`, `project`, `harness`, `model`, `sailor` | A new worker or second mate is launched. A relaunch of an existing task is not recorded. |
+| `task.dispatched`  | `kind`, `project`, `harness`, `model`, `sailor`, `grade` | A new worker or second mate is launched. A relaunch of an existing task is not recorded. |
 | `task.status`      | `state`, `key`, `text`                         | A complete, nonblank line in the task's status log is captured. |
 | `task.validation`  | `run`, `step`, `outcome`                       | Firstmate reads a new outcome for one step of the task's no-mistakes run. |
 | `task.pr_ready`    | `pr`, `risk`, `touches`                        | Firstmate records the task's PR as ready for review. |
@@ -38,7 +38,7 @@ Readers must ignore members and events they do not recognize, so later versions 
 | `task.cleaned_up`  | none                                           | The task's worker and local copy were removed. |
 | `sailor.state`     | `name`, `state`                                | The supervision monitor sees a live named sailor stop answering or answer again. |
 
-`task.dispatched` members: `kind` is `ship`, `scout`, or `secondmate`; `project` is the project directory name, or `null` for a remote second mate; `harness` names the agent tool; `model` is the requested model, or `null` for the tool's default; `sailor` names the sailor the worker runs on ([named sailors](configuration.md#crew-dispatch-profiles-configcrew-dispatchjson)), or `null` for a worker on no sailor.
+`task.dispatched` members: `kind` is `ship`, `scout`, or `secondmate`; `project` is the project directory name, or `null` for a remote second mate; `harness` names the agent tool; `model` is the requested model, or `null` for the tool's default; `sailor` names the sailor the worker runs on ([named sailors](configuration.md#crew-dispatch-profiles-configcrew-dispatchjson)), or `null` for a worker on no sailor; `grade` is that sailor's grade, or `null` when the worker is on no sailor or the sailor is ungraded.
 
 `task.validation` members: `run` is the no-mistakes run id.
 `step` is `review`, `tests`, `docs`, or `pr`, for the run's review, test, document, and pr steps; its other steps are not recorded.
@@ -66,7 +66,7 @@ It is written once per change, never again while the sailor stays in that state,
 Example:
 
 ```json
-{"v":1,"ts":1790132857,"event":"task.dispatched","task":"fix-login","kind":"ship","project":"webapp","harness":"claude","model":null,"sailor":null}
+{"v":1,"ts":1790132857,"event":"task.dispatched","task":"fix-login","kind":"ship","project":"webapp","harness":"claude","model":null,"sailor":null,"grade":null}
 {"v":1,"ts":1790132870,"event":"task.status","task":"fix-login","state":"working","key":null,"text":" bug reproduced"}
 {"v":1,"ts":1790133000,"event":"task.validation","task":"fix-login","run":"01M3KZCFNJDHDRBRYH3QQYYK97","step":"review","outcome":"running"}
 {"v":1,"ts":1790133400,"event":"task.status","task":"fix-login","state":"done","key":null,"text":" PR https://github.com/acme/webapp/pull/7 checks green risk=low touches=none"}
