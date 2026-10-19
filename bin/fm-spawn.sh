@@ -93,11 +93,14 @@
 #   build agent's variant, keyed to the resolved model, inside the
 #   OPENCODE_CONFIG_CONTENT JSON its launch already carries (config schema
 #   verified on opencode 1.18.32); without a model the axis is recorded but omitted.
-#   --sailor <name> runs an OpenCode crewmate or scout on a named sailor
-#   from config/crew-dispatch.json (docs/configuration.md "Named sailors"). It
-#   requires --harness opencode and a --model listed for that sailor; without
-#   --model it takes the sailor's one listed model and refuses a sailor that
-#   lists several. It refuses before any endpoint, worktree, or record exists
+#   --sailor <name> runs a crewmate or scout on a named sailor from
+#   config/crew-dispatch.json (docs/configuration.md "Named sailors"): an
+#   endpoint sailor, which OpenCode drives, or a login sailor, a worker app on
+#   its own subscription login. It requires --harness naming the sailor's own
+#   harness, opencode for an endpoint sailor and the entry's `harness` (codex,
+#   kimi, or grok) for a login sailor, and a --model listed for that sailor;
+#   without --model it takes the sailor's one listed model and refuses a
+#   sailor that lists several. It refuses before any endpoint, worktree, or record exists
 #   unless `bin/fm-sailor.sh pick --sailor <name> --model <model>` passes, so a
 #   sailor marked paid launches only with --spend, which the caller passes when
 #   the matched rule allows spend or the captain okays it for this one task;
@@ -106,8 +109,15 @@
 #   carries the sailor as its own provider (bin/fm-sailor.sh provider-json),
 #   OpenCode receives --model <sailor>/<model>, any effort is recorded but
 #   omitted because the sailor's server sets reasoning depth, and the record
-#   gets sailor=<name>. A relaunch that keeps OpenCode and the recorded model
+#   gets sailor=<name>. A relaunch that keeps the recorded harness and model
 #   keeps the recorded sailor; a relaunch onto another harness drops it.
+#   A login sailor launches as its harness's ordinary crewmate or scout, with
+#   --model <model> and any effort as that harness takes them, after
+#   `bin/fm-sailor.sh pick` has passed its sign-in check; it gets no OpenCode
+#   provider, token, system-fold plugin, or sailor sandbox, since those wrap
+#   OpenCode, and its record gets sailor=<name> plus login=<label> when the
+#   entry carries one. bin/fm-sailor.sh owns the sign-in check and never
+#   reads the login itself.
 #   For a sailor whose entry names auth_env, the provider entry carries only
 #   {env:<variable>} and the launch runs OpenCode through
 #   `bin/fm-sailor.sh with-token <variable> <home>/.env --`, outside any
@@ -2493,9 +2503,9 @@ if [ "$HARNESS" = agy ]; then
   agy_model_validate "$AGY_BIN" "$MODEL" || exit 1
 fi
 # Named sailor (header above; docs/configuration.md "Named sailors"). A relaunch
-# that keeps OpenCode and the recorded model keeps the recorded sailor, so a
+# that keeps the recorded harness and model keeps the recorded sailor, so a
 # grant applied through bin/fm-control.sh relaunch never moves the task off it.
-if [ "$SAILOR_SET" -eq 0 ] && [ "$RELAUNCH" -eq 1 ] && [ "$HARNESS" = opencode ]; then
+if [ "$SAILOR_SET" -eq 0 ] && [ "$RELAUNCH" -eq 1 ] && [ "$HARNESS" = "$RELAUNCH_PRIOR_HARNESS" ]; then
   RELAUNCH_SAILOR=$(fm_meta_get "$RELAUNCH_META" sailor)
   RELAUNCH_SAILOR_MODEL=$(fm_meta_get "$RELAUNCH_META" model)
   if [ -n "$RELAUNCH_SAILOR" ] && { [ -z "$MODEL" ] || [ "$MODEL" = "$RELAUNCH_SAILOR_MODEL" ]; }; then
@@ -2535,6 +2545,8 @@ fi
 SAILOR_PROVIDER_JSON=
 SAILOR_AUTH_ENV=
 SAILOR_GRADE=
+SAILOR_HARNESS=
+SAILOR_LOGIN=
 [ "$SPEND_SET" -eq 0 ] || [ -n "$SAILOR" ] || {
   echo "error: --spend applies only with --sailor; it lets a paid sailor take this one task" >&2
   exit 1
@@ -2544,10 +2556,19 @@ if [ -n "$SAILOR" ]; then
     echo "error: --sailor applies to crewmate and scout spawns only; a secondmate runs its own home" >&2
     exit 1
   }
-  [ "$HARNESS" = opencode ] && [ "$RAW_LAUNCH" = 0 ] || {
-    echo "error: --sailor requires --harness opencode, the one harness that takes a sailor's endpoint" >&2
-    exit 1
-  }
+  [ ! -f "$CONFIG/crew-dispatch.json" ] ||
+    SAILOR_HARNESS=$(jq -r --arg s "$SAILOR" '.sailors[$s].harness // empty' "$CONFIG/crew-dispatch.json" 2>/dev/null) || SAILOR_HARNESS=
+  if [ -n "$SAILOR_HARNESS" ]; then
+    [ "$HARNESS" = "$SAILOR_HARNESS" ] && [ "$RAW_LAUNCH" = 0 ] || {
+      echo "error: sailor $SAILOR is a login sailor on $SAILOR_HARNESS; --sailor $SAILOR requires --harness $SAILOR_HARNESS, the worker app its login belongs to" >&2
+      exit 1
+    }
+  else
+    [ "$HARNESS" = opencode ] && [ "$RAW_LAUNCH" = 0 ] || {
+      echo "error: --sailor requires --harness opencode, the one harness that takes a sailor's endpoint" >&2
+      exit 1
+    }
+  fi
   # pick is the one owner of the sailor gates: the one-model rule, the spend
   # go for a paid sailor, and check.
   SAILOR_PICK_ARGS=(pick --sailor "$SAILOR" --task "$ID")
@@ -2558,24 +2579,31 @@ if [ -n "$SAILOR" ]; then
     exit 1
   fi
   MODEL=${SAILOR_CHECK#* }
-  SAILOR_PROVIDER_JSON=$(FM_CONFIG_OVERRIDE="$CONFIG" FM_STATE_OVERRIDE="$STATE" "$SCRIPT_DIR/fm-sailor.sh" provider-json "$SAILOR" "$MODEL") || {
-    echo "error: sailor $SAILOR's OpenCode provider entry could not be built" >&2
-    exit 1
-  }
-  SAILOR_AUTH_ENV=$(jq -r --arg s "$SAILOR" '.sailors[$s].auth_env // empty' "$CONFIG/crew-dispatch.json")
+  if [ -n "$SAILOR_HARNESS" ]; then
+    # A login sailor is its worker app on its own login: no provider, no token.
+    SAILOR_LOGIN=$(jq -r --arg s "$SAILOR" '.sailors[$s].login // empty' "$CONFIG/crew-dispatch.json")
+  else
+    SAILOR_PROVIDER_JSON=$(FM_CONFIG_OVERRIDE="$CONFIG" FM_STATE_OVERRIDE="$STATE" "$SCRIPT_DIR/fm-sailor.sh" provider-json "$SAILOR" "$MODEL") || {
+      echo "error: sailor $SAILOR's OpenCode provider entry could not be built" >&2
+      exit 1
+    }
+    SAILOR_AUTH_ENV=$(jq -r --arg s "$SAILOR" '.sailors[$s].auth_env // empty' "$CONFIG/crew-dispatch.json")
+  fi
   SAILOR_GRADE=$(jq -r --arg s "$SAILOR" '.sailors[$s].grade // empty' "$CONFIG/crew-dispatch.json")
 fi
 # Sailor sandbox (header above; docs/configuration.md "Sailor sandbox"). The
 # wrapper's paths need the task's copy, so only its availability is proven here,
 # before any endpoint, worktree, or record exists. A restricted sailor always
 # needs it: the profile's shell patterns cannot rule out a redirection that
-# writes outside the copy, so the sandbox is what bounds those writes.
+# writes outside the copy, so the sandbox is what bounds those writes. Both
+# wrap OpenCode, so a login sailor, which launches as its own worker app,
+# takes neither.
 SAILOR_SANDBOX=0
-if [ -n "$SAILOR" ] && [ "$OC_PROFILE" = restricted ] && [ ! -e "$CONFIG/sailor-sandbox" ]; then
+if [ -n "$SAILOR" ] && [ -z "$SAILOR_HARNESS" ] && [ "$OC_PROFILE" = restricted ] && [ ! -e "$CONFIG/sailor-sandbox" ]; then
   echo "error: sailor $SAILOR runs under the restricted OpenCode profile, which requires config/sailor-sandbox; create it to launch restricted sailors inside the sandbox" >&2
   exit 1
 fi
-if [ -n "$SAILOR" ] && [ -e "$CONFIG/sailor-sandbox" ] && [ ! -e "$CONFIG/privateer" ] && [ ! -L "$CONFIG/privateer" ]; then
+if [ -n "$SAILOR" ] && [ -z "$SAILOR_HARNESS" ] && [ -e "$CONFIG/sailor-sandbox" ] && [ ! -e "$CONFIG/privateer" ] && [ ! -L "$CONFIG/privateer" ]; then
   "$SCRIPT_DIR/fm-sandbox-exec.sh" available || {
     echo "error: config/sailor-sandbox asks for the sailor sandbox, but sandbox-exec cannot run on this machine; refusing to launch sailor $SAILOR unconfined" >&2
     exit 1
@@ -5244,7 +5272,7 @@ SPAWN_META_PATH=$SPAWN_META_TMP
 preserve_relaunch_meta() {
   awk -F= '
     BEGIN {
-      split("window endpoint_task_id worktree project harness kind mode yolo branch tasktmp model effort sailor spend mcp sandbox account account_provider busy_gen spawn_gen traceparent backend herdr_session herdr_workspace_id herdr_tab_id herdr_pane_id zellij_session zellij_tab_id zellij_pane_id orca_worktree_id terminal cmux_workspace_id cmux_surface_id home projects control_relaunch_tx", keys, " ")
+      split("window endpoint_task_id worktree project harness kind mode yolo branch tasktmp model effort sailor login spend mcp sandbox account account_provider busy_gen spawn_gen traceparent backend herdr_session herdr_workspace_id herdr_tab_id herdr_pane_id zellij_session zellij_tab_id zellij_pane_id orca_worktree_id terminal cmux_workspace_id cmux_surface_id home projects control_relaunch_tx", keys, " ")
       for (i in keys) owned[keys[i]] = 1
     }
     !($1 in owned)
@@ -5264,6 +5292,7 @@ spawn_compose_meta() {
   echo "model=${MODEL:-default}"
   echo "effort=${EFFORT:-default}"
   [ -z "$SAILOR" ] || echo "sailor=$SAILOR"
+  [ -z "$SAILOR_LOGIN" ] || echo "login=$SAILOR_LOGIN"
   [ -z "$SAILOR" ] || [ "$SPEND" = 0 ] || echo "spend=allowed"
   [ "$FULL_MCP" = 0 ] || echo "mcp=full"
   [ "$SAILOR_SANDBOX" = 0 ] || echo "sandbox=seatbelt"

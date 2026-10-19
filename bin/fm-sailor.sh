@@ -4,9 +4,33 @@
 # docs/configuration.md ("Crew dispatch profiles", "Named sailors") owns the
 # schema and what firstmate does with each answer. This header owns the checks:
 # map and reference validation, the placeholder lock, the per-sailor capacity
-# count, the endpoint probe and warm-up, the choice by grade, the OpenCode
-# provider fragment, the status view, and the health probe; and the registry
-# commands that edit the map, with their refusals.
+# count, the endpoint probe and warm-up, the sign-in check of a login sailor,
+# the choice by grade, the OpenCode provider fragment, the status view, and
+# the health probe; and the registry commands that edit the map, with their
+# refusals.
+#
+# A sailor is either an endpoint sailor, an OpenAI-compatible `endpoint` that
+# OpenCode drives, or a login sailor, a worker app (`harness`: codex, kimi,
+# or grok) run on the subscription login already stored on this machine. A
+# login sailor has no endpoint, auth_env, unlisted_models, model_settings, or
+# host; its `models` are the model ids the worker app takes, and its optional
+# `login` is a label for the account, never a credential. This script never
+# reads, prints, or copies a stored login: every sign-in check runs the worker
+# app itself, under `env -i` with HOME, PATH, and, when set, TMPDIR, USER, and
+# LOGNAME, so an ambient API key never stands in for the login. The checks:
+#   codex: `codex login status` exits 0 within FM_SAILOR_LOGIN_TIMEOUT seconds
+#     (default 30);
+#   grok: ${GROK_HOME:-~/.grok}/auth.json exists and `grok models` exits 0
+#     within that bound;
+#   kimi: a credentials file ~/.kimi-code/credentials/kimi-code-env-*.json
+#     exists; check alone also sends `kimi -p` one test prompt, which must
+#     exit 0 within FM_SAILOR_SMOKE_TIMEOUT seconds (default 120), from an
+#     empty scratch directory, so a stale login surfaces before a worker is
+#     launched on it rather than inside its first turn. That prompt is the
+#     one request these commands send a login sailor; health and status never
+#     send it.
+# An app that is not installed, times out, or exits non-zero reads as signed
+# out, and every reason names the app and never a value.
 #
 # Usage:
 #   fm-sailor.sh validate
@@ -25,6 +49,9 @@
 #   fm-sailor.sh add <sailor> --from-mlx-serve <server-id> [--models <id>[,<id>...]]
 #                    [--title <text>] [--host <text>] [--max-concurrent <n>]
 #                    [--auth-env <variable>] [--unlisted-models] [--live | --placeholder]
+#   fm-sailor.sh add <sailor> --harness <codex|kimi|grok> --models <id>[,<id>...]
+#                    [--login <label>] [--title <text>] [--max-concurrent <n>]
+#                    [--live | --placeholder]
 #   fm-sailor.sh set <sailor> [--endpoint <url>] [--title <text>] [--host <text>]
 #                    [--max-concurrent <n>] [--auth-env <variable> | --no-auth-env]
 #                    [--unlisted-models | --no-unlisted-models] [--live | --placeholder]
@@ -66,13 +93,18 @@
 # profile's `sailor` or `grade` reference (in rules, default, and
 # sailor_fallback, which names neither), each rule's `spend`, and the
 # `sailor_fallback` shape, and prints one reason on stdout with exit 1 when any
-# is malformed. A profile naming a sailor without a model needs that sailor to
-# list exactly one model; a profile naming a grade uses harness opencode and
-# names no model; a rule's `spend`, when present, is "allowed".
+# is malformed. A sailor has exactly one of `endpoint` and `harness`, and a
+# login sailor's harness is codex, kimi, or grok. A profile naming a sailor
+# uses that sailor's harness, opencode for an endpoint sailor, and without a
+# model needs that sailor to list exactly one model; a profile naming a grade
+# uses harness opencode and names no model, and the sailor the pick chooses
+# for it brings its own harness, which bin/fm-spawn.sh --sailor then requires;
+# a rule's `spend`, when present, is "allowed".
 # bin/fm-bootstrap.sh reports that reason as a CREW_DISPATCH diagnostic.
 #
-# list prints one line per sailor: name, status, endpoint, capacity, grade (a
-# graded sailor only), models.
+# list prints one line per sailor: name, status, endpoint or harness,
+# capacity, grade (a graded sailor only), models, and login (a login sailor
+# with a label only).
 #
 # grades prints the grades, lowest first, one per line.
 #
@@ -87,10 +119,12 @@
 #   5. GET <endpoint>/models answers within FM_SAILOR_PROBE_TIMEOUT seconds
 #      (default 3) with an OpenAI-style model list that includes <model>, or,
 #      for a sailor with unlisted_models, with any model list.
-# It prints `ok: ...` and exits 0, or prints `refused: ...` and exits 1. When
-# the model list carries a `loaded` flag, the ok line says whether the model
-# is loaded or only listed. No probe here or in status or health ever asks
-# for a completion, so none spends a paid endpoint's credits.
+# For a login sailor, steps 4 and 5 are its sign-in check (above), with the
+# kimi test prompt. It prints `ok: ...` and exits 0, or prints `refused: ...`
+# and exits 1. When the model list carries a `loaded` flag, the ok line says
+# whether the model is loaded or only listed. No probe here or in status or
+# health ever asks an endpoint for a completion, so none spends a paid
+# endpoint's credits.
 #
 # pick chooses the sailor and model that may take a task now, and prints them
 # as `<sailor> <model>` with exit 0, or prints `refused: ...` and exits 1.
@@ -114,7 +148,8 @@
 # and an `options` object, in OpenCode's own field names. A sailor with
 # auth_env gets `apiKey: "{env:<variable>}"`, which OpenCode resolves from its
 # own environment and sends as the bearer token, so the entry never holds the
-# value.
+# value. It refuses a login sailor, which runs as its own worker app and takes
+# no OpenCode provider.
 #
 # with-token puts <variable> into <command>'s environment and execs it: the
 # environment's value when set and non-empty, otherwise <env-file>'s, read as
@@ -135,7 +170,10 @@
 # missing. A graded sailor's line carries grade=<grade> right after its tasks,
 # and an ungraded sailor's line omits it. A sailor missing its token is not
 # probed: its line reads no-token in place of the answer and ends with
-# auth_env=<variable>. Every sailor is
+# auth_env=<variable>. A login sailor's line carries harness=<harness> in
+# place of endpoint=<url>, answering or not-answering by its sign-in check
+# without the kimi test prompt, each model as signed-in or signed-out, and
+# ends with login=<label> when it has one. Every sailor is
 # probed at once, so the run takes about one probe timeout however many are
 # down. It exits 0 whatever the sailors answer.
 #
@@ -146,10 +184,12 @@
 # <baseURL><healthPath> answers without an HTTP error status within
 # FM_SAILOR_PROBE_TIMEOUT seconds, the longest matching baseURL winning; any
 # other sailor is up when GET <endpoint>/models does. A sailor missing its
-# token is down without a probe. Every sailor is probed
-# at once, so the whole run takes about one probe timeout however many there
-# are. bin/fm-watch.sh turns its changes into wakes. It exits 0 whatever the
-# sailors answer.
+# token is down without a probe. A login sailor's line reads `<sailor> up
+# login:<harness>` or `<sailor> down login:<harness>` by its sign-in check
+# without the kimi test prompt, so the periodic watch sends no prompt. Every
+# sailor is probed at once, so the whole run takes about one probe timeout
+# however many there are. bin/fm-watch.sh turns its changes into wakes. It
+# exits 0 whatever the sailors answer.
 #
 # The registry commands edit config/crew-dispatch.json and nothing else,
 # except that set-model --first-mate and sync also write config/privateer. Each builds
@@ -181,7 +221,10 @@
 # servers.json and never loads, unloads, or starts a server. --auth-env records
 # the sailor's auth_env, and with --from-mlx-serve its token also rides that
 # list request; --unlisted-models records unlisted_models, and with
-# --from-mlx-serve lets --models name ids the list leaves out.
+# --from-mlx-serve lets --models name ids the list leaves out. --harness
+# <codex|kimi|grok> registers a login sailor on that worker app with the
+# --models it takes and the optional --login label, probing nothing; it takes
+# no --endpoint, --from-mlx-serve, --host, --auth-env, or --unlisted-models.
 #
 # set changes the given fields of an existing sailor; its models change only
 # through set-model. --no-auth-env and --no-unlisted-models remove those
@@ -215,8 +258,10 @@
 #   - for a live sailor, a missing token, an endpoint that does not answer or
 #     does not list <model> (unless the sailor has unlisted_models), and with
 #     --warm, a failed warm-up.
-# A placeholder is not probed. When the server lists <model> as not loaded
-# and --warm is absent, it says so and names --warm.
+# A placeholder is not probed, and neither is a login sailor, whose model id
+# cannot be checked against a list; set-model refuses --warm and --first-mate
+# on a login sailor. When the server lists <model> as not loaded and --warm
+# is absent, it says so and names --warm.
 #
 # retire removes a sailor and every rule and default profile naming it. A rule
 # left with no profile is removed, as is a default left empty, and each is
@@ -229,16 +274,19 @@
 # comment, an absolute path or one starting ~/); without that file the home's
 # sailors are managed by hand and sync refuses. It reads from the registry:
 # `schema`, which must be 1; `homes`, which must map <key> to this home's
-# directory; `slots`, each a pre-named sailor that is blank (neither `server`
-# nor `model`) or bound to one `server`, an id in the mlx-serve registry, and
-# one `model`, with optional `title`, `status` (default placeholder),
-# `capacity` (default 1), `homes` (each home's share of that capacity, whole
-# numbers summing to at most it), `grade` (one of SAILOR_GRADES below),
-# `facets` (names), `paid`, `auth_env`, `unlisted_models`, and
-# `model_settings`; and `privateer_first_mate`, a slot name. A bound slot with
-# a share for <key> becomes the sailor of the same name, in registry order:
-# endpoint the server's baseURL plus /v1, host the server's name, models
-# [model], max_concurrent the share, and the other fields copied as given.
+# directory; `slots`, each a pre-named sailor that is blank (no `server`,
+# `harness`, or `model`) or bound to one `model` on one `server`, an id in
+# the mlx-serve registry, or on one `harness` (codex, kimi, or grok), with
+# optional `title`, `status` (default placeholder), `capacity` (default 1),
+# `homes` (each home's share of that capacity, whole numbers summing to at
+# most it), `grade` (one of SAILOR_GRADES below), `facets` (names), `paid`,
+# and, on a server, `auth_env`, `unlisted_models`, and `model_settings`, or,
+# on a harness, `login` (a label); and `privateer_first_mate`, a slot name. A
+# bound slot with a share for <key> becomes the sailor of the same name, in
+# registry order: on a server, endpoint the server's baseURL plus /v1, host
+# the server's name, models [model], max_concurrent the share, and the other
+# fields copied as given; on a harness, that harness, the login label, models
+# [model], max_concurrent the share, and grade, facets, and paid as given.
 # Every other sailor leaves the map with every rule and default profile naming
 # it, as retire removes them, and each removal is reported. In a home with
 # config/privateer, privateer_first_mate becomes the first mate line
@@ -250,19 +298,22 @@
 #   - without config/sailor-registry, when it names another file, or when
 #     `homes` does not map <key> to this home;
 #   - a registry that is not schema 1 JSON with `homes` and `slots` objects,
-#     a privateer_first_mate that is not a string, and, naming the slot, a server
-#     without a model or a model without a server, a server the mlx-serve
-#     registry does not list exactly once or whose baseURL is not http(s), a
-#     capacity or share that is not a whole number, a share for a home
-#     `homes` does not name, shares above the capacity, a grade outside
+#     a privateer_first_mate that is not a string, and, naming the slot, a
+#     server or harness without a model or a model without either, a slot
+#     with both, a harness outside codex, kimi, and grok, a login slot with
+#     auth_env, unlisted_models, or model_settings, a login label on a slot
+#     without a harness or that is not a non-empty string, a server the
+#     mlx-serve registry does not list exactly once or whose baseURL is not
+#     http(s), a capacity or share that is not a whole number, a share for a
+#     home `homes` does not name, shares above the capacity, a grade outside
 #     SAILOR_GRADES, or facets that are not a list of names;
 #   - a sailor leaving the map while a task record carries sailor=<it>, or a
 #     model leaving a sailor while one carries sailor=<it> and model=<that>;
 #   - a rule or default profile naming a sailor that stays, with a model it
 #     no longer lists;
 #   - in a Privateer home, a privateer_first_mate that is not a slot, or is
-#     blank, not shared with <key>, without the `helm` facet, or a
-#     placeholder, and a first mate line left on a placeholder sailor;
+#     a login slot, blank, not shared with <key>, without the `helm` facet,
+#     or a placeholder, and a first mate line left on a placeholder sailor;
 #   - whatever validate or the Privateer check refuses, as for every registry
 #     command.
 #
@@ -293,6 +344,10 @@ SAILOR_TOKEN=
 . "$SCRIPT_DIR/fm-env-lib.sh"
 # The grades, lowest first.
 GRADES='["deckhand","sailor","specialist","expert"]'
+# The worker apps a login sailor runs on, each on its own subscription login.
+LOGIN_HARNESSES='["codex","kimi","grok"]'
+# shellcheck source=bin/fm-timeout-lib.sh
+. "$SCRIPT_DIR/fm-timeout-lib.sh"
 
 usage() {
   cat >&2 <<'EOF'
@@ -304,6 +359,8 @@ usage: fm-sailor.sh validate | list | grades | status [--all] | health
        fm-sailor.sh add <sailor> (--endpoint <url> --models <ids> | --from-mlx-serve <server-id> [--models <ids>])
                     [--title <text>] [--host <text>] [--max-concurrent <n>] [--auth-env <variable>] [--unlisted-models]
                     [--live | --placeholder]
+       fm-sailor.sh add <sailor> --harness <codex|kimi|grok> --models <ids> [--login <label>]
+                    [--title <text>] [--max-concurrent <n>] [--live | --placeholder]
        fm-sailor.sh set <sailor> [--endpoint <url>] [--title <text>] [--host <text>] [--max-concurrent <n>]
                     [--auth-env <variable> | --no-auth-env] [--unlisted-models | --no-unlisted-models] [--live | --placeholder]
        fm-sailor.sh set-model <sailor> <model> [--replace <old>] [--first-mate] [--model-limit <context>:<output>]
@@ -332,12 +389,17 @@ need_curl() {
   command -v curl >/dev/null 2>&1 || die "curl is required to probe a sailor"
 }
 
-# load_timeouts: the probe and warm-up bounds, in whole seconds.
+# load_timeouts: the probe, warm-up, sign-in check, and test-prompt bounds, in
+# whole seconds.
 load_timeouts() {
   PROBE_TIMEOUT=${FM_SAILOR_PROBE_TIMEOUT:-3}
   WARM_TIMEOUT=${FM_SAILOR_WARM_TIMEOUT:-600}
+  LOGIN_TIMEOUT=${FM_SAILOR_LOGIN_TIMEOUT:-30}
+  SMOKE_TIMEOUT=${FM_SAILOR_SMOKE_TIMEOUT:-120}
   case "$PROBE_TIMEOUT" in '' | *[!0-9]*) die "FM_SAILOR_PROBE_TIMEOUT must be whole seconds" ;; esac
   case "$WARM_TIMEOUT" in '' | *[!0-9]*) die "FM_SAILOR_WARM_TIMEOUT must be whole seconds" ;; esac
+  case "$LOGIN_TIMEOUT" in '' | *[!0-9]*) die "FM_SAILOR_LOGIN_TIMEOUT must be whole seconds" ;; esac
+  case "$SMOKE_TIMEOUT" in '' | *[!0-9]*) die "FM_SAILOR_SMOKE_TIMEOUT must be whole seconds" ;; esac
 }
 
 # load_file: the dispatch file must exist and parse for every subcommand but
@@ -358,6 +420,11 @@ load_valid() {
 # sailor_field <sailor> <jq-path>: one field of one sailor, empty when absent.
 sailor_field() {
   jq -r --arg s "$1" ".sailors[\$s]$2 // empty" "$FILE"
+}
+
+# sailor_exists <sailor>: whether the map holds an entry of that name.
+sailor_exists() {
+  jq -e --arg s "$1" '.sailors[$s] | type == "object"' "$FILE" >/dev/null 2>&1
 }
 
 # token_lookup <variable> <env-file>: sets TOKEN_VALUE as the header describes
@@ -410,7 +477,7 @@ unlisted_models() {  # <sailor>
 validate_file() {
   local err
   jq -e . "$1" >/dev/null 2>&1 || { echo "malformed JSON"; return 1; }
-  err=$(jq -r --argjson grades "$GRADES" '
+  err=$(jq -r --argjson grades "$GRADES" --argjson login "$LOGIN_HARNESSES" '
     def profiles($v): if ($v | type) == "array" then $v elif ($v | type) == "object" then [$v] else [] end;
     def uses: [(.rules // [])[]? | profiles(.use?)[]?] + [profiles(.default?)[]?];
     def safe_text: type == "string" and length > 0 and (test("[[:space:][:cntrl:]\"'"'"'\\\\]") | not);
@@ -433,7 +500,12 @@ validate_file() {
     def sailor_bad($n; $s):
       if ($n | test("^[a-z][a-z0-9]*(-[a-z0-9]+)*$") | not) then "sailor name \($n) must be lowercase letters, digits and single dashes"
       elif ($s | type) != "object" then "sailor \($n) must be an object"
-      elif (($s.endpoint | safe_text) and ($s.endpoint | test("^https?://[^/]+"))) | not then "sailor \($n) needs an http(s) endpoint"
+      elif ($s | has("endpoint")) == ($s | has("harness")) then "sailor \($n) needs an http(s) endpoint or a login harness, not both"
+      elif ($s | has("endpoint")) and ((($s.endpoint | safe_text) and ($s.endpoint | test("^https?://[^/]+"))) | not) then "sailor \($n) needs an http(s) endpoint"
+      elif ($s | has("harness")) and (($s.harness | type) != "string" or ($login | index($s.harness)) == null) then "sailor \($n) harness must be one of \($login | join(", "))"
+      elif ($s | has("harness")) and ($s | has("auth_env") or has("unlisted_models") or has("model_settings") or has("host")) then "sailor \($n) is a login sailor, which takes no auth_env, unlisted_models, model_settings, or host"
+      elif ($s | has("login")) and (($s | has("harness")) | not) then "sailor \($n) login names a sign-in label, which only a login sailor carries"
+      elif ($s | has("login")) and (($s.login | type) != "string" or ($s.login | length) == 0) then "sailor \($n) login must be a non-empty string"
       elif (["live", "placeholder"] | index($s.status)) == null then "sailor \($n) status must be live or placeholder"
       elif ($s.models | type) != "array" or ($s.models | length) == 0 then "sailor \($n) needs a non-empty models list"
       elif ($s.models | all(safe_text)) | not then "sailor \($n) models must be non-empty strings without spaces or quotes"
@@ -454,7 +526,7 @@ validate_file() {
       | .model as $m
       | if ($n | type) != "string" then "profile sailor must be a string"
         elif ($map | has($n)) | not then "profile names unknown sailor \($n)"
-        elif .harness != "opencode" then "sailor \($n) profile must use harness opencode"
+        elif .harness != ($map[$n].harness // "opencode") then "sailor \($n) profile must use harness \($map[$n].harness // "opencode")"
         elif has("grade") then "sailor \($n) profile names a grade too; a profile names a sailor or a grade, not both"
         elif (has("model") | not) and ($map[$n].models | length) != 1 then "sailor \($n) profile names no model, and \($n) lists several; name one"
         elif (has("model") | not) then empty
@@ -504,14 +576,14 @@ cmd_list() {
   need_jq
   load_file
   jq -r '(.sailors // {}) | to_entries[]
-    | "\(.key) status=\(.value.status) endpoint=\(.value.endpoint) max_concurrent=\(.value.max_concurrent // 1)\(if .value.grade then " grade=\(.value.grade)" else "" end) models=\(.value.models | join(","))\(if .value.auth_env then " auth_env=\(.value.auth_env)" else "" end)\(if .value.unlisted_models then " unlisted_models=true" else "" end)"' "$FILE"
+    | "\(.key) status=\(.value.status) \(if .value.harness then "harness=\(.value.harness)" else "endpoint=\(.value.endpoint)" end) max_concurrent=\(.value.max_concurrent // 1)\(if .value.grade then " grade=\(.value.grade)" else "" end) models=\(.value.models | join(","))\(if .value.login then " login=\(.value.login)" else "" end)\(if .value.auth_env then " auth_env=\(.value.auth_env)" else "" end)\(if .value.unlisted_models then " unlisted_models=true" else "" end)"' "$FILE"
 }
 
 # sailor_load <sailor> <model>: shared lookup for check and provider-json.
 sailor_load() {
   local sailor=$1 model=$2
   load_valid
-  [ -n "$(sailor_field "$sailor" '.endpoint')" ] || refuse "unknown sailor $sailor"
+  sailor_exists "$sailor" || refuse "unknown sailor $sailor"
   jq -e --arg s "$sailor" --arg m "$model" '.sailors[$s].models | index($m) != null' "$FILE" >/dev/null ||
     refuse "model $model is not listed for sailor $sailor"
 }
@@ -595,10 +667,69 @@ server_queue() {
     END { if (hr && hw) printf "running=%d waiting=%d\n", r, w }'
 }
 
+# login_env: CLEAN_ENV, the `env -i` prefix a sign-in check runs under: HOME
+# and PATH, plus TMPDIR, USER, and LOGNAME when set, so the worker app sees
+# the login it will run on and never an ambient API key, as
+# bin/fm-worker-account-lib.sh clears the environment for a pinned account.
+login_env() {
+  CLEAN_ENV=(env -i "HOME=${HOME:-}" "PATH=${PATH:-}")
+  [ -z "${TMPDIR:-}" ] || CLEAN_ENV+=("TMPDIR=$TMPDIR")
+  [ -z "${USER:-}" ] || CLEAN_ENV+=("USER=$USER")
+  [ -z "${LOGNAME:-}" ] || CLEAN_ENV+=("LOGNAME=$LOGNAME")
+}
+
+# login_up <harness> [smoke]: whether the worker app is signed in, by the
+# sign-in check the header describes; with `smoke`, kimi must also answer a
+# test prompt. Returns 1 with LOGIN_REASON set when it is not.
+login_up() {
+  local harness=$1 smoke=${2:-} bin rc grok_home scratch
+  LOGIN_REASON=
+  login_env
+  bin=$(command -v "$harness" 2>/dev/null) || { LOGIN_REASON="$harness is not installed"; return 1; }
+  case "$harness" in
+    codex)
+      fm_run_timed "$LOGIN_TIMEOUT" "${CLEAN_ENV[@]}" "$bin" login status >/dev/null 2>&1 </dev/null
+      rc=$?
+      if fm_timed_out "$rc"; then
+        LOGIN_REASON="codex login status did not answer within $LOGIN_TIMEOUT seconds"
+        return 1
+      fi
+      [ "$rc" = 0 ] || { LOGIN_REASON="codex login status reports no login (exit $rc)"; return 1; }
+      ;;
+    grok)
+      grok_home=${GROK_HOME:-${HOME:-}/.grok}
+      [ -f "$grok_home/auth.json" ] || { LOGIN_REASON="no $grok_home/auth.json, so grok holds no login"; return 1; }
+      fm_run_timed "$LOGIN_TIMEOUT" "${CLEAN_ENV[@]}" "GROK_HOME=$grok_home" "$bin" models >/dev/null 2>&1 </dev/null
+      rc=$?
+      if fm_timed_out "$rc"; then
+        LOGIN_REASON="grok models did not answer within $LOGIN_TIMEOUT seconds"
+        return 1
+      fi
+      [ "$rc" = 0 ] || { LOGIN_REASON="grok models failed (exit $rc), so its login is not usable"; return 1; }
+      ;;
+    kimi)
+      set -- "${HOME:-}"/.kimi-code/credentials/kimi-code-env-*.json
+      [ -f "$1" ] || { LOGIN_REASON="no credentials file under ${HOME:-}/.kimi-code/credentials, so kimi holds no login"; return 1; }
+      [ "$smoke" = smoke ] || return 0
+      scratch=$(mktemp -d "${TMPDIR:-/tmp}/fm-sailor-smoke.XXXXXX") || { LOGIN_REASON="cannot create a scratch directory for the kimi test prompt"; return 1; }
+      (cd "$scratch" && fm_run_timed "$SMOKE_TIMEOUT" "${CLEAN_ENV[@]}" "$bin" -p "Reply with the single word OK." --output-format text >/dev/null 2>&1 </dev/null)
+      rc=$?
+      rm -rf "$scratch"
+      if fm_timed_out "$rc"; then
+        LOGIN_REASON="kimi did not answer a test prompt within $SMOKE_TIMEOUT seconds"
+        return 1
+      fi
+      [ "$rc" = 0 ] || { LOGIN_REASON="kimi refused a test prompt (exit $rc), so its login is not usable"; return 1; }
+      ;;
+    *) LOGIN_REASON="$harness takes no login sailor"; return 1 ;;
+  esac
+}
+
 cmd_check() {
-  local sailor=$1 model=$2 exclude=$3 endpoint status max busy body state note
+  local sailor=$1 model=$2 exclude=$3 endpoint harness status max busy body state note
   sailor_load "$sailor" "$model"
   endpoint=$(sailor_field "$sailor" '.endpoint')
+  harness=$(sailor_field "$sailor" '.harness')
   status=$(sailor_field "$sailor" '.status')
   if [ "$status" != live ]; then
     refuse "sailor $sailor is a placeholder; it is dispatched only after the captain marks it live"
@@ -608,6 +739,12 @@ cmd_check() {
   busy=$(busy_count "$sailor" "$exclude")
   if [ "$busy" -ge "$max" ]; then
     refuse "sailor $sailor is at capacity ($busy of $max tasks)"
+  fi
+  if [ -n "$harness" ]; then
+    load_timeouts
+    login_up "$harness" smoke || refuse "sailor $sailor is signed out of $harness: $LOGIN_REASON"
+    echo "ok: sailor $sailor runs $model on its $harness login ($busy of $max tasks busy; signed in)"
+    return 0
   fi
   need_curl
   load_timeouts
@@ -710,8 +847,10 @@ cmd_pick() {
 }
 
 cmd_provider_json() {
-  local sailor=$1 model=$2
+  local sailor=$1 model=$2 harness
   sailor_load "$sailor" "$model"
+  harness=$(sailor_field "$sailor" '.harness')
+  [ -z "$harness" ] || refuse "sailor $sailor is a login sailor on $harness, which runs as its own worker app and takes no OpenCode provider"
   jq -c --arg s "$sailor" --arg m "$model" '
     .sailors[$s] as $x
     | {($s): {npm: "@ai-sdk/openai-compatible", name: ($x.title // $s),
@@ -721,13 +860,28 @@ cmd_provider_json() {
 
 # status_line <sailor> <url>: the one status line for a sailor.
 status_line() {
-  local name=$1 url=$2 status endpoint max busy body queue models m state states grade
+  local name=$1 url=$2 status endpoint harness login max busy body queue models m state states grade
   status=$(sailor_field "$name" '.status')
   grade=$(sailor_field "$name" '.grade')
   grade=${grade:+ grade=$grade}
   endpoint=$(sailor_field "$name" '.endpoint')
+  harness=$(sailor_field "$name" '.harness')
   max=$(sailor_field "$name" '.max_concurrent')
   busy=$(busy_count "$name" "")
+  if [ -n "$harness" ]; then
+    login=$(sailor_field "$name" '.login')
+    login=${login:+ login=$login}
+    if probe_up "$url"; then
+      state=answering
+      states=signed-in
+    else
+      state=not-answering
+      states=signed-out
+    fi
+    models=$(jq -r --arg s "$name" --arg st "$states" '.sailors[$s].models | map("\(.)(\($st))") | join(",")' "$FILE")
+    echo "$name $status $state harness=$harness tasks=$busy/${max:-1}$grade models=$models$login"
+    return 0
+  fi
   if ! sailor_auth "$name"; then
     echo "$name $status no-token endpoint=$endpoint tasks=$busy/${max:-1}$grade auth_env=$AUTH_ENV"
     return 0
@@ -774,14 +928,19 @@ cmd_status() {
   done <<<"$targets"
 }
 
-# probe_up <url>: whether GET <url> answers without an HTTP error status
-# within the probe timeout.
+# probe_up <target>: whether a health target answers: for `login:<harness>`,
+# the worker app's sign-in check; otherwise whether GET <target> answers
+# without an HTTP error status within the probe timeout.
 probe_up() {
-  sailor_curl -fsS -o /dev/null --proto '=http,https' --max-time "$PROBE_TIMEOUT" "$1" >/dev/null 2>&1
+  case "$1" in
+    login:*) login_up "${1#login:}" ;;
+    *) sailor_curl -fsS -o /dev/null --proto '=http,https' --max-time "$PROBE_TIMEOUT" "$1" >/dev/null 2>&1 ;;
+  esac
 }
 
-# health_targets <all>: `<sailor>\t<url>` for each live sailor, or each sailor
-# when <all> is true, the URL its health probe reads (see the header).
+# health_targets <all>: `<sailor>\t<target>` for each live sailor, or each
+# sailor when <all> is true: the URL its health probe reads (see the header),
+# or `login:<harness>` for a login sailor.
 health_targets() {
   local registry='{}'
   if [ -f "$SERVERS_FILE" ] && jq -e '.servers | type == "array"' "$SERVERS_FILE" >/dev/null 2>&1; then
@@ -792,9 +951,12 @@ health_targets() {
      | select(type == "object" and (.baseURL | type) == "string" and (.healthPath | type) == "string" and (.healthPath | length) > 0)
      | {base: (.baseURL | sub("/+$"; "")), health: .healthPath}] as $servers
     | (.sailors // {}) | to_entries[] | select($all or .value.status == "live")
-    | (.value.endpoint | sub("/+$"; "")) as $e
-    | ([$servers[] | .base as $b | select($b != "" and ($e == $b or ($e | startswith($b + "/"))))] | max_by(.base | length)) as $m
-    | "\(.key)\t\(if $m then $m.base + "/" + ($m.health | ltrimstr("/")) else $e + "/models" end)"' "$FILE"
+    | if .value.harness then "\(.key)\tlogin:\(.value.harness)"
+      else
+        (.value.endpoint | sub("/+$"; "")) as $e
+        | ([$servers[] | .base as $b | select($b != "" and ($e == $b or ($e | startswith($b + "/"))))] | max_by(.base | length)) as $m
+        | "\(.key)\t\(if $m then $m.base + "/" + ($m.health | ltrimstr("/")) else $e + "/models" end)"
+      end' "$FILE"
 }
 
 cmd_with_token() {
@@ -1080,7 +1242,7 @@ mlx_server() {
 
 cmd_add() {
   local name title='' host='' endpoint='' models='' max='' status=placeholder from='' has_title=0 has_host=0 entry models_array missing
-  local auth_env='' unlisted=false
+  local auth_env='' unlisted=false harness='' login=''
   [ "$#" -ge 1 ] || usage
   name=$1
   shift
@@ -1095,19 +1257,24 @@ cmd_add() {
       --from-mlx-serve) [ "$#" -ge 2 ] && [ -n "$2" ] || usage; from=$2; shift 2 ;;
       --auth-env) [ "$#" -ge 2 ] && [ -n "$2" ] || usage; auth_env=$2; shift 2 ;;
       --unlisted-models) unlisted=true; shift ;;
+      --harness) [ "$#" -ge 2 ] && [ -n "$2" ] || usage; harness=$2; shift 2 ;;
+      --login) [ "$#" -ge 2 ] && [ -n "$2" ] || usage; login=$2; shift 2 ;;
       --live) status=live; shift ;;
       --placeholder) status=placeholder; shift ;;
       *) usage ;;
     esac
   done
   if [ -n "$from" ]; then
-    [ -z "$endpoint" ] || usage
+    [ -z "$endpoint" ] && [ -z "$harness" ] || usage
+  elif [ -n "$harness" ]; then
+    [ -z "$endpoint" ] && [ -n "$models" ] || usage
   else
     [ -n "$endpoint" ] && [ -n "$models" ] || usage
   fi
+  [ -z "$login" ] || [ -n "$harness" ] || usage
   case "$max" in '' | *[!0-9]*) [ -z "$max" ] || refuse "--max-concurrent must be a positive whole number" ;; esac
   begin_edit
-  [ -z "$(sailor_field "$name" '.endpoint')" ] || refuse "sailor $name already exists; change it with set or set-model"
+  ! sailor_exists "$name" || refuse "sailor $name already exists; change it with set or set-model"
   models_array=$(models_json "$models")
   if [ -n "$from" ]; then
     if [ -n "$auth_env" ]; then
@@ -1125,11 +1292,13 @@ cmd_add() {
     fi
   fi
   entry=$(jq -nc --arg title "$title" --argjson has_title "$has_title" --arg host "$host" --argjson has_host "$has_host" \
-    --arg endpoint "$endpoint" --arg status "$status" --argjson models "$models_array" --arg max "$max" \
+    --arg endpoint "$endpoint" --arg harness "$harness" --arg login "$login" \
+    --arg status "$status" --argjson models "$models_array" --arg max "$max" \
     --arg auth_env "$auth_env" --argjson unlisted "$unlisted" '
     (if $has_title == 1 then {title: $title} else {} end)
     + (if $has_host == 1 then {host: $host} else {} end)
-    + {endpoint: $endpoint, status: $status, models: $models}
+    + (if $harness != "" then {harness: $harness} + (if $login != "" then {login: $login} else {} end) else {endpoint: $endpoint} end)
+    + {status: $status, models: $models}
     + (if $max != "" then {max_concurrent: ($max | tonumber)} else {} end)
     + (if $auth_env != "" then {auth_env: $auth_env} else {} end)
     + (if $unlisted then {unlisted_models: true} else {} end)')
@@ -1137,7 +1306,11 @@ cmd_add() {
   compose --arg s "$name" --argjson e "$entry" '.sailors = ((.sailors // {}) + {($s): $e})'
   guard_candidate
   commit || true
-  echo "added sailor $name ($status) at $endpoint serving $(jq -r 'join(",")' <<<"$models_array")"
+  if [ -n "$harness" ]; then
+    echo "added sailor $name ($status) on its $harness login serving $(jq -r 'join(",")' <<<"$models_array")"
+  else
+    echo "added sailor $name ($status) at $endpoint serving $(jq -r 'join(",")' <<<"$models_array")"
+  fi
   report_effects
   hand_edit_note
 }
@@ -1180,7 +1353,7 @@ cmd_set() {
   done
   [ "$patch" != '{}' ] || usage
   begin_edit
-  [ -n "$(sailor_field "$name" '.endpoint')" ] || refuse "unknown sailor $name"
+  sailor_exists "$name" || refuse "unknown sailor $name"
   line=$(first_mate_line)
   if [ "$(jq -r '.status // empty' <<<"$patch")" = placeholder ] && privateer_on && [ "${line%%/*}" = "$name" ]; then
     refuse "the first mate runs on $line, and the first mate runs only on a live sailor"
@@ -1201,7 +1374,7 @@ cmd_set() {
 }
 
 cmd_set_model() {
-  local name model old='' first_mate=0 warm=0 limit='' options='' settings status endpoint replaced ids body state='' reason line
+  local name model old='' first_mate=0 warm=0 limit='' options='' settings status endpoint harness replaced ids body state='' reason line
   [ "$#" -ge 2 ] || usage
   name=$1 model=$2
   shift 2
@@ -1227,6 +1400,9 @@ cmd_set_model() {
   status=$(sailor_field "$name" '.status')
   [ -n "$status" ] || refuse "unknown sailor $name"
   endpoint=$(sailor_field "$name" '.endpoint')
+  harness=$(sailor_field "$name" '.harness')
+  [ -z "$harness" ] || [ "$first_mate" = 0 ] || refuse "sailor $name is a login sailor on $harness, and the first mate runs only on an endpoint sailor"
+  [ -z "$harness" ] || [ "$warm" = 0 ] || refuse "sailor $name is a login sailor on $harness, and a login sailor is never warmed"
   if [ -n "$old" ]; then
     [ "$old" != "$model" ] || refuse "--replace names $model itself"
     jq -e --arg s "$name" --arg m "$old" '.sailors[$s].models | index($m) != null' "$FILE" >/dev/null ||
@@ -1264,7 +1440,9 @@ cmd_set_model() {
     first_mate_rewrite "$name/$model" > "$WORK/privateer"
   fi
   guard_candidate
-  if [ "$status" = live ]; then
+  if [ -n "$harness" ]; then
+    echo "note: $name is a login sailor on $harness, so $model was not probed"
+  elif [ "$status" = live ]; then
     need_curl
     load_timeouts
     sailor_auth "$name" || refuse "sailor $name has no token: $TOKEN_REASON"
@@ -1298,7 +1476,7 @@ cmd_retire() {
   name=$1
   case "$name" in '' | -*) usage ;; esac
   begin_edit
-  [ -n "$(sailor_field "$name" '.endpoint')" ] || refuse "unknown sailor $name"
+  sailor_exists "$name" || refuse "unknown sailor $name"
   ids=$(sailor_tasks "$name" "" | paste -sd, -)
   [ -z "$ids" ] || refuse "task(s) $ids run on $name; retire it once they land"
   removed=$(jq --arg s "$name" '
@@ -1319,7 +1497,7 @@ cmd_retire() {
 # registry_problem <registry-json> <servers-json>: the first reason the slot
 # registry cannot be projected, or nothing.
 registry_problem() {
-  jq -nr --argjson reg "$1" --argjson srv "$2" --argjson grades "$SAILOR_GRADES" --arg file "$SERVERS_FILE" '
+  jq -nr --argjson reg "$1" --argjson srv "$2" --argjson grades "$SAILOR_GRADES" --argjson login "$LOGIN_HARNESSES" --arg file "$SERVERS_FILE" '
     def whole: type == "number" and . == floor;
     def name: type == "string" and test("^[a-z][a-z0-9]*(-[a-z0-9]+)*$");
     [$srv.servers[]? | select(type == "object")] as $servers
@@ -1328,13 +1506,19 @@ registry_problem() {
         | (($s.homes // {}) | if type == "object" then . else {} end) as $shares
         | ((($shares | keys) - ($homes | keys)) | first) as $stray
         | ($s.capacity // 1) as $cap
-        | if ($s | has("server")) != ($s | has("model")) then "slot \($n) needs both a server and a model, or neither"
+        | (($s | has("server")) or ($s | has("harness"))) as $bound
+        | if ($s | has("server")) and ($s | has("harness")) then "slot \($n) names both a server and a harness; a slot is bound to one server or one login harness"
+          elif $bound != ($s | has("model")) then "slot \($n) needs a server or a harness with a model, or neither"
           elif ($s | has("grade")) and (($s.grade | type) != "string" or ($grades | index($s.grade)) == null) then "slot \($n) grade \($s.grade | tostring) is not one of \($grades | join(", "))"
           elif ($s | has("facets")) and (($s.facets | type) != "array" or ([$s.facets[] | name] | all | not)) then "slot \($n) facets must be a list of names"
-          elif ($s | has("server")) | not then empty
-          elif ($match | length) == 0 then "slot \($n) names server \($s.server | tostring), which \($file) does not list"
-          elif ($match | length) > 1 then "slot \($n) names server \($s.server), which \($file) lists more than once"
-          elif ($match[0].baseURL | type) != "string" or ($match[0].baseURL | test("^https?://[^/]") | not) then "slot \($n) is on server \($s.server), whose baseURL \($match[0].baseURL | tostring) is not an http(s) URL"
+          elif ($s | has("login")) and (($s | has("harness")) | not) then "slot \($n) login names a sign-in label, which only a login slot carries"
+          elif $bound | not then empty
+          elif ($s | has("harness")) and (($s.harness | type) != "string" or ($login | index($s.harness)) == null) then "slot \($n) harness \($s.harness | tostring) is not one of \($login | join(", "))"
+          elif ($s | has("harness")) and ($s | has("auth_env") or has("unlisted_models") or has("model_settings")) then "slot \($n) is a login slot, which takes no auth_env, unlisted_models, or model_settings"
+          elif ($s | has("login")) and (($s.login | type) != "string" or ($s.login | length) == 0) then "slot \($n) login must be a non-empty string"
+          elif ($s | has("server")) and ($match | length) == 0 then "slot \($n) names server \($s.server | tostring), which \($file) does not list"
+          elif ($s | has("server")) and ($match | length) > 1 then "slot \($n) names server \($s.server), which \($file) lists more than once"
+          elif ($s | has("server")) and (($match[0].baseURL | type) != "string" or ($match[0].baseURL | test("^https?://[^/]") | not)) then "slot \($n) is on server \($s.server), whose baseURL \($match[0].baseURL | tostring) is not an http(s) URL"
           elif ($s.model | type) != "string" or ($s.model | length) == 0 then "slot \($n) model must be a non-empty string"
           elif ($s | has("capacity")) and (($s.capacity | whole and . >= 1) | not) then "slot \($n) capacity must be a positive whole number"
           elif ($s | has("homes")) and (($s.homes | type) != "object") then "slot \($n) homes must map home names to shares"
@@ -1360,16 +1544,22 @@ registry_problem() {
 slot_projection() {
   jq -nc --argjson reg "$1" --argjson srv "$2" --arg key "$3" '
     [$srv.servers[]? | select(type == "object")] as $servers
-    | $reg.slots | to_entries
-    | map(select((.value | has("server")) and (((.value.homes // {})[$key] // 0) > 0))
+    | def copy($s; $fields): reduce $fields[] as $f ({}; if $s | has($f) then . + {($f): $s[$f]} else . end);
+    $reg.slots | to_entries
+    | map(select(((.value | has("server")) or (.value | has("harness"))) and (((.value.homes // {})[$key] // 0) > 0))
           | .key as $n | .value as $s
           | [$servers[] | select(.id? == $s.server)][0] as $x
           | {key: $n, value: (
               (if $s | has("title") then {title: $s.title} else {} end)
-              + (if ($x.name | type) == "string" then {host: $x.name} else {} end)
-              + {endpoint: (($x.baseURL | sub("/$"; "")) + "/v1"), status: ($s.status // "placeholder"), models: [$s.model], max_concurrent: $s.homes[$key]}
-              + reduce ("grade", "facets", "paid", "auth_env", "unlisted_models", "model_settings") as $f
-                  ({}; if $s | has($f) then . + {($f): $s[$f]} else . end))})
+              + (if $s | has("harness") then
+                   {harness: $s.harness} + copy($s; ["login"])
+                   + {status: ($s.status // "placeholder"), models: [$s.model], max_concurrent: $s.homes[$key]}
+                   + copy($s; ["grade", "facets", "paid"])
+                 else
+                   (if ($x.name | type) == "string" then {host: $x.name} else {} end)
+                   + {endpoint: (($x.baseURL | sub("/$"; "")) + "/v1"), status: ($s.status // "placeholder"), models: [$s.model], max_concurrent: $s.homes[$key]}
+                   + copy($s; ["grade", "facets", "paid", "auth_env", "unlisted_models", "model_settings"])
+                 end))})
     | from_entries'
 }
 
@@ -1444,6 +1634,7 @@ cmd_sync() {
       err=$(jq -r --arg f "$fm" --arg k "$key" '
         .slots[$f] as $s
         | if $s == null then "privateer_first_mate names \($f), which is not a slot"
+          elif $s | has("harness") then "slot \($f) is a login slot, and the first mate runs only on an endpoint sailor"
           elif ($s | has("server")) | not then "slot \($f) is blank, and the first mate runs only on a bound slot"
           elif ((($s.homes // {})[$k] // 0) > 0) | not then "slot \($f) gives home \($k) no share, so the first mate cannot run on it"
           elif (($s.facets // []) | index("helm")) == null then "slot \($f) lacks the helm facet the first mate needs"
