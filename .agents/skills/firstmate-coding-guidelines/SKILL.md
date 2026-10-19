@@ -62,6 +62,9 @@ If an addition needs more than a few lines of conditional detail (detail that ma
 `AGENTS.md`'s token cost is paid by every session of every fleet member, every time, whether or not that session ever hits the situation the new lines describe.
 A skill's cost is paid only by the sessions that actually load it.
 When in doubt, write the fact into the skill or doc first by patching that owner's existing language, and add only the one-line trigger to `AGENTS.md`.
+Keep `AGENTS.md` for knowledge useful to almost every future agent session, point to the authoritative file, skill, command, or doc instead of repeating what the codebase shows, and prefer rewriting or pruning existing entries over appending new ones.
+Every edit preserves every safety boundary while keeping the always-loaded contract concise.
+Keep the file safely under 32 KiB, because Codex stops reading `AGENTS.md` at its default `project_doc_max_bytes` of 32 KiB and a session past that limit silently loses the later sections.
 
 ## Trigger hygiene
 
