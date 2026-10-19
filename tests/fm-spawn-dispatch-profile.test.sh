@@ -861,7 +861,8 @@ identity_case() { # <name> <id> <map-line>; sets the case record and enables the
 
 test_sailor_spawn_on_a_mapped_project_sets_the_worktree_identity() {
   local id=identity-sailor-s1 out status project shared_before
-  identity_case identity-mapped "$id" "$(printf '%s Chris <{sailor}.chris@euroradar.nl>' "$(basename "$(printf '%s' "$CASE_DIR/project")")")"
+  # make_spawn_case names every case's primary checkout "project".
+  identity_case identity-mapped "$id" 'project Chris <{sailor}.chris@euroradar.nl>'
   project=$PROJ_DIR
   shared_before=$(git -C "$project" config --local --get-regexp '^user\.' || true)
 
