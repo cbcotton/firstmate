@@ -5955,6 +5955,8 @@ test_procevent_headlines_classify_queue_keys() {
   surface_once "$dir" "$out" || fail "a mixed cycle was not surfaced: $(cat "$out")"
   grep -F "check: process-event result captured: procevent:cap2-src:1; process-event source stranded: procevent:str2-src:stranded:tok-2" "$out" >/dev/null \
     || fail "a cycle with a capture and a strand did not carry both headlines joined: $(cat "$out")"
+  grep -F "procevent:str2-src:stranded:tok-2 - load process-event-sources" "$out" >/dev/null \
+    || fail "a process-event headline did not name the skill that handles it: $(cat "$out")"
   FM_STATE_OVERRIDE="$state" "$DRAIN" >/dev/null 2>&1 || fail "joined headline fixture drain failed"
   pass "process-event queue keys surface under their own headlines"
 }

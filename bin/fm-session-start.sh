@@ -101,11 +101,11 @@
 # PROGRESS" and names exactly which checks are not yet confirmed, instead of
 # waiting for them. It never reports an unconfirmed check as passed.
 #
-# ORDERING, and why FLEET STATE now runs before CONTEXT: this digest is
-# delivered through a harness that truncates an oversized payload from the TAIL,
-# and it has really been truncated in practice - a 70KB digest arrived as lines
-# 1-435 of 578, cutting off eight lines before the live-task inventory. What a
-# truncated tail drops must therefore be the CHEAPEST thing to lose. Curated
+# ORDERING, and why FLEET STATE now runs before CONTEXT: some harnesses
+# truncate an oversized digest payload from the TAIL, and it has really been
+# truncated in practice - a 70KB digest arrived as lines 1-435 of 578, cutting
+# off eight lines before the live-task inventory. What a truncated tail drops
+# must therefore be the CHEAPEST thing to lose. Curated
 # memory is stable session to session, is already governed by a captain-set
 # budget (config/startup-memory-budget), and is recoverable with one targeted
 # read; live fleet identity - which tasks exist, their windows, worktrees,
@@ -115,6 +115,20 @@
 # contract that only arrives after the payload it governs is the first thing a
 # truncated digest loses, and it carries the truncation caveat that keeps it
 # honest when a stage below it never ran.
+#
+# CLAUDE HEADLINE: Claude Code keeps only the HEAD of an oversized payload. A
+# SessionStart payload over 10,000 characters reaches the model only as its
+# first 2,000 characters plus the path of a file holding the rest, and nothing
+# makes the agent read that file. Under a Claude primary this script therefore
+# buffers the digest and prints a headline in front of it that is sufficient on
+# its own: the lock verdict, the queued-wake and open-decision counts, any away
+# posture, any STARTUP TRUNCATED or IN PROGRESS marker, every live task with its
+# endpoint liveness (dead ones first), and one line stating the full size and
+# the Read offsets that cover it, with the instruction to read all of it. The
+# facts come from the digest's own variables, which the child records in
+# FM_SESSION_START_FACTS_FILE as it prints; nothing is scraped from the rendered
+# digest. The payload below the headline is unchanged, and every other harness
+# keeps its streamed digest with no headline.
 # The LOCK/BOOTSTRAP/WAKE-QUEUE safety preamble keeps its order: it establishes
 # mutation authority and this turn's work queue before anything else is read.
 #
@@ -295,6 +309,114 @@ stage() {  # <stage-name>: breadcrumb for the parent's truncation banner
 # shellcheck source=bin/fm-session-lock-lib.sh
 . "$SCRIPT_DIR/fm-session-lock-lib.sh"
 
+# --- Claude headline ------------------------------------------------------------
+# Largest chunk the headline tells the agent to Read per call, in lines. A full
+# digest is about 100 characters per line, so a chunk stays well inside one Read.
+HEADLINE_READ_LINES=400
+
+# render_headline <total-lines> <total-bytes> <facts-file> <exit-status> <pending-stages>:
+# the Claude headline, which must stay under 2,000 characters whatever the
+# fleet size (the task list is the only variable part and is cut to a budget).
+render_headline() {
+  local total_lines=$1 total_bytes=$2 facts=$3 rc=$4 pending=$5
+  local lock wakes decisions afk network tasks_total offsets off line shown_chars=0 shown=0 chunks=0
+  local tasks_budget=620
+  lock=$(awk -F '\t' '$1 == "lock" { v = $2 } END { print v }' "$facts" 2>/dev/null)
+  wakes=$(awk -F '\t' '$1 == "wakes" { v = $2 } END { print v }' "$facts" 2>/dev/null)
+  decisions=$(awk -F '\t' '$1 == "decisions" { v = $2 } END { print v }' "$facts" 2>/dev/null)
+  afk=$(awk -F '\t' '$1 == "afk" { v = $2 } END { print v }' "$facts" 2>/dev/null)
+  network=$(awk -F '\t' '$1 == "network" { v = $2 } END { print v }' "$facts" 2>/dev/null)
+  tasks_total=$(awk -F '\t' '$1 == "task" { n++ } END { print n + 0 }' "$facts" 2>/dev/null)
+  offsets=
+  off=1
+  while [ "$off" -le "$total_lines" ] && [ "$chunks" -lt 8 ]; do
+    offsets="${offsets:+$offsets, }$off"
+    off=$((off + HEADLINE_READ_LINES))
+    chunks=$((chunks + 1))
+  done
+  [ "$off" -le "$total_lines" ] && offsets="$offsets, ..."
+
+  printf 'FIRSTMATE SESSION-START HEADLINE (the digest below is NOT optional reading)\n'
+  printf 'FULL DIGEST: %s lines / %s bytes. Claude Code shows only the first 2,000 characters of a large\n' "$total_lines" "$total_bytes"
+  printf 'startup payload and saves the rest to a file: if this output was cut off, Read that saved file IN\n'
+  printf 'FULL before acting - %s lines per Read call, offsets %s.\n' "$HEADLINE_READ_LINES" "$offsets"
+  case "$lock" in
+    held) printf 'lock: held - this session owns the fleet\n' ;;
+    refused) printf 'lock: REFUSED - READ-ONLY session, change nothing\n' ;;
+    *) printf 'lock: unknown\n' ;;
+  esac
+  if [ "$lock" = refused ]; then
+    printf 'queued wakes: %s (not drained here)\n' "${wakes:-?}"
+  else
+    printf 'queued wakes: %s | open decisions: %s\n' "${wakes:-?}" "${decisions:-?}"
+  fi
+  [ -z "$afk" ] || printf 'posture: %s mode recorded (load its skill)\n' "$afk"
+  if [ "$rc" -ne 0 ]; then
+    printf 'STARTUP TRUNCATED (exit %s): never ran: %s - rerun bin/fm-session-start.sh\n' "$rc" "${pending% }"
+  fi
+  [ "$network" != in-progress ] || printf 'network checks: IN PROGRESS - none confirmed (bin/fm-startup-network.sh report)\n'
+  if [ "$tasks_total" -eq 0 ]; then
+    printf 'live tasks: none\n'
+  else
+    printf 'live tasks (%s), dead or unreadable endpoints first:\n' "$tasks_total"
+    while IFS= read -r line; do
+      [ $((shown_chars + ${#line} + 1)) -le "$tasks_budget" ] || break
+      printf '%s\n' "$line"
+      shown_chars=$((shown_chars + ${#line} + 1))
+      shown=$((shown + 1))
+    done < <(awk -F '\t' '
+      $1 == "task" { if ($3 == "alive") alive[++na] = $2 " alive"; else bad[++nb] = $2 " " toupper($3) }
+      END { for (i = 1; i <= nb; i++) print "  " bad[i]; for (i = 1; i <= na; i++) print "  " alive[i] }
+    ' "$facts" 2>/dev/null)
+    [ "$shown" -ge "$tasks_total" ] || printf '  ... %s more in FLEET STATE\n' "$((tasks_total - shown))"
+  fi
+}
+
+# print_headline_and_digest <body-file> <facts-file> <exit-status> <pending-stages>:
+# the headline, then the buffered digest. The headline states the size of the
+# whole output including itself, so it is rendered until its own length settles.
+print_headline_and_digest() {
+  local body=$1 facts=$2 rc=$3 pending=$4 head prev='' lines bytes body_lines body_bytes
+  body_lines=$(awk 'END { print NR }' "$body" 2>/dev/null || printf 0)
+  body_bytes=$(wc -c < "$body" 2>/dev/null | tr -d ' ')
+  lines=$body_lines
+  bytes=$body_bytes
+  for _ in 1 2 3 4; do
+    head=$(render_headline "$lines" "$bytes" "$facts" "$rc" "$pending")
+    [ "$head" != "$prev" ] || break
+    prev=$head
+    lines=$((body_lines + $(printf '%s\n' "$head" | awk 'END { print NR }') + 1))
+    bytes=$((body_bytes + $(printf '%s\n' "$head" | wc -c | tr -d ' ') + 1))
+  done
+  printf '%s\n\n' "$head"
+  cat "$body"
+}
+
+# print_truncation_banner <exit-status> <budget> <last-stage> <pending-stages>
+print_truncation_banner() {
+  local rc=$1 budget=$2 last_stage=$3 pending=$4 BAR
+  BAR='●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
+  printf '\n%s\n' "$BAR"
+  if [ "$rc" -eq 124 ]; then
+    printf '●  STARTUP TRUNCATED - SESSION START HIT ITS %ss RUNTIME BOUND\n' "$budget"
+  else
+    printf '●  STARTUP TRUNCATED - SESSION START DIED UNEXPECTEDLY (exit %s, not its runtime bound)\n' "$rc"
+  fi
+  printf '●  It stopped during the "%s" stage, so everything above is COMPLETE\n' "$last_stage"
+  printf '●  only up to that point.\n'
+  printf '●  RECONCILE these stages before acting on anything they would have shown:\n'
+  printf '●    %s\n' "${pending% }"
+  printf '●  Rerun bin/fm-session-start.sh now to finish taking the helm. If it truncates\n'
+  if [ "$rc" -eq 124 ]; then
+    printf '●  again, raise FM_SESSION_START_TIMEOUT and report the slow stage - a stage that\n'
+    printf '●  cannot finish inside the bound is a fleet problem, not a reporting detail.\n'
+  else
+    printf '●  again, report the exit status and the stage - raising the runtime bound\n'
+    printf '●  cannot help a digest that died, and a stage that dies is a fleet problem.\n'
+  fi
+  printf '%s\n' "$BAR"
+}
+
 if [ -z "${FM_SESSION_START_STAGE_FILE:-}" ]; then
   SESSION_START_BUDGET=${FM_SESSION_START_TIMEOUT:-120}
   # A non-positive or non-numeric budget is not a budget (`timeout 0` disables
@@ -308,30 +430,38 @@ if [ -z "${FM_SESSION_START_STAGE_FILE:-}" ]; then
     # is lost, so the child still runs bounded.
     SESSION_START_STAGE_FILE=/dev/null
   fi
-  if [ "$REEMIT" -eq 1 ]; then
-    if [ -n "$SESSION_SOURCE" ]; then
-      fm_run_timed "$SESSION_START_BUDGET" \
-        env FM_SESSION_START_STAGE_FILE="$SESSION_START_STAGE_FILE" \
-        "$SCRIPT_DIR/fm-session-start.sh" --reemit --source "$SESSION_SOURCE"
-    else
-      fm_run_timed "$SESSION_START_BUDGET" \
-        env FM_SESSION_START_STAGE_FILE="$SESSION_START_STAGE_FILE" \
-        "$SCRIPT_DIR/fm-session-start.sh" --reemit
+  # The headline is Claude-only (see the CLAUDE HEADLINE note above); without a
+  # scratch file to buffer into, the digest simply streams with no headline.
+  SESSION_START_BODY_FILE=
+  SESSION_START_FACTS_FILE=
+  if [ "$("$SCRIPT_DIR/fm-harness.sh" 2>/dev/null || printf unknown)" = claude ]; then
+    SESSION_START_BODY_FILE=$(mktemp "${TMPDIR:-/tmp}/fm-session-start-body.XXXXXX" 2>/dev/null) || SESSION_START_BODY_FILE=
+    SESSION_START_FACTS_FILE=$(mktemp "${TMPDIR:-/tmp}/fm-session-start-facts.XXXXXX" 2>/dev/null) || SESSION_START_FACTS_FILE=
+    if [ -z "$SESSION_START_BODY_FILE" ] || [ -z "$SESSION_START_FACTS_FILE" ]; then
+      rm -f "$SESSION_START_BODY_FILE" "$SESSION_START_FACTS_FILE" 2>/dev/null || true
+      SESSION_START_BODY_FILE=
+      SESSION_START_FACTS_FILE=
     fi
-  elif [ -n "$SESSION_SOURCE" ]; then
+  fi
+  CHILD_ARGS=()
+  [ "$REEMIT" -ne 1 ] || CHILD_ARGS+=(--reemit)
+  [ -z "$SESSION_SOURCE" ] || CHILD_ARGS+=(--source "$SESSION_SOURCE")
+  if [ -n "$SESSION_START_BODY_FILE" ]; then
     fm_run_timed "$SESSION_START_BUDGET" \
       env FM_SESSION_START_STAGE_FILE="$SESSION_START_STAGE_FILE" \
-      "$SCRIPT_DIR/fm-session-start.sh" --source "$SESSION_SOURCE"
+      FM_SESSION_START_FACTS_FILE="$SESSION_START_FACTS_FILE" \
+      "$SCRIPT_DIR/fm-session-start.sh" ${CHILD_ARGS[@]+"${CHILD_ARGS[@]}"} > "$SESSION_START_BODY_FILE"
   else
     fm_run_timed "$SESSION_START_BUDGET" \
       env FM_SESSION_START_STAGE_FILE="$SESSION_START_STAGE_FILE" \
-      "$SCRIPT_DIR/fm-session-start.sh"
+      "$SCRIPT_DIR/fm-session-start.sh" ${CHILD_ARGS[@]+"${CHILD_ARGS[@]}"}
   fi
   SESSION_START_RC=$?
   # ANY nonzero child exit is a truncation: the banner contract promises that
   # a stage that cannot print is named. Exit 124 is the bound firing; any
   # other status means the child died or was killed mid-stage, which truncates
   # silently when unbanned - the parent must banner it, never exit 0 around it.
+  SESSION_START_PENDING=
   if [ "$SESSION_START_RC" -ne 0 ]; then
     SESSION_START_LAST_STAGE=$(cat "$SESSION_START_STAGE_FILE" 2>/dev/null) || SESSION_START_LAST_STAGE=
     [ -n "$SESSION_START_LAST_STAGE" ] || SESSION_START_LAST_STAGE=unknown
@@ -340,26 +470,15 @@ if [ -z "${FM_SESSION_START_STAGE_FILE:-}" ]; then
         awk -v from="$SESSION_START_LAST_STAGE" '$0 == from {seen = 1} seen' | tr '\n' ' '
     )
     [ -n "${SESSION_START_PENDING# }" ] || SESSION_START_PENDING='(unknown - the digest may be incomplete anywhere)'
-    BAR='●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
-    printf '\n%s\n' "$BAR"
-    if [ "$SESSION_START_RC" -eq 124 ]; then
-      printf '●  STARTUP TRUNCATED - SESSION START HIT ITS %ss RUNTIME BOUND\n' "$SESSION_START_BUDGET"
+    if [ -n "$SESSION_START_BODY_FILE" ]; then
+      print_truncation_banner "$SESSION_START_RC" "$SESSION_START_BUDGET" "$SESSION_START_LAST_STAGE" "$SESSION_START_PENDING" >> "$SESSION_START_BODY_FILE"
     else
-      printf '●  STARTUP TRUNCATED - SESSION START DIED UNEXPECTEDLY (exit %s, not its runtime bound)\n' "$SESSION_START_RC"
+      print_truncation_banner "$SESSION_START_RC" "$SESSION_START_BUDGET" "$SESSION_START_LAST_STAGE" "$SESSION_START_PENDING"
     fi
-    printf '●  It stopped during the "%s" stage, so everything above is COMPLETE\n' "$SESSION_START_LAST_STAGE"
-    printf '●  only up to that point.\n'
-    printf '●  RECONCILE these stages before acting on anything they would have shown:\n'
-    printf '●    %s\n' "${SESSION_START_PENDING% }"
-    printf '●  Rerun bin/fm-session-start.sh now to finish taking the helm. If it truncates\n'
-    if [ "$SESSION_START_RC" -eq 124 ]; then
-      printf '●  again, raise FM_SESSION_START_TIMEOUT and report the slow stage - a stage that\n'
-      printf '●  cannot finish inside the bound is a fleet problem, not a reporting detail.\n'
-    else
-      printf '●  again, report the exit status and the stage - raising the runtime bound\n'
-      printf '●  cannot help a digest that died, and a stage that dies is a fleet problem.\n'
-    fi
-    printf '%s\n' "$BAR"
+  fi
+  if [ -n "$SESSION_START_BODY_FILE" ]; then
+    print_headline_and_digest "$SESSION_START_BODY_FILE" "$SESSION_START_FACTS_FILE" "$SESSION_START_RC" "$SESSION_START_PENDING"
+    rm -f "$SESSION_START_BODY_FILE" "$SESSION_START_FACTS_FILE" 2>/dev/null || true
   fi
   rm -f "$SESSION_START_STAGE_FILE" 2>/dev/null || true
   exit 0
@@ -403,6 +522,28 @@ BACKLOG_FIELDS=blocked_by,hold_kind,hold_reason
 
 RULE='================================================================================'
 SUBRULE='--------------------------------------------------------------------------------'
+
+# bootstrap_diagnostic_hint <section-text>: names the bootstrap-diagnostics skill
+# under a section that printed an actionable diagnostic line, because after a
+# compaction the skill listing that carries its trigger is not re-injected. A
+# diagnostic label is the first word of a line (bin/fm-bootstrap.sh's header owns
+# the line formats); BOOTSTRAP_INFO facts are benign except the interrupted
+# cleanup one the skill handles.
+bootstrap_diagnostic_hint() {
+  printf '%s\n' "$1" | awk '
+    /^BOOTSTRAP_INFO: / { if ($0 ~ /after interrupted cleanup/) found = 1; next }
+    /^[A-Z][A-Z_][A-Z_]+(:|$)/ { found = 1 }
+    END { exit !found }
+  ' || return 0
+  printf 'Load the bootstrap-diagnostics skill before acting on the diagnostic line(s) above.\n'
+}
+
+# headline_fact <key> <value> [<value>]: record one fact for the Claude headline
+# (see the CLAUDE HEADLINE note). A no-op unless the parent asked for them.
+headline_fact() {
+  [ -n "${FM_SESSION_START_FACTS_FILE:-}" ] || return 0
+  printf '%s\t%s\t%s\n' "$1" "$2" "${3:-}" >> "$FM_SESSION_START_FACTS_FILE" 2>/dev/null || true
+}
 
 section() { printf '\n%s\n%s\n%s\n' "$RULE" "$1" "$RULE"; }
 subsection() { printf '\n%s\n%s\n' "$1" "$SUBRULE"; }
@@ -690,8 +831,10 @@ LOCK_OUT=$("$SCRIPT_DIR/fm-lock.sh" 2>&1)
 LOCK_RC=$?
 printf '%s\n' "$LOCK_OUT"
 READ_ONLY=0
+headline_fact lock held
 if [ "$LOCK_RC" -ne 0 ]; then
   READ_ONLY=1
+  headline_fact lock refused
   BAR='●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
   {
     printf '%s\n' "$BAR"
@@ -756,6 +899,7 @@ else
 fi
 if [ -n "$BOOT_OUT" ]; then
   printf '%s\n' "$BOOT_OUT"
+  bootstrap_diagnostic_hint "$BOOT_OUT"
 else
   printf '(silent - all good)\n'
 fi
@@ -779,6 +923,7 @@ subsection "WAKE QUEUE"
 if [ "$READ_ONLY" -eq 1 ]; then
   QLEN=0
   [ -s "$STATE/.wake-queue" ] && QLEN=$(grep -c . "$STATE/.wake-queue" 2>/dev/null || printf '0')
+  headline_fact wakes "$QLEN"
   printf 'skipped (read-only session) - %s record(s) remain queued because this session lacks verified fleet-lock ownership.\n' "$QLEN"
   GUARD_OUT=$(FM_GUARD_READ_ONLY=1 "$SCRIPT_DIR/fm-guard.sh" 2>&1)
   [ -n "$GUARD_OUT" ] && printf '%s\n' "$GUARD_OUT"
@@ -798,6 +943,16 @@ else
     fi
   fi
   DRAIN_OUT=$("$SCRIPT_DIR/fm-wake-drain.sh" 2>&1)
+  # Queue rows are the drain's tab-separated "epoch seq kind key payload" lines;
+  # open decisions are the entry lines between its header and its closing hint.
+  headline_fact wakes "$(printf '%s\n' "$DRAIN_OUT" | awk -F '\t' 'NF >= 5 && $1 ~ /^[0-9]+$/ && $2 ~ /^[0-9]+$/ { n++ } END { print n + 0 }')"
+  headline_fact decisions "$(printf '%s\n' "$DRAIN_OUT" | awk '
+    /^OPEN DECISIONS \(still open/ { open = 1; next }
+    open && /^OPEN DECISIONS: [0-9]+ more omitted/ { n += $3; next }
+    open && /^OPEN DECISIONS:/ { open = 0; next }
+    open { n++ }
+    END { print n + 0 }
+  ')"
   if [ -n "$DRAIN_OUT" ]; then
     printf '%s\n' "$DRAIN_OUT"
   else
@@ -910,14 +1065,18 @@ for meta in "$STATE"/*.meta; do
     # the bound firing and >=128 is a signal death. Every other nonzero status
     # is the probe's own verdict that the endpoint is gone.
     if [ "$endpoint_rc" -eq 0 ]; then
+      headline_fact task "$id" alive
       printf 'endpoint: alive (backend=%s window=%s)\n' "$backend" "$window"
     elif [ "$endpoint_rc" -eq 124 ] || [ "$endpoint_rc" -ge 128 ]; then
+      headline_fact task "$id" error
       printf 'endpoint: error (backend=%s window=%s - the endpoint read died or hit its %ss bound; the digest continued past it)\n' \
         "$backend" "$window" "$ENDPOINT_TIMEOUT"
     else
+      headline_fact task "$id" dead
       printf 'endpoint: dead (backend=%s window=%s)\n' "$backend" "$window"
     fi
   else
+    headline_fact task "$id" unknown
     printf 'endpoint: unknown (no window recorded)\n'
   fi
 
@@ -949,9 +1108,11 @@ subsection "AFK"
 # nothing for a return.
 if [ -f "$STATE/.afk-contract" ]; then
   if [ "$("$SCRIPT_DIR/fm-afk-contract.sh" mode 2>/dev/null)" = quiet ]; then
+    headline_fact afk quiet
     printf 'present - quiet mode recorded at %s (the captain is present and nothing is held for a return: requested actions proceed under ordinary attended authority; only an explicit /quiet off exits it)' \
       "$("$SCRIPT_DIR/fm-afk-contract.sh" field entered 2>/dev/null || printf unknown)"
   else
+    headline_fact afk away
     printf 'present - away posture recorded at %s (bin/fm-afk-contract.sh readback for the mandate and the reach channel)' \
       "$("$SCRIPT_DIR/fm-afk-contract.sh" field entered 2>/dev/null || printf unknown)"
   fi
@@ -965,6 +1126,7 @@ if [ -f "$STATE/.afk-contract" ]; then
     printf '; no daemon runs, the ordinary supervision session continues.\n'
   fi
 elif [ -e "$STATE/.afk" ]; then
+  headline_fact afk "$AFK_MODE"
   if [ "$AFK_MODE" = quiet ]; then
     printf 'present - quiet-mode supervision is active; the daemon owns the watcher, only an explicit /quiet off exits it (legacy flag with no posture record).\n'
   else
@@ -1015,7 +1177,10 @@ if [ "$READ_ONLY" -eq 1 ]; then
   printf 'They need the fleet lock, and this session must not spawn, steer, or merge, so it\n'
   printf 'has no action they would gate. The session holding the lock runs them.\n'
 else
-  "$SCRIPT_DIR/fm-startup-network.sh" harvest --pid $$ 2>&1 || true
+  NETWORK_OUT=$("$SCRIPT_DIR/fm-startup-network.sh" harvest --pid $$ 2>&1 || true)
+  case "$NETWORK_OUT" in *"IN PROGRESS"*) headline_fact network in-progress ;; esac
+  printf '%s\n' "$NETWORK_OUT"
+  bootstrap_diagnostic_hint "$NETWORK_OUT"
 fi
 
 # --- 8. privateer ------------------------------------------------------------

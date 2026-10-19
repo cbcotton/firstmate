@@ -410,6 +410,8 @@ The skill owns the guarded fleet update and restart procedure; it never touches 
 
 Skill descriptions are the always-loaded trigger index; load each agent-only skill only at its stated trigger.
 Load `agent-skill-trigger-index` only when auditing or maintaining the complete trigger index.
+Load `firstmate-orca` before switching to, spawning onto, or reconciling work on the Orca runtime backend.
+Load `firstmate-codexapp` before coordinating a visible Codex Desktop thread for Firstmate work.
 
 ## 14. Relay
 
