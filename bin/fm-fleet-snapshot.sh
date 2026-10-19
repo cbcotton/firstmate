@@ -74,11 +74,14 @@
 #   scout_reports[]: present data/<id>/report.md pointers.
 #   charts[]: {project,path,data} for each data/charts/<project>.json, sorted by
 #     project; data is the file's parsed JSON. Empty when the directory is absent.
-#   sailors[]: {name,status,answering,endpoint,tasks,capacity,grade,line} - one row per
-#     live named sailor, parsed from bin/fm-sailor.sh status (which owns the
-#     probe and the line); line is its raw text, and grade is the sailor's
-#     grade or null when ungraded. answering is the result of
-#     the health probe behind the watcher's `check: sailor` wakes: true, false,
+#   sailors[]: {name,status,answering,endpoint,harness,login,tasks,capacity,grade,line}
+#     - one row per live named sailor, parsed from bin/fm-sailor.sh status
+#     (which owns the probe and the line); line is its raw text, grade is the
+#     sailor's grade or null when ungraded, and harness and login are a login
+#     sailor's worker app and account label, null for an endpoint sailor, whose
+#     endpoint is null in turn for a login sailor. answering is the result of
+#     the health probe behind the watcher's `check: sailor` wakes, a login
+#     sailor's sign-in check included: true, false,
 #     or null when the line is unrecognized. Empty when the home declares no
 #     sailors. privateer: {active,first_mate,active_project} - active is true
 #     while config/privateer exists; the other two are null when unset, and
@@ -2035,6 +2038,8 @@ sailors_json() {
       | {name:$f[0], status:($f[1] // null),
          answering:(if $f[2] == "answering" then true elif $f[2] == "not-answering" then false else null end),
          endpoint:($f | map(select(startswith("endpoint=")))[0] // null | if . then ltrimstr("endpoint=") else null end),
+         harness:($f | map(select(startswith("harness=")))[0] // null | if . then ltrimstr("harness=") else null end),
+         login:($f | map(select(startswith("login=")))[0] // null | if . then ltrimstr("login=") else null end),
          tasks:($tc[0] | tonumber? // null), capacity:($tc[1] // null | tonumber? // null),
          grade:($f | map(select(startswith("grade=")))[0] // null | if . then ltrimstr("grade=") else null end),
          line:$line})'

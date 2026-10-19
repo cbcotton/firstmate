@@ -824,7 +824,31 @@ SH
   out=$(PATH="$fakebin:$PATH" FM_HOME="$home" "$SNAPSHOT" --json)
   assert_equals null "$(printf '%s' "$out" | jq -c '.privateer.active_project')" \
     "the snapshot must report a malformed active project as null"
-  pass "the snapshot reports live sailors and the Privateer first mate and active project"
+  assert_equals '[null]' "$(printf '%s' "$out" | jq -c '[.sailors[] | .harness]')" "an endpoint sailor's snapshot row carries no harness"
+
+  # A login sailor runs its worker app on its own login; the fake codex stands
+  # in for the sign-in check, which runs under env -i, so it reads its
+  # signed-out toggle from HOME rather than from a variable.
+  jq '.sailors.teach = {harness: "codex", login: "chatgpt", status: "live", models: ["gpt-6-sol"], grade: "specialist"}' \
+    "$home/config/crew-dispatch.json" > "$home/config/crew-dispatch.json.new" \
+    && mv "$home/config/crew-dispatch.json.new" "$home/config/crew-dispatch.json"
+  rm "$home/config/privateer"
+  cat > "$fakebin/codex" <<'SH'
+#!/usr/bin/env bash
+[ ! -e "$HOME/codex.down" ] || exit 1
+exit 0
+SH
+  chmod +x "$fakebin/codex"
+  mkdir -p "$home/user-home"
+  out=$(HOME="$home/user-home" PATH="$fakebin:$PATH" FM_HOME="$home" "$SNAPSHOT" --json)
+  assert_equals '{"name":"teach","status":"live","answering":true,"tasks":0,"capacity":1,"grade":"specialist","harness":"codex","login":"chatgpt","endpoint":null}' \
+    "$(printf '%s' "$out" | jq -c '.sailors[] | select(.name == "teach") | {name,status,answering,tasks,capacity,grade,harness,login,endpoint}')" \
+    "a login sailor's snapshot row must carry its harness and login label in place of an endpoint"
+  : > "$home/user-home/codex.down"
+  out=$(HOME="$home/user-home" PATH="$fakebin:$PATH" FM_HOME="$home" "$SNAPSHOT" --json)
+  assert_equals 'false' "$(printf '%s' "$out" | jq -c '.sailors[] | select(.name == "teach") | .answering')" \
+    "a signed-out login sailor must read as not answering"
+  pass "the snapshot reports live sailors, a login sailor's harness and label, and the Privateer first mate and active project"
 }
 
 test_view_renders_snapshot() {

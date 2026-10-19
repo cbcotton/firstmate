@@ -4,8 +4,10 @@
 # firstmate exactly twice (check: sailor <name> down, then up), stays silent
 # while it stays down, and writes one sailor.state fleet-ledger event per
 # change. The sailor's endpoint belongs to a stub mlx-serve registry entry, so
-# the watch reads the server's healthPath. bin/fm-sailor.sh owns the probe and
-# docs/configuration.md ("Named sailors") the contract.
+# the watch reads the server's healthPath, and a login sailor on a fake codex
+# is read by its local sign-in check alone, bounded by the probe timeout.
+# bin/fm-sailor.sh owns the probe and docs/configuration.md ("Named sailors")
+# the contract.
 set -u
 
 # shellcheck source=tests/wake-helpers.sh
@@ -230,8 +232,74 @@ test_home_without_sailors_stays_silent() {
   pass "watch: a home that declares no sailors stays silent"
 }
 
+# make_login_case <name>: make_sailor_case plus a live login sailor on codex,
+# whose sign-in check runs a fake codex from the case's fakebin. The check
+# runs under env -i, so the fake reads its signed-out toggle from a file under
+# the case's own HOME, which each leg exports.
+make_login_case() {
+  local dir
+  dir=$(make_sailor_case "$1")
+  jq '.sailors.teach = {harness: "codex", login: "chatgpt", status: "live", models: ["gpt-6-sol"], grade: "specialist"}' \
+    "$dir/config/crew-dispatch.json" > "$dir/config/crew-dispatch.json.new" && mv "$dir/config/crew-dispatch.json.new" "$dir/config/crew-dispatch.json"
+  mkdir -p "$dir/home"
+  cat > "$dir/fakebin/codex" <<'SH'
+#!/usr/bin/env bash
+printf 'codex %s\n' "$*" >> "$HOME/codex.log"
+[ ! -e "$HOME/codex.sleep" ] || sleep 20
+[ ! -e "$HOME/codex.down" ] || exit 1
+exit 0
+SH
+  chmod +x "$dir/fakebin/codex"
+  printf '%s\n' "$dir"
+}
+
+test_login_sailor_signing_out_wakes_once_without_a_prompt() {
+  local dir state
+  start_stub
+  set_health 200
+  dir=$(make_login_case login)
+  state="$dir/state"
+
+  HOME="$dir/home" quiet_leg "$dir" signed-in
+  assert_equals "teach up
+tiller up" "$(sort "$state/.sailor-health" 2>/dev/null)" "the watch must record the login sailor beside the endpoint sailor"
+  drain_leg "$dir" signed-in
+  assert_no_grep "sailor" "$dir/drain-signed-in.out" "a signed-in login sailor must queue nothing"
+
+  : > "$dir/home/codex.down"
+  HOME="$dir/home" waking_leg "$dir" signed-out
+  assert_equals "check: sailor teach down" "$(cat "$dir/watch-signed-out.out")" "a login sailor that signs out must wake once with its name"
+  drain_leg "$dir" signed-out
+  assert_equals 1 "$(grep -c 'check: sailor teach down' "$dir/drain-signed-out.out")" "the down wake must be queued exactly once"
+
+  rm "$dir/home/codex.down"
+  HOME="$dir/home" waking_leg "$dir" signed-back
+  assert_equals "check: sailor teach up" "$(cat "$dir/watch-signed-back.out")" "a login sailor that signs in again must wake once"
+  assert_equals '{"task":null,"name":"teach","state":"down"}
+{"task":null,"name":"teach","state":"up"}' "$(ledger_states "$dir")" "each change of the login sailor must write exactly one sailor.state ledger event"
+  assert_no_grep "-p" "$dir/home/codex.log" "the watch must never send the login sailor a prompt"
+  assert_equals 0 "$(grep -vc '^codex login status$' "$dir/home/codex.log")" "the watch must ask codex only for its login status"
+  pass "watch: a login sailor signing out and back in wakes exactly twice, by its sign-in check alone"
+}
+
+test_login_sailor_check_is_bounded_by_the_probe_timeout() {
+  local dir
+  start_stub
+  set_health 200
+  dir=$(make_login_case login-slow)
+
+  HOME="$dir/home" quiet_leg "$dir" signed-in
+  drain_leg "$dir" signed-in
+  : > "$dir/home/codex.sleep"
+  HOME="$dir/home" FM_SAILOR_PROBE_TIMEOUT=1 FM_SAILOR_LOGIN_TIMEOUT=60 waking_leg "$dir" stalled
+  assert_equals "check: sailor teach down" "$(cat "$dir/watch-stalled.out")" "a codex that stalls past the probe timeout must read as down on the next tick, not after the login timeout"
+  pass "watch: a stalled login sailor's sign-in check is bounded by the probe timeout, not the login timeout"
+}
+
 test_sailor_flipping_up_down_up_wakes_exactly_twice
 test_sailor_first_seen_down_wakes_once
 test_home_without_sailors_stays_silent
+test_login_sailor_signing_out_wakes_once_without_a_prompt
+test_login_sailor_check_is_bounded_by_the_probe_timeout
 
 echo "# all fm-watch-sailor-health tests passed"

@@ -1335,7 +1335,8 @@ This section is the single owner of the canonical schema and its per-field seman
 ```json
 {
   "sailors": {
-    "<sailor name>": { "title": "<optional display name>", "host": "<optional machine description>", "endpoint": "<http(s) OpenAI-compatible base URL>", "status": "<live|placeholder>", "models": ["<model id>"], "max_concurrent": 1, "auth_env": "<optional token variable>", "unlisted_models": false, "grade": "<deckhand|sailor|specialist|expert, optional>", "facets": ["<optional role word>"], "paid": false }
+    "<sailor name>": { "title": "<optional display name>", "host": "<optional machine description>", "endpoint": "<http(s) OpenAI-compatible base URL>", "status": "<live|placeholder>", "models": ["<model id>"], "max_concurrent": 1, "auth_env": "<optional token variable>", "unlisted_models": false, "grade": "<deckhand|sailor|specialist|expert, optional>", "facets": ["<optional role word>"], "paid": false },
+    "<login sailor name>": { "title": "<optional display name>", "harness": "<codex|kimi|grok>", "login": "<optional label for the account>", "status": "<live|placeholder>", "models": ["<model id the worker app takes>"], "max_concurrent": 1, "grade": "<optional grade>", "facets": ["<optional role word>"], "paid": false }
   },
   "rules": [
     {
@@ -1345,7 +1346,7 @@ This section is the single owner of the canonical schema and its per-field seman
       "floor": { "scope": "<quota-axi scope>", "min_percent": 20, "provider": "<quota-axi provider>" },
       "use": [
         { "harness": "<adapter>", "model": "<optional model>", "effort": "<low|medium|high|xhigh|max|ultra, optional>", "provider": "<optional quota-axi provider>", "floor": { "scope": "<quota-axi scope>", "min_percent": 50 } },
-        { "harness": "opencode", "sailor": "<sailor name>", "model": "<a model listed for that sailor, optional>" },
+        { "harness": "<opencode for an endpoint sailor, or a login sailor's own harness>", "sailor": "<sailor name>", "model": "<a model listed for that sailor, optional>" },
         { "harness": "opencode", "grade": "<the lowest grade the work needs>" }
       ],
       "spend": "<allowed, optional>",
@@ -1422,10 +1423,17 @@ See [`docs/examples/crew-dispatch.json`](examples/crew-dispatch.json) for a star
 
 **Named sailors**
 
-A sailor is a named OpenAI-compatible endpoint that ordinary work can run on: usually a machine serving local models, and sometimes an external inference service.
+A sailor is a named place that ordinary work can run on: an endpoint sailor, an OpenAI-compatible endpoint such as a machine serving local models or an external inference service, or a login sailor, a worker app running on a subscription login already stored on this machine.
 `bin/fm-sailor.sh` owns the checks below and its header owns their mechanics.
 
 - `sailors` maps each sailor's name (lowercase letters, digits, and single dashes) to its `endpoint`, its `status`, and the `models` it may be asked for; `title`, `host`, and `max_concurrent` (default 1) are optional.
+- A login sailor names a `harness` (`codex`, `kimi`, or `grok`) in place of an `endpoint` and runs as that worker app on its own login, with an optional `login` label naming the account; it carries no `host`, `auth_env`, `unlisted_models`, or `model_settings`, and its `models` are the ids that worker app takes.
+  Firstmate never reads, copies, or prints the login itself: `bin/fm-sailor.sh` runs the worker app's own sign-in check under a cleared environment, so an ambient API key never stands in for the login, and an app that is not installed, signed out, or silent reads as down, with the reason naming the app and never a value.
+  Before each task, `check` runs the full sign-in check: `codex login status` and `grok models` within `FM_SAILOR_LOGIN_TIMEOUT` seconds (default 30) after grok's `auth.json` is found, and, after kimi's credentials file is found, one tiny kimi test prompt within `FM_SAILOR_SMOKE_TIMEOUT` seconds (default 120), because the stored file alone does not prove the login still answers.
+  `health` and `status` read only local, network-free evidence within `FM_SAILOR_PROBE_TIMEOUT` seconds (default 3): `codex login status`, and grok's `auth.json` or kimi's credentials file being present, so a watcher tick never waits on a vendor endpoint and spends nothing.
+  The `login` label is safe text, with no spaces, quotes, or control characters, because it lands in status lines and task records.
+  Only the main firstmate home runs login sailors: a [Privateer home](#privateer-quarantine-configprivateer) refuses them, since its first mate and workers run only on endpoint sailors inside its quarantine.
+  `tests/fm-login-sailors-live-e2e.test.sh` re-proves the checks against the installed apps, and [`verification/login-sailors.md`](verification/login-sailors.md) records the result.
 - A sailor may also carry `model_settings`, a map from a listed model to that model's own behavior settings, in OpenCode's field names: a `limit` object holding both `context` and `output` (positive whole numbers), and an `options` object of string, number, or boolean values such as `reasoningEffort` (camelCase), `enable_thinking`, `temperature`, `top_p`, and `top_k`.
   `bin/fm-sailor.sh provider-json` emits them under that model, so every worker launch and the Privateer first mate get the same settings from the same place, whatever the home's global OpenCode configuration says; an entry without `model_settings` launches exactly as before.
   Settings change only at the next launch, so a Privateer first mate needs a restart.
@@ -1435,23 +1443,25 @@ A sailor is a named OpenAI-compatible endpoint that ordinary work can run on: us
   A sailor whose variable is set nowhere is refused by every check, which names the variable and never a value, and reads as down.
   `tests/fm-sailor-token-live-e2e.test.sh` re-proves the header against the installed OpenCode, and [`verification/local-sailors.md`](verification/local-sailors.md) records the result.
 - `unlisted_models: true` marks an endpoint that serves model ids its model list leaves out, as a router taking provider-routed ids does; the eligibility check then needs that list to answer but not to name the model.
-- A profile with `sailor` must use the `opencode` harness and may name a `model` from that sailor's list; without one it means the sailor's one listed model, and it is invalid while the sailor lists several.
-  `fm-spawn.sh --sailor` points the worker's OpenCode at that endpoint, and without `--model` it likewise takes the sailor's one model.
+- A profile with `sailor` must use that sailor's harness, `opencode` for an endpoint sailor and the entry's own `harness` for a login sailor, and may name a `model` from that sailor's list; without one it means the sailor's one listed model, and it is invalid while the sailor lists several.
+  `fm-spawn.sh --sailor` points the worker's OpenCode at an endpoint sailor, or launches a login sailor's worker app on the sailor's model as an ordinary crewmate or scout, outside the OpenCode provider, token, system-prompt fold, and sailor sandbox below; without `--model` it likewise takes the sailor's one model, and its task record names the sailor and its `login` label.
 - Every sailor launch, a Privateer worker's included, folds OpenCode's system prompt into one system message, keeping every part in order.
   OpenCode sends a second system message whenever a plugin adds system text, such as the global AXI plugins under `~/.config/opencode/plugins/`, and a local chat template that allows one leading system message, as Qwen-family templates do, rejects the request.
   The fold is a worktree plugin that `fm-spawn.sh` writes beside the busy-state plugin; it folds what earlier plugins added and what later ones add, because OpenCode runs plugins in an order it does not document.
   A launch without a sailor drops it, and in a Privateer worker, which loads no global plugins, it changes nothing.
 - A `placeholder` sailor is never dispatched, even when something answers at its address; only the captain changes its status to `live`.
-- A `live` sailor is eligible only while `bin/fm-sailor.sh check <sailor> <model>` passes: it must have its token when it names one, its endpoint must answer within a few seconds and list the model (or only answer, with `unlisted_models`), and this home must hold fewer than `max_concurrent` tasks on it.
+- A `live` sailor is eligible only while `bin/fm-sailor.sh check <sailor> <model>` passes: it must have its token when it names one, its endpoint must answer within a few seconds and list the model (or only answer, with `unlisted_models`), and this home must hold fewer than `max_concurrent` tasks on it; a login sailor's worker app must instead pass its full sign-in check, with the kimi test prompt.
   The capacity count is per home, so homes that share one machine each count only their own tasks.
   `bin/fm-sailor.sh pick`, under "Sailor grades" below, runs that check for each candidate it weighs.
-- No eligibility, status, or health probe ever asks for a completion: each reads only the model list, an mlx-serve health path, or the server's `/metrics` gauges, so watching a pay-per-token sailor spends nothing.
+- No eligibility, status, or health probe ever asks for a completion: each reads only the model list, an mlx-serve health path, or the server's `/metrics` gauges, so watching a pay-per-token sailor spends nothing; the kimi test prompt in a login sailor's `check` is the one exception.
 - `bin/fm-sailor.sh status` shows each live sailor, or every sailor with `--all`: whether it answers the same health probe the watcher uses (below), or `no-token` when its token is missing, this home's tasks on it, the sailor's `grade=<grade>` when it has one, the server's running and waiting requests when it reports them, and, when its model list answers, each listed model as loaded, unloaded, unlisted, or missing.
-- The supervision watcher probes every live sailor on the heartbeat's base interval through `bin/fm-sailor.sh health`, at its mlx-serve server's `healthPath` when `~/.mlx-serve/servers.json` lists a server whose `baseURL` the endpoint lies under, and otherwise at the endpoint's model list.
+  A login sailor's line carries `harness=<harness>` in place of its endpoint, each model as signed-in or signed-out, and its `login=<label>` when it has one.
+- The supervision watcher probes every live sailor on the heartbeat's base interval through `bin/fm-sailor.sh health`, at its mlx-serve server's `healthPath` when `~/.mlx-serve/servers.json` lists a server whose `baseURL` the endpoint lies under, and otherwise at the endpoint's model list; a login sailor is read by its local sign-in evidence alone, within the probe timeout, without a prompt or a network request.
   It wakes firstmate only when a sailor's state changes, with `check: sailor <name> down` or `check: sailor <name> up`; work routed to a down sailor waits or uses `sailor_fallback`, and firstmate tells the captain only when queued work is stuck on it.
   To scale out, add more mlx-serve servers to that registry, each with its own sailor, and every one is watched the same way.
 - `bin/fm-sailor.sh` also edits the map, from the captain's own shell:
   - `add` registers a sailor, as a `placeholder` unless `--live`; `--auth-env <variable>` and `--unlisted-models` record those fields.
+  - `add --harness <codex|kimi|grok> --models <ids> [--login <label>]` registers a login sailor on that worker app, probing nothing.
   - `add --from-mlx-serve <server-id>` takes the endpoint and the live model list from that server's entry in the local mlx-serve registry, `~/.mlx-serve/servers.json`; it only reads the registry and never loads, unloads, or starts a server.
   - `set` changes a sailor's endpoint, title, host, capacity, status, `auth_env` (`--auth-env`, `--no-auth-env`), or `unlisted_models` (`--unlisted-models`, `--no-unlisted-models`); in a Privateer home it refuses to make the first mate's sailor a `placeholder`.
   - `set-model` adds a model to a sailor, `--replace <old>` also moves every rule and default profile on that sailor from the old model to the new one, and `--first-mate` moves a [Privateer](#privateer-quarantine-configprivateer) first mate onto it.
@@ -1491,7 +1501,7 @@ Each line maps a registered project name to a `Name <address>` template whose ad
 gpr3d Chris <{sailor}.chris@euroradar.nl>
 ```
 
-- `fm-spawn.sh` applies it to every crewmate or scout launched with `--sailor` on a mapped project, and a relaunch on the same copy keeps it; with no file, or no line for the project, a spawn behaves as before, and a launch without a sailor gets no identity.
+- `fm-spawn.sh` applies it to every crewmate or scout launched with `--sailor` on a mapped project, a login sailor's worker app included, and a relaunch on the same copy keeps it; with no file, or no line for the project, a spawn behaves as before, and a launch without a sailor gets no identity.
   A fresh spawn whose copy gets no identity removes any worktree-scoped `user.name` and `user.email` an earlier sailor task left in that reused copy, so it commits under the repository's usual identity.
 - The identity is set in that copy's own worktree configuration (`extensions.worktreeConfig` with `git config --worktree`), so the repository's shared `user.*` settings, the primary checkout, and global configuration stay unchanged.
   A restricted sailor's permission profile denies `git -c user.*` and environment-prefixed commits, which is why firstmate sets the identity at launch rather than leaving it to the sailor.
@@ -1532,6 +1542,7 @@ A graded sailor therefore lists exactly one model.
 | `expert` | xhigh | Planning and architecture, security audits, risky refactors, concurrency, auth, and data migrations |
 
 - A profile may name `{ "harness": "opencode", "grade": "<grade>" }` instead of a sailor; it names no model, and any live sailor of that grade or higher meets it, so a model swap on a sailor never rewrites a rule.
+  The profile's `opencode` is a placeholder whatever sailors it may pick: the sailor `pick` chooses brings its own harness, which firstmate passes to `fm-spawn.sh --harness` beside `--sailor`.
 - `bin/fm-sailor.sh pick --grade <grade>` resolves it: of this home's live sailors at or above that grade, lowest sufficient grade first, then free before paid, then in map order, it prints `<sailor> <model>` for the first that `check` passes, and otherwise each candidate's refusal.
   `pick --sailor <sailor> [--model <model>]` weighs one named sailor through the same gates, so firstmate and the Privateer front door choose every sailor through `pick` and pass its sailor and model to `fm-spawn.sh`.
 - A repeated `--grade` raises the floor to the highest one given, which is how the captain asks a stronger sailor for one task; an ungraded sailor is never picked by grade.
@@ -1556,7 +1567,7 @@ Secondmate homes inherit this file from the primary, so a secondmate's own crewm
 
 ### Sailor slot registry (config/sailor-registry)
 
-A sailor slot is a pre-named sailor that is either blank or bound to one model on one server, so the models behind a fixed set of names can change for every home on the machine at once.
+A sailor slot is a pre-named sailor that is either blank or bound to one model on one server or on one login harness, so the models behind a fixed set of names can change for every home on the machine at once.
 The slots live in one slot registry, `~/.mlx-serve/sailors.json` beside MLX Serve's server list, written from outside every session; the MLX Serve project owns that file, and this section covers only what firstmate reads from it.
 Each home projects the registry into its own `config/crew-dispatch.json` with `bin/fm-sailor.sh sync <registry> --home <key>`, so every check, probe, sandbox, egress rule, and Privateer rule under [named sailors](#crew-dispatch-profiles-configcrew-dispatchjson) keeps applying unchanged.
 The script's header owns the fields `sync` reads, the projection, and every refusal.
@@ -1572,11 +1583,12 @@ The script's header owns the fields `sync` reads, the projection, and every refu
 
 - The registry's `homes` maps each home's key to its directory, and `sync` refuses a key that does not map to the home it runs in.
 - A bound slot with a share for the home becomes the sailor of the same name: its server's `baseURL` from `~/.mlx-serve/servers.json` plus `/v1`, that one model, and the home's share as `max_concurrent`.
+- A slot bound to a `harness` (`codex`, `kimi`, or `grok`) instead becomes a login sailor of the same name, with its `login` label, that one model, and the share as `max_concurrent`; it takes no `auth_env`, `unlisted_models`, or `model_settings`, and a slot naming both a server and a harness is refused.
 - The shares of one slot sum to at most its capacity, so homes on one machine never promise its server more parallel tasks than it carries.
 - A slot's `grade` (`deckhand`, `sailor`, `specialist`, or `expert`, lowest first), `facets`, `paid`, `auth_env`, `unlisted_models`, and `model_settings` reach the sailor as given, and a slot without a `status` is a `placeholder`.
 - A blank slot, or one without a share for the home, is absent from its map, and a sailor that leaves the map takes the rules and default profiles naming it, as `retire` does.
 - `sync` refuses rather than strand work: while a task runs on a sailor or model it would remove, and while a rule or default names a slot with a model the slot no longer serves.
-- In a [Privateer home](#privateer-quarantine-configprivateer) the registry's `privateer_first_mate` names the first mate's slot, which must be bound, live, shared with that home, and carry the `helm` facet; `sync` writes its `<slot>/<model>` into `config/privateer`.
+- In a [Privateer home](#privateer-quarantine-configprivateer) the registry's `privateer_first_mate` names the first mate's slot, which must be bound to a server, live, shared with that home, and carry the `helm` facet; `sync` writes its `<slot>/<model>` into `config/privateer`.
 - Like every edit above, `sync` writes nothing unless the whole result passes `validate` and, in a Privateer home, `bin/fm-privateer.sh check`, keeps dated copies, and says when the change applies; `--dry-run` only prints it.
 - `sync` probes no server and never writes the registry, the server list, `.env`, or the Keychain; a keyed slot's token is read from the environment or the home's `.env`, as for any sailor.
 

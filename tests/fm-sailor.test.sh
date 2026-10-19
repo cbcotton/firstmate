@@ -2,8 +2,8 @@
 # tests/fm-sailor.test.sh - named local sailors through bin/fm-sailor.sh:
 # map validation, grades, the choice by grade or name, the placeholder lock,
 # the capacity count, the endpoint probe, and the OpenCode provider fragment,
-# then the warm-up, the status view, and the registry commands, and a sailor's
-# bearer token and unlisted model ids. The first cases use a fake curl that
+# then the warm-up, the status view, and the registry commands, a sailor's
+# bearer token and unlisted model ids, and login sailors on fake worker apps. The first cases use a fake curl that
 # logs every URL it is asked for, so a test can prove a probe did or did not
 # happen; the later
 # cases run the real curl against a local HTTP stub standing in for the
@@ -1268,7 +1268,16 @@ test_sync_refuses_a_malformed_registry_naming_the_slot() {
     assert_contains "$out" "refused: $want" "registry edit $filter must be refused with its reason"
   done <<EOF
 .schema = 2~the slot registry must be an object with schema 1
-.slots.stoker.server = "mlx-serve"~slot stoker needs both a server and a model, or neither
+.slots.stoker.server = "mlx-serve"~slot stoker needs a server or a harness with a model, or neither
+.slots.stoker.harness = "codex"~slot stoker needs a server or a harness with a model, or neither
+.slots.tiller.harness = "codex"~slot tiller names both a server and a harness; a slot is bound to one server or one login harness
+.slots.stoker += {harness: "claude", model: "m"}~slot stoker harness claude is not one of codex, kimi, grok
+.slots.stoker += {harness: "codex", model: "m", auth_env: "X"}~slot stoker is a login slot, which takes no auth_env, unlisted_models, or model_settings
+.slots.stoker.login = "chatgpt"~slot stoker login names a sign-in label, which only a login slot carries
+.slots.stoker += {harness: "codex", model: "m", login: 1}~slot stoker login must be a non-empty string without spaces or quotes
+.slots.stoker += {harness: "codex", model: "m", login: "ChatGPT Plus"}~slot stoker login must be a non-empty string without spaces or quotes
+.slots.stoker += {harness: "codex", model: "m", login: "x\nsailor=other"}~slot stoker login must be a non-empty string without spaces or quotes
+.slots.stoker += {harness: "codex", model: "m", capacity: 0}~slot stoker capacity must be a positive whole number
 .slots.lookout.server = "ghost"~slot lookout names server ghost, which $CASE_DIR/servers.json does not list
 .slots["bonsai-1"].homes.firstmate = 3~slot bonsai-1 shares 4 tasks among its homes, above its capacity of 3
 .slots["bonsai-1"].homes.firstmate = 1.5~slot bonsai-1 shares must be whole numbers
@@ -1392,6 +1401,307 @@ EOF
   pass "in a Privateer home sync moves the first mate with its helm slot, refuses a first mate it cannot run, and keeps the quarantine"
 }
 
+# Login sailors: worker apps on their own subscription logins. The fake codex,
+# kimi, and grok below log every call to $HOME/login.log, because the sign-in
+# check runs them under env -i, so a toggle or log named by the test's own
+# environment would never reach them; each reads its down and sleep toggles
+# from files under that HOME for the same reason.
+LOGIN_MAP='{"sailors":{
+  "teach":{"title":"Teach","harness":"codex","login":"chatgpt","status":"live","models":["gpt-6-sol"],"grade":"specialist"},
+  "bonny":{"harness":"kimi","status":"live","models":["kimi-for-coding"],"grade":"sailor"},
+  "mary":{"harness":"grok","login":"grok.com","status":"live","models":["grok-4.7"],"grade":"sailor","max_concurrent":2},
+  "tiller":{"endpoint":"http://127.0.0.1:11234/v1","status":"live","models":["qwen-coder"],"grade":"deckhand"}},
+ "rules":[{"when":"planning","use":[{"harness":"codex","sailor":"teach","model":"gpt-6-sol"},{"harness":"opencode","sailor":"tiller","model":"qwen-coder"}]}],
+ "default":{"harness":"opencode","grade":"sailor"},
+ "sailor_fallback":{"harness":"claude","model":"claude-opus-5-5"}}'
+
+# make_login_case <name> <map-json>: make_case plus LOGIN_HOME, a HOME holding
+# a grok auth.json and a kimi credentials file, and the three fake worker apps
+# in FAKEBIN. LOGIN_LOG is their call log.
+make_login_case() {
+  local app
+  make_case "$1" "$2"
+  LOGIN_HOME="$CASE_DIR/home"
+  mkdir -p "$LOGIN_HOME/.grok" "$LOGIN_HOME/.kimi-code/credentials"
+  : > "$LOGIN_HOME/.grok/auth.json"
+  : > "$LOGIN_HOME/.kimi-code/credentials/kimi-code-env-0123abcd.json"
+  LOGIN_LOG="$LOGIN_HOME/login.log"
+  : > "$LOGIN_LOG"
+  for app in codex kimi grok; do
+    cat > "$FAKEBIN/$app" <<SH
+#!/usr/bin/env bash
+printf '%s %s key=%s grok_home=%s cwd=%s\\n' "$app" "\$*" "\${OPENAI_API_KEY:-unset}" "\${GROK_HOME:-unset}" "\$PWD" >> "\$HOME/login.log"
+[ ! -e "\$HOME/$app.sleep" ] || sleep 5
+[ ! -e "\$HOME/$app.down" ] || exit 1
+exit 0
+SH
+    chmod +x "$FAKEBIN/$app"
+  done
+}
+
+# run_login <args...>: run_sailor from LOGIN_HOME with an API key in the
+# environment that a sign-in check must not pass on.
+run_login() {
+  HOME="$LOGIN_HOME" OPENAI_API_KEY=leaked-key run_sailor "$@"
+}
+
+test_validate_and_list_know_login_sailors() {
+  local out map want
+  make_login_case login-valid "$LOGIN_MAP"
+  out=$(run_login validate)
+  expect_code 0 "$?" "a map with login sailors must validate: $out"
+  out=$(run_login list)
+  assert_contains "$out" "teach status=live harness=codex max_concurrent=1 grade=specialist models=gpt-6-sol login=chatgpt" "list must show a login sailor's harness and label"
+  assert_contains "$out" "bonny status=live harness=kimi max_concurrent=1 grade=sailor models=kimi-for-coding" "list must omit the label of a login sailor without one"
+  assert_contains "$out" "tiller status=live endpoint=http://127.0.0.1:11234/v1 max_concurrent=1 grade=deckhand models=qwen-coder" "list must keep an endpoint sailor's endpoint"
+  while IFS='~' read -r map want; do
+    make_login_case "login-bad-$RANDOM" "$map"
+    out=$(run_login validate)
+    expect_code 1 "$?" "map $map must be invalid: $out"
+    assert_equals "$want" "$out" "diagnostic mismatch for $map"
+  done <<'EOF'
+{"sailors":{"x":{"harness":"codex","endpoint":"http://127.0.0.1:1/v1","status":"live","models":["m"]}}}~sailor x needs an http(s) endpoint or a login harness, not both
+{"sailors":{"x":{"status":"live","models":["m"]}}}~sailor x needs an http(s) endpoint or a login harness, not both
+{"sailors":{"x":{"harness":"claude","status":"live","models":["m"]}}}~sailor x harness must be one of codex, kimi, grok
+{"sailors":{"x":{"harness":"opencode","status":"live","models":["m"]}}}~sailor x harness must be one of codex, kimi, grok
+{"sailors":{"x":{"harness":"codex","auth_env":"OPENAI_API_KEY","status":"live","models":["m"]}}}~sailor x is a login sailor, which takes no auth_env, unlisted_models, model_settings, or host
+{"sailors":{"x":{"harness":"kimi","host":"this Mac","status":"live","models":["m"]}}}~sailor x is a login sailor, which takes no auth_env, unlisted_models, model_settings, or host
+{"sailors":{"x":{"endpoint":"http://127.0.0.1:1/v1","login":"chatgpt","status":"live","models":["m"]}}}~sailor x login names a sign-in label, which only a login sailor carries
+{"sailors":{"x":{"harness":"codex","login":1,"status":"live","models":["m"]}}}~sailor x login must be a non-empty string without spaces or quotes
+{"sailors":{"x":{"harness":"codex","login":"","status":"live","models":["m"]}}}~sailor x login must be a non-empty string without spaces or quotes
+{"sailors":{"x":{"harness":"codex","login":"ChatGPT Plus","status":"live","models":["m"]}}}~sailor x login must be a non-empty string without spaces or quotes
+{"sailors":{"x":{"harness":"codex","login":"x\nsailor=other","status":"live","models":["m"]}}}~sailor x login must be a non-empty string without spaces or quotes
+{"sailors":{"x":{"harness":"codex","status":"live","models":["m"]}},"default":{"harness":"opencode","sailor":"x","model":"m"}}~sailor x profile must use harness codex
+{"sailors":{"x":{"harness":"grok","status":"live","models":["m"]}},"default":{"harness":"kimi","sailor":"x","model":"m"}}~sailor x profile must use harness grok
+{"sailors":{"x":{"endpoint":"http://127.0.0.1:1/v1","status":"live","models":["m"]}},"default":{"harness":"codex","sailor":"x","model":"m"}}~sailor x profile must use harness opencode
+EOF
+  pass "validate takes a login sailor on codex, kimi, or grok with its own profile harness and refuses a mixed, mislabelled, or mis-profiled one; list shows its harness and label"
+}
+
+test_check_runs_a_login_sailors_sign_in_check_and_nothing_else() {
+  local out
+  make_login_case login-check "$LOGIN_MAP"
+  out=$(run_login check teach gpt-6-sol)
+  expect_code 0 "$?" "a signed-in codex sailor must pass check: $out"
+  assert_equals "ok: sailor teach runs gpt-6-sol on its codex login (0 of 1 tasks busy; signed in)" "$out" "the codex ok line must name the login"
+  assert_equals "codex login status key=unset grok_home=unset cwd=$PWD" "$(cat "$LOGIN_LOG")" "codex must see login status alone, under an environment without the ambient API key"
+  [ ! -s "$CURL_LOG" ] || fail "a login sailor must never be probed over HTTP, but curl was called: $(cat "$CURL_LOG")"
+
+  : > "$LOGIN_LOG"
+  out=$(run_login check bonny kimi-for-coding)
+  expect_code 0 "$?" "a signed-in kimi sailor must pass check: $out"
+  assert_equals "ok: sailor bonny runs kimi-for-coding on its kimi login (0 of 1 tasks busy; signed in)" "$out" "the kimi ok line must name the login"
+  assert_contains "$(cat "$LOGIN_LOG")" "kimi -p Reply with the single word OK. --output-format text key=unset" "check must send kimi the one test prompt"
+  assert_not_contains "$(cat "$LOGIN_LOG")" "cwd=$PWD" "the kimi test prompt must run from a scratch directory, not the caller's"
+  assert_equals 1 "$(wc -l < "$LOGIN_LOG" | tr -d ' ')" "check must send kimi exactly one prompt"
+  [ -z "$(find "${TMPDIR:-/tmp}" -maxdepth 1 -name 'fm-sailor-smoke.*' 2>/dev/null)" ] || fail "the scratch directory of the kimi test prompt must be removed"
+
+  : > "$LOGIN_LOG"
+  out=$(GROK_HOME="$LOGIN_HOME/elsewhere" run_login check mary grok-4.7)
+  expect_code 1 "$?" "grok without its auth.json must be refused: $out"
+  assert_equals "refused: sailor mary is signed out of grok: no $LOGIN_HOME/elsewhere/auth.json, so grok holds no login" "$out" "the grok refusal must name the missing file under GROK_HOME"
+  [ ! -s "$LOGIN_LOG" ] || fail "grok must not run without its auth.json: $(cat "$LOGIN_LOG")"
+  mkdir -p "$LOGIN_HOME/elsewhere" && : > "$LOGIN_HOME/elsewhere/auth.json"
+  out=$(GROK_HOME="$LOGIN_HOME/elsewhere" run_login check mary grok-4.7)
+  expect_code 0 "$?" "a signed-in grok sailor must pass check: $out"
+  assert_equals "ok: sailor mary runs grok-4.7 on its grok login (0 of 2 tasks busy; signed in)" "$out" "the grok ok line must name the login"
+  assert_equals "grok models key=unset grok_home=$LOGIN_HOME/elsewhere cwd=$PWD" "$(cat "$LOGIN_LOG")" "grok must list models under GROK_HOME alone"
+
+  : > "$LOGIN_HOME/codex.down"
+  out=$(run_login check teach gpt-6-sol)
+  expect_code 1 "$?" "a signed-out codex sailor must be refused: $out"
+  assert_equals "refused: sailor teach is signed out of codex: codex login status reports no login (exit 1)" "$out" "the codex refusal must carry the exit status"
+  rm "$LOGIN_HOME/codex.down"
+  : > "$LOGIN_HOME/kimi.down"
+  out=$(run_login check bonny kimi-for-coding)
+  expect_code 1 "$?" "a kimi sailor refusing the test prompt must be refused: $out"
+  assert_equals "refused: sailor bonny is signed out of kimi: kimi refused a test prompt (exit 1), so its login is not usable" "$out" "the kimi refusal must name the test prompt"
+  rm "$LOGIN_HOME/kimi.down" "$LOGIN_HOME/.kimi-code/credentials/kimi-code-env-0123abcd.json"
+  : > "$LOGIN_LOG"
+  out=$(run_login check bonny kimi-for-coding)
+  expect_code 1 "$?" "kimi without a credentials file must be refused: $out"
+  assert_equals "refused: sailor bonny is signed out of kimi: no credentials file under $LOGIN_HOME/.kimi-code/credentials, so kimi holds no login" "$out" "the kimi refusal must name the credentials directory"
+  [ ! -s "$LOGIN_LOG" ] || fail "kimi must not run without a credentials file: $(cat "$LOGIN_LOG")"
+  : > "$LOGIN_HOME/.grok/auth.json"
+  : > "$LOGIN_HOME/grok.down"
+  out=$(run_login check mary grok-4.7)
+  expect_code 1 "$?" "grok failing to list models must be refused: $out"
+  assert_equals "refused: sailor mary is signed out of grok: grok models failed (exit 1), so its login is not usable" "$out" "the grok refusal must carry the exit status"
+  rm "$LOGIN_HOME/grok.down"
+
+  : > "$LOGIN_HOME/codex.sleep"
+  out=$(FM_SAILOR_LOGIN_TIMEOUT=1 run_login check teach gpt-6-sol)
+  expect_code 1 "$?" "a sign-in check past its bound must be refused: $out"
+  assert_equals "refused: sailor teach is signed out of codex: codex login status did not answer within 1 seconds" "$out" "the timeout refusal must name the bound"
+  rm "$LOGIN_HOME/codex.sleep"
+  out=$(FM_SAILOR_LOGIN_TIMEOUT=x run_login check teach gpt-6-sol)
+  expect_code 2 "$?" "a malformed bound is a usage error"
+  rm "$FAKEBIN/codex"
+  out=$(PATH="$FAKEBIN:$(dirname "$(command -v jq)"):/usr/bin:/bin" run_login check teach gpt-6-sol)
+  expect_code 1 "$?" "an absent worker app must be refused: $out"
+  assert_equals "refused: sailor teach is signed out of codex: codex is not installed" "$out" "the absent-app refusal must name the app"
+
+  : > "$LOGIN_LOG"
+  fm_write_meta "$CASE_DIR/state/busy-m1.meta" harness=grok sailor=mary model=grok-4.7
+  fm_write_meta "$CASE_DIR/state/busy-m2.meta" harness=grok sailor=mary model=grok-4.7
+  out=$(run_login check mary grok-4.7)
+  expect_code 1 "$?" "a login sailor at capacity must be refused: $out"
+  assert_equals "refused: sailor mary is at capacity (2 of 2 tasks)" "$out" "capacity must count a login sailor's tasks"
+  out=$(run_login check mary grok-4.7 --task busy-m2)
+  expect_code 0 "$?" "the task being relaunched must not count: $out"
+  assert_contains "$out" "(1 of 2 tasks busy; signed in)" "the ok line must count the other task"
+  rm "$CASE_DIR/state/busy-m1.meta" "$CASE_DIR/state/busy-m2.meta"
+  out=$(run_login check mary nope)
+  expect_code 1 "$?" "a model the login sailor does not list must be refused"
+  assert_equals "refused: model nope is not listed for sailor mary" "$out" "unlisted-model refusal mismatch"
+  assert_equals "grok models key=unset grok_home=$LOGIN_HOME/.grok cwd=$PWD" "$(cat "$LOGIN_LOG")" "a capacity or model refusal must run no sign-in check, and grok sees its default home"
+  [ ! -s "$CURL_LOG" ] || fail "no login check may touch curl: $(cat "$CURL_LOG")"
+  pass "check signs a login sailor in through its own worker app under a clean environment, sends kimi one test prompt from a scratch directory, and refuses a signed-out, absent, slow, busy, or mis-modelled one by name"
+}
+
+test_pick_takes_a_login_sailor_by_grade_through_its_sign_in_check() {
+  local out
+  make_login_case login-pick "$LOGIN_MAP"
+  out=$(run_login pick --grade specialist)
+  expect_code 0 "$?" "pick by grade must take a signed-in login sailor: $out"
+  assert_equals "teach gpt-6-sol" "$out" "pick must print the login sailor and its model"
+  out=$(run_login pick --grade sailor)
+  assert_equals "bonny kimi-for-coding" "$out" "the lowest sufficient login sailor must come first"
+  : > "$LOGIN_HOME/kimi.down"
+  out=$(run_login pick --grade sailor)
+  assert_equals "mary grok-4.7" "$out" "a signed-out login sailor must be passed over"
+  : > "$LOGIN_HOME/grok.down"
+  : > "$LOGIN_HOME/codex.down"
+  out=$(run_login pick --grade sailor)
+  expect_code 1 "$?" "pick must refuse when every candidate is signed out"
+  assert_contains "$out" "bonny/kimi-for-coding: sailor bonny is signed out of kimi: kimi refused a test prompt (exit 1), so its login is not usable" "the refusal must carry each sign-in reason"
+  assert_contains "$out" "mary/grok-4.7: sailor mary is signed out of grok: grok models failed (exit 1), so its login is not usable" "the refusal must carry the grok reason"
+  assert_contains "$out" "teach/gpt-6-sol: sailor teach is signed out of codex: codex login status reports no login (exit 1)" "the refusal must carry the codex reason"
+  out=$(run_login pick --sailor teach)
+  expect_code 1 "$?" "a named signed-out login sailor must be refused"
+  assert_equals "refused: sailor teach is signed out of codex: codex login status reports no login (exit 1)" "$out" "the named refusal must be the sign-in reason"
+  [ ! -s "$CURL_LOG" ] || fail "no pick over login sailors may touch curl: $(cat "$CURL_LOG")"
+  pass "pick weighs a login sailor by grade through its sign-in check and passes a signed-out one over, naming the reason"
+}
+
+test_health_and_status_read_a_login_sailor_without_a_prompt() {
+  local out start
+  make_login_case login-health "$LOGIN_MAP"
+  out=$(run_login health)
+  expect_code 0 "$?" "health must succeed: $out"
+  assert_contains "$out" "teach up login:codex" "health must read a signed-in codex sailor as up"
+  assert_contains "$out" "bonny up login:kimi" "health must read a kimi sailor with a credentials file as up"
+  assert_contains "$out" "mary up login:grok" "health must read a signed-in grok sailor as up"
+  assert_contains "$out" "tiller up http://127.0.0.1:11234/v1/models" "health must keep probing an endpoint sailor"
+  assert_not_contains "$(cat "$LOGIN_LOG")" "kimi" "health must never send kimi a prompt"
+  assert_equals "http://127.0.0.1:11234/v1/models" "$(cat "$CURL_LOG")" "health must probe only the endpoint sailor over HTTP"
+
+  out=$(run_login status)
+  expect_code 0 "$?" "status must succeed: $out"
+  assert_contains "$out" "teach live answering harness=codex tasks=0/1 grade=specialist models=gpt-6-sol(signed-in) login=chatgpt" "status must show a signed-in login sailor"
+  assert_contains "$out" "bonny live answering harness=kimi tasks=0/1 grade=sailor models=kimi-for-coding(signed-in)" "status must omit the label of a login sailor without one"
+  assert_not_contains "$(cat "$LOGIN_LOG")" "kimi" "status must never send kimi a prompt"
+  assert_not_contains "$(cat "$LOGIN_LOG")" "grok models" "health and status must never run grok, which reaches its vendor"
+
+  : > "$LOGIN_HOME/codex.sleep"
+  : > "$LOGIN_HOME/grok.sleep"
+  start=$SECONDS
+  out=$(FM_SAILOR_PROBE_TIMEOUT=1 FM_SAILOR_LOGIN_TIMEOUT=30 run_login health)
+  [ $((SECONDS - start)) -lt 4 ] || fail "health must bound a slow sign-in check by the probe timeout, not the login timeout: took $((SECONDS - start))s"
+  assert_contains "$out" "teach down login:codex" "health must read a codex that does not answer within the probe timeout as down"
+  assert_contains "$out" "mary up login:grok" "health must read grok by its auth.json alone"
+  start=$SECONDS
+  out=$(FM_SAILOR_PROBE_TIMEOUT=1 FM_SAILOR_LOGIN_TIMEOUT=30 run_login status)
+  [ $((SECONDS - start)) -lt 4 ] || fail "status must bound a slow sign-in check by the probe timeout, not the login timeout: took $((SECONDS - start))s"
+  assert_contains "$out" "teach live not-answering harness=codex" "status must read a codex that does not answer within the probe timeout as not answering"
+  rm "$LOGIN_HOME/codex.sleep" "$LOGIN_HOME/grok.sleep"
+
+  : > "$LOGIN_HOME/codex.down"
+  rm "$LOGIN_HOME/.kimi-code/credentials/kimi-code-env-0123abcd.json"
+  fm_write_meta "$CASE_DIR/state/busy-t1.meta" harness=codex sailor=teach model=gpt-6-sol
+  out=$(run_login health)
+  assert_contains "$out" "teach down login:codex" "health must read a signed-out codex sailor as down"
+  assert_contains "$out" "bonny down login:kimi" "health must read kimi without a credentials file as down"
+  out=$(run_login status)
+  assert_contains "$out" "teach live not-answering harness=codex tasks=1/1 grade=specialist models=gpt-6-sol(signed-out) login=chatgpt" "status must show a signed-out login sailor and its tasks"
+  assert_contains "$out" "bonny live not-answering harness=kimi tasks=0/1 grade=sailor models=kimi-for-coding(signed-out)" "status must show kimi as signed out without its file"
+  assert_not_contains "$out" "leaked-key" "status must never print a value from the environment"
+  pass "health and status read a login sailor by its local sign-in evidence within the probe timeout, up or answering when signed in, and never run grok or send kimi a prompt"
+}
+
+test_login_sailors_take_no_provider_or_warm_up_and_add_registers_one() {
+  local out
+  make_login_case login-edit "$LOGIN_MAP"
+  out=$(run_login provider-json teach gpt-6-sol)
+  expect_code 1 "$?" "provider-json on a login sailor must be refused: $out"
+  assert_equals "refused: sailor teach is a login sailor on codex, which runs as its own worker app and takes no OpenCode provider" "$out" "provider-json refusal mismatch"
+  cp "$CASE_DIR/config/crew-dispatch.json" "$CASE_DIR/original.json"
+  rm -f "$CASE_DIR/config/"*.bak-*
+  out=$(run_login set-model teach gpt-6-pro --warm)
+  expect_code 1 "$?" "warming a login sailor must be refused: $out"
+  assert_equals "refused: sailor teach is a login sailor on codex, and a login sailor is never warmed" "$out" "warm refusal mismatch"
+  out=$(run_login set-model teach gpt-6-pro --first-mate)
+  expect_code 1 "$?" "a login sailor as first mate must be refused: $out"
+  assert_equals "refused: sailor teach is a login sailor on codex, and the first mate runs only on an endpoint sailor" "$out" "first-mate refusal mismatch"
+  out=$(run_login add x --harness claude --models m)
+  expect_code 1 "$?" "add on an unknown harness must be refused: $out"
+  assert_contains "$out" "refused: sailor x harness must be one of codex, kimi, grok" "add must carry validate's harness reason"
+  out=$(run_login add x --harness codex --endpoint http://127.0.0.1:1/v1 --models m)
+  expect_code 2 "$?" "add with both a harness and an endpoint is a usage error"
+  out=$(run_login add x --login work --endpoint http://127.0.0.1:1/v1 --models m)
+  expect_code 2 "$?" "add with a login label and no harness is a usage error"
+  out=$(run_login add x --harness codex)
+  expect_code 2 "$?" "add with a harness and no models is a usage error"
+  assert_unchanged "the login refusals"
+  [ ! -s "$LOGIN_LOG" ] || fail "no edit may run a sign-in check: $(cat "$LOGIN_LOG")"
+
+  out=$(run_login set-model teach gpt-6-pro --replace gpt-6-sol)
+  expect_code 0 "$?" "set-model on a login sailor must succeed without a probe: $out"
+  assert_contains "$out" "note: teach is a login sailor on codex, so gpt-6-pro was not probed" "set-model must say it probed nothing"
+  assert_equals '["gpt-6-pro"]' "$(dispatch '.sailors.teach.models')" "set-model must swap the model"
+  assert_equals '[{"harness":"codex","sailor":"teach","model":"gpt-6-pro"},{"harness":"opencode","sailor":"tiller","model":"qwen-coder"}]' "$(dispatch '.rules[0].use')" "set-model --replace must move the login sailor's profile"
+  out=$(run_login add anne --harness kimi --models kimi-k3 --login work --title Anne --max-concurrent 2)
+  expect_code 0 "$?" "adding a login sailor must succeed: $out"
+  assert_contains "$out" "added sailor anne (placeholder) on its kimi login serving kimi-k3" "add must report the login"
+  assert_equals '{"title":"Anne","harness":"kimi","login":"work","status":"placeholder","models":["kimi-k3"],"max_concurrent":2}' "$(dispatch '.sailors.anne')" "add must register exactly the given fields"
+  out=$(run_login set anne --live)
+  expect_code 0 "$?" "set must find a login sailor: $out"
+  out=$(run_login retire anne)
+  expect_code 0 "$?" "retire must find a login sailor: $out"
+  assert_equals 'false' "$(dispatch '.sailors | has("anne")')" "retire must remove the login sailor"
+  [ ! -s "$LOGIN_LOG" ] || fail "no edit may run a sign-in check: $(cat "$LOGIN_LOG")"
+  [ ! -s "$CURL_LOG" ] || fail "no edit of a login sailor may probe: $(cat "$CURL_LOG")"
+  pass "a login sailor takes no OpenCode provider, warm-up, or first mate line; add, set, set-model, and retire edit one without a probe"
+}
+
+test_sync_projects_a_login_slot_and_keeps_it_off_the_first_mate() {
+  local out
+  make_sync_case synclogin "$HAND_MAP"
+  slot_registry '.slots.teach = {title: "Teach", harness: "codex", login: "chatgpt", model: "gpt-6-sol", grade: "specialist", facets: ["plan"], capacity: 1, homes: {firstmate: 1}, status: "live"}
+    | .slots.bonny = {harness: "kimi", model: "kimi-for-coding", grade: "sailor", capacity: 1, homes: {privateer: 1}, status: "live"}
+    | .slots.mary = {harness: "grok", login: "grok.com", model: "grok-4.7", grade: "sailor", paid: false, capacity: 1, homes: {firstmate: 1}, status: "placeholder"}'
+  out=$(run_sync sync "$REGISTRY" --home firstmate)
+  expect_code 0 "$?" "a sync with login slots must succeed: $out"
+  assert_equals '["bonsai-1","lookout","teach","mary"]' "$(dispatch '.sailors | keys_unsorted')" "the home must get its login slots in registry order and not another home's"
+  assert_equals '{"title":"Teach","harness":"codex","login":"chatgpt","status":"live","models":["gpt-6-sol"],"max_concurrent":1,"grade":"specialist","facets":["plan"]}' \
+    "$(dispatch '.sailors.teach')" "a login slot must become a login sailor with its harness, label, share, grade, and facets"
+  assert_equals '{"harness":"grok","login":"grok.com","status":"placeholder","models":["grok-4.7"],"max_concurrent":1,"grade":"sailor","paid":false}' \
+    "$(dispatch '.sailors.mary')" "a login placeholder must keep its status and paid flag"
+  assert_contains "$out" "synced home firstmate from $REGISTRY: bonsai-1, lookout, teach, mary" "sync must name the login sailors it gave the home"
+  run_sync validate >/dev/null || fail "the projected map must validate"
+  [ ! -s "$CURL_LOG" ] || fail "sync must probe nothing, but curl was called: $(cat "$CURL_LOG")"
+
+  make_privateer_sync_case synclogin-pv
+  slot_registry "$PRIVATEER_KEY"' | .slots.teach = {harness: "codex", model: "gpt-6-sol", facets: ["helm"], capacity: 1, homes: {privateer: 1}, status: "live"} | .privateer_first_mate = "teach"'
+  cp "$CASE_DIR/config/privateer" "$CASE_DIR/privateer.orig"
+  out=$(run_sync sync "$REGISTRY" --home privateer)
+  expect_code 1 "$?" "a login slot as the Privateer first mate must be refused: $out"
+  assert_contains "$out" "refused: slot teach is a login slot, and the first mate runs only on an endpoint sailor" "the first-mate refusal must name the login slot"
+  assert_unchanged "the login first-mate refusal"
+  cmp -s "$CASE_DIR/privateer.orig" "$CASE_DIR/config/privateer" || fail "a refused sync must leave config/privateer alone"
+  pass "sync projects a login slot into a login sailor with the home's share and refuses one as the Privateer first mate"
+}
+
 test_live_sailor_serving_the_model_passes_check
 test_endpoint_trailing_slash_is_not_doubled
 test_placeholder_is_refused_without_a_probe
@@ -1431,5 +1741,11 @@ test_sync_runs_only_where_the_home_hands_its_sailors_to_that_registry
 test_sync_refuses_a_malformed_registry_naming_the_slot
 test_sync_refuses_to_strand_a_running_task_or_a_rule
 test_sync_in_a_privateer_home_moves_the_first_mate_and_keeps_the_quarantine
+test_validate_and_list_know_login_sailors
+test_check_runs_a_login_sailors_sign_in_check_and_nothing_else
+test_pick_takes_a_login_sailor_by_grade_through_its_sign_in_check
+test_health_and_status_read_a_login_sailor_without_a_prompt
+test_login_sailors_take_no_provider_or_warm_up_and_add_registers_one
+test_sync_projects_a_login_slot_and_keeps_it_off_the_first_mate
 
 echo "# all fm-sailor tests passed"

@@ -573,6 +573,10 @@
       "audience": "maintainer-verification"
     },
     {
+      "path": "docs/verification/login-sailors.md",
+      "audience": "maintainer-verification"
+    },
+    {
       "path": "docs/verification/muse.md",
       "audience": "maintainer-verification"
     },

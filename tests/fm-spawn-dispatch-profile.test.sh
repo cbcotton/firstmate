@@ -38,8 +38,17 @@ SH
 make_spawn_fakebin() {
   local dir=$1 fakebin
   fakebin=$(fm_test_make_spawn_fakebin "$dir")
+  # Stands in for timeout as bin/fm-timeout-lib.sh calls it, `-k <n> <seconds>
+  # <command...>`, and as a bare `timeout <seconds> <command...>`.
   cat > "$fakebin/timeout" <<'SH'
 #!/usr/bin/env bash
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -k) shift 2 ;;
+    -*) shift ;;
+    *) break ;;
+  esac
+done
 shift
 exec "$@"
 SH
@@ -1226,6 +1235,96 @@ test_restricted_sailor_requires_the_sandbox() {
   expect_code 0 "$status" "a restricted sailor with the sandbox should launch"$'\n'"$out"
   assert_contains "$out" "sailor=tiller sandbox=seatbelt" "a restricted sailor must launch inside the sandbox"
   pass "a restricted sailor launches only inside the sailor sandbox"
+}
+
+# A login sailor is a worker app on its own subscription login; a fake codex
+# in the case's fakebin stands in for the sign-in check, which bin/fm-sailor.sh
+# runs under env -i, so the fake reads its signed-out toggle from the spawn's
+# throwaway HOME rather than from a variable.
+enable_login_sailors() {  # <home> <fakebin>
+  local home=$1 fakebin=$2
+  printf '%s\n' '{"sailors":{"teach":{"title":"Teach","harness":"codex","login":"chatgpt","status":"live","models":["gpt-6-sol"],"grade":"specialist"},"tiller":{"endpoint":"http://127.0.0.1:11234/v1","status":"live","models":["qwen-coder"]}},"default":{"harness":"codex","sailor":"teach","model":"gpt-6-sol"}}' \
+    > "$home/config/crew-dispatch.json"
+  cat > "$fakebin/codex" <<'SH'
+#!/usr/bin/env bash
+[ ! -e "$HOME/codex.down" ] || exit 1
+exit 0
+SH
+  chmod +x "$fakebin/codex"
+}
+
+test_login_sailor_launches_as_its_own_worker_app() {
+  local rec id out status launch
+  id=profile-login-sailor-l1
+  rec=$(make_spawn_case profile-login-sailor codex "$id")
+  read_case_record "$rec"
+  enable_login_sailors "$HOME_DIR" "$FAKEBIN_DIR"
+  : > "$HOME_DIR/config/fleet-ledger"
+  : > "$HOME_DIR/config/sailor-sandbox"
+  # The sailor commit identity hook keys on the sailor name, endpoint or login.
+  write_identity_map "$HOME_DIR" 'project Chris <{sailor}.chris@euroradar.nl>'
+
+  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR" --harness codex --sailor teach --effort high)
+  status=$?
+  expect_code 0 "$status" "a codex spawn on a signed-in login sailor should succeed"$'\n'"$out"
+  assert_equals "teach.chris@euroradar.nl" "$(git -C "$WT_DIR" config user.email)" "a login sailor's copy must commit under the sailor's own address"
+  assert_equals "" "$(git -C "$PROJ_DIR" config --worktree --get user.email 2>/dev/null || true)" "the primary checkout must not gain the login sailor's identity"
+  assert_grep "commit_email=teach.chris@euroradar.nl" "$HOME_DIR/state/$id.meta" "meta must record the login sailor's applied address"
+  assert_contains "$out" "spawned $id harness=codex kind=ship mode=no-mistakes yolo=off sailor=teach window=" "spawn must report the login sailor on its own harness, outside the sailor sandbox"
+  assert_meta_profile "$HOME_DIR/state/$id.meta" codex gpt-6-sol high
+  assert_grep "sailor=teach" "$HOME_DIR/state/$id.meta" "meta missing sailor=teach"
+  assert_grep "login=chatgpt" "$HOME_DIR/state/$id.meta" "meta missing the login label"
+  assert_equals '["teach","specialist"]' "$(jq -c 'select(.event == "task.dispatched") | [.sailor, .grade]' "$HOME_DIR/state/fleet-ledger.jsonl")" \
+    "the ledger's dispatch record must name the login sailor and its grade"
+  launch=$(cat "$LAUNCH_LOG")
+  assert_contains "$launch" "codex --model 'gpt-6-sol' -c 'model_reasoning_effort=\"high\"' --dangerously-bypass-approvals-and-sandbox" \
+    "a login sailor must launch as an ordinary codex worker on the sailor's model and effort"
+  assert_not_contains "$launch" "OPENCODE_CONFIG_CONTENT" "a login sailor takes no OpenCode provider"
+  assert_not_contains "$launch" "with-token" "a login sailor takes no token"
+  [ ! -e "$WT_DIR/.opencode/plugins/fm-sailor-system-fold.js" ] || fail "a login sailor launch must not write the OpenCode system-fold plugin"
+  pass "a login sailor launches as its own worker app on the sailor's model with its commit identity, recording the sailor and its login label"
+}
+
+test_login_sailor_requires_its_own_harness() {
+  local rec id out status
+  id=profile-login-harness-l2
+  rec=$(make_spawn_case profile-login-harness codex "$id")
+  read_case_record "$rec"
+  enable_login_sailors "$HOME_DIR" "$FAKEBIN_DIR"
+
+  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR" --harness opencode --sailor teach)
+  status=$?
+  expect_code 1 "$status" "a login sailor on opencode must be refused"
+  assert_contains "$out" "error: sailor teach is a login sailor on codex; --sailor teach requires --harness codex" "the refusal must name the sailor's harness"
+  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR" --harness kimi --sailor teach)
+  status=$?
+  expect_code 1 "$status" "a login sailor on another worker app must be refused"
+  assert_contains "$out" "error: sailor teach is a login sailor on codex; --sailor teach requires --harness codex" "the refusal must name the sailor's harness"
+  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR" --harness codex --sailor tiller)
+  status=$?
+  expect_code 1 "$status" "an endpoint sailor on codex must still be refused"
+  assert_contains "$out" "error: --sailor requires --harness opencode" "the endpoint sailor refusal must still name opencode"
+  [ ! -e "$HOME_DIR/state/$id.meta" ] || fail "a refused sailor spawn must leave no task record"
+  [ ! -s "$LAUNCH_LOG" ] || fail "a refused sailor spawn must launch nothing"
+  pass "--sailor on a login sailor requires that sailor's own harness, and an endpoint sailor still requires opencode"
+}
+
+test_signed_out_login_sailor_refuses_before_a_record_exists() {
+  local rec id out status
+  id=profile-login-signedout-l3
+  rec=$(make_spawn_case profile-login-signedout codex "$id")
+  read_case_record "$rec"
+  enable_login_sailors "$HOME_DIR" "$FAKEBIN_DIR"
+  mkdir -p "$HOME_DIR/user-home"
+  : > "$HOME_DIR/user-home/codex.down"
+
+  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR" --harness codex --sailor teach)
+  status=$?
+  expect_code 1 "$status" "a signed-out login sailor must refuse the spawn"
+  assert_contains "$out" "error: sailor teach cannot take task $id: sailor teach is signed out of codex: codex login status reports no login (exit 1)" "the refusal must carry the sign-in reason"
+  [ ! -e "$HOME_DIR/state/$id.meta" ] || fail "a refused sailor spawn must leave no task record"
+  [ ! -s "$LAUNCH_LOG" ] || fail "a refused sailor spawn must launch nothing"
+  pass "a signed-out login sailor refuses the spawn before any endpoint or record exists"
 }
 
 test_sandbox_leaves_non_sailor_opencode_launches_alone() {
@@ -2514,6 +2613,9 @@ test_token_sailor_launch_reads_its_token_at_launch
 test_sandbox_that_cannot_run_refuses_the_sailor
 test_restricted_sailor_requires_the_sandbox
 test_sandbox_leaves_non_sailor_opencode_launches_alone
+test_login_sailor_launches_as_its_own_worker_app
+test_login_sailor_requires_its_own_harness
+test_signed_out_login_sailor_refuses_before_a_record_exists
 test_native_effort_validator_keeps_axes_separate
 test_native_pi_ultra_is_explicit_and_model_scoped
 test_batch_preserves_native_ultra

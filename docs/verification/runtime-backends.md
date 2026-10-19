@@ -617,6 +617,30 @@ skip-runner: pi-signed is not installed, so its pin check was not exercised
 
 The guard submits no prompt and spends no tokens, so it runs by default wherever a runner is installed; rerun it after every Claude or Pi upgrade.
 
+## Login sailors
+
+`bin/fm-sailor.sh` decides whether a login sailor's worker app is signed in from vendor behavior: the exit status of `codex login status`, the presence of grok's `auth.json` and the exit status of `grok models`, and the presence of kimi's `kimi-code-env-*.json` credentials file plus, in `check` only, the exit status of one `kimi -p` test prompt.
+`tests/fm-login-sailors-live-e2e.test.sh` runs the real installed apps on the operator's own logins through a scratch home, projecting the three planned slots from a scratch slot registry and reading `health`, `status`, `check`, and `pick`, without spawning anything.
+[`login-sailors.md`](login-sailors.md) records the exact output.
+
+Verified 2026-10-19 on macOS 26.6 with codex-cli 0.163.0, kimi 2.2.0, and grok 1.0.62, each signed in.
+
+```sh
+FM_LOGIN_SAILORS_E2E=1 bash tests/fm-login-sailors-live-e2e.test.sh
+```
+
+```
+ok - sync projects the three login slots from a scratch registry into login sailors
+ok - codex codex-cli 0.163.0: health, status, check, and pick read the teach login as signed in, and check says so without printing a value
+ok - kimi 2.2.0: health, status, check, and pick read the bonny login as signed in, and check says so without printing a value
+ok - grok grok 1.0.62 (1474f9cbdd91) [stable]: health, status, check, and pick read the mary login as signed in, and check says so without printing a value
+ok - a login sailor takes no OpenCode provider
+# login sailors live guard checked: codex kimi grok
+```
+
+The signed-out verdict is covered only by the portable fakes in `tests/fm-sailor.test.sh`; no real app was signed out.
+The guard sends kimi one test prompt, so it is opt-in; rerun it after every codex, kimi, or grok upgrade.
+
 ## Codex hook trust
 
 Verified 2026-09-16 on codex-cli 0.151.0, macOS arm64, in a fresh linked worktree of this repository.
