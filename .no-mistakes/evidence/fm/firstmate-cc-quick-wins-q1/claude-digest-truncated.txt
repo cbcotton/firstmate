@@ -1,0 +1,29 @@
+FIRSTMATE SESSION-START HEADLINE (the digest below is NOT optional reading)
+FULL DIGEST: 29 lines / 2151 bytes. Claude Code shows only the first 2,000 characters of a large
+startup payload and saves the rest to a file: if this output was cut off, Read that saved file IN
+FULL before acting - 400 lines per Read call, offsets 1.
+lock: held - this session owns the fleet
+queued wakes: ? | open decisions: ?
+posture: unknown - fleet-state never ran or did not finish
+STARTUP TRUNCATED (exit 124): never ran: lock bootstrap wake-queue supervision-instructions read-once fleet-state network-checks privateer context next-step - rerun bin/fm-session-start.sh
+live tasks: unknown - fleet-state never ran or did not finish (see FLEET STATE / rerun)
+
+
+================================================================================
+SESSION START - /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.eMO9jL
+================================================================================
+
+LOCK
+--------------------------------------------------------------------------------
+lock acquired: harness pid 73944
+
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  STARTUP TRUNCATED - SESSION START HIT ITS 1s RUNTIME BOUND
+●  It stopped during the "lock" stage, so everything above is COMPLETE
+●  only up to that point.
+●  RECONCILE these stages before acting on anything they would have shown:
+●    lock bootstrap wake-queue supervision-instructions read-once fleet-state network-checks privateer context next-step
+●  Rerun bin/fm-session-start.sh now to finish taking the helm. If it truncates
+●  again, raise FM_SESSION_START_TIMEOUT and report the slow stage - a stage that
+●  cannot finish inside the bound is a fleet problem, not a reporting detail.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

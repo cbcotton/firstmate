@@ -1,0 +1,60 @@
+⏺ FIRSTMATE SESSION-START HEADLINE (the digest below is NOT optional reading)                                                            
+  FULL DIGEST: 38 lines / 2707 bytes. Claude Code shows only the first 2,000 characters of a large
+  startup payload and saves the rest to a file: if this output was cut off, Read that saved file IN                                                                                                     
+  FULL before acting - 400 lines per Read call, offsets 1.                                                                                                                        
+  lock: held - this session owns the fleet                                                                                            
+  queued wakes: ? | open decisions: ?                                                                                  
+  posture: unknown - fleet-state never ran or did not finish
+  STARTUP TRUNCATED (exit 124): never ran: bootstrap wake-queue supervision-instructions read-once fleet-state network-checks privateer context next-step - rerun bin/fm-session-start.sh
+  live tasks: unknown - fleet-state never ran or did not finish (see FLEET STATE / rerun)                                                                                                               
+                                                                                                                                                                                                        
+                                                                                                   
+  ================================================================================                
+  SESSION START (CONTEXT RE-EMIT) - /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.MAGTj4                                                                                                     
+  ================================================================================                                                                                                       
+  This session already took the helm at its own startup and has only lost its                                                                                                                           
+  context. Lock ownership is re-verified and the durable records below are                                                                                                                              
+  reprinted, but the sweeps startup already reconciled - project clone refresh,                                                                                                                         
+  secondmate convergence and liveness, pending remote handoff                                                                                                                            
+  retry, X-mode artifact writes, and stale Herdr child cleanup - are NOT repeated.                                                                                                                      
+  Queued wakes ARE still drained: they arrived after startup and are this turn work.               
+
+  LOCK                                                                                                                                                                                                  
+  --------------------------------------------------------------------------------                 
+  lock acquired: harness pid 39137                                                                 
+                                                                                                  
+  BOOTSTRAP                                                                                                                                                                                             
+  --------------------                                                                                                                                                                                  
+                                                                                                                                                                                         
+✻ Crunched for 14s · done 3:08 PM                                                        
+                                                                                                                                                                                                        
+❯ Test step, no tools: from the skills listing in your system context only, (1) is any skill named decision-hold-lifecycle listed? (2) quote verbatim the listed descriptions for firstmate-orca,       
+  process-event-sources and bootstrap-diagnostics.                                                                                                                                                      
+                                                                                                                                                                                                        
+⏺ Captain, this comes only from the skills listing in my context. No tools were used.                                                                                                                 
+                                                                                                                                                                                                        
+  (1) No skill named decision-hold-lifecycle is listed. The closest is captain-hold-lifecycle.
+                                                                                                                                                                                                        
+  (2) The listed descriptions, quoted exactly:                                                                                                                                                          
+                                                                                  
+  - firstmate-orca:                                                                  
+  ▎ Load when switching to Orca, spawning or supervising Orca-backed work, smoke-testing Orca backend behavior, debugging Orca task state, or reconciling Orca-backed task metadata. Operator checklist 
+  for Firstmate's Orca runtime backend.                                                       
+  - process-event-sources:                                                                    
+  ▎ Load before arming a long-polling source, before registering a deterministic condition-&gt;action watch, on any procevent &lt;adapter&gt; &lt;source-id&gt; &lt;sequence&gt; check wake, and on any 
+  process-event source stranded or process-event source failed to start check wake.
+  - bootstrap-diagnostics:                                                                    
+  ▎ Load whenever the session-start digest's bootstrap or network-checks section, or a standalone bin/fm-bootstrap.sh or bin/fm-startup-network.sh run, prints MISSING, MISSING_MANUAL,                 
+  PRESENTATION_UNAVAILABLE, BACKEND_INVALID, NEEDS_GH_AUTH, TANGLE, STARTUP_MEMORY_BUDGET, CREW_DISPATCH invalid, PRIVATEER, FLEET_SYNC, NETWORK_CHECKS, HOME_SUMMARY, BACKLOG_RECONCILE,               
+  SECONDMATE_SYNC, SECONDMATE_LIVENESS, SECONDMATE_HANDOFF, NUDGE_SECONDMATES, or FMX, or reports an interrupted backlog cleanup that may have left an endpoint or local copy. A silent bootstrap       
+  section, or any other BOOTSTRAP_INFO fact, means no skill load.                                                                                                                                       
+
+  The &gt; and &lt; in the process-event-sources description are copied as they appear in the listing, as HTML escapes for > and <.                                                                     
+                                                                                                                                                                                        
+✻ Crunched for 6s · done 3:09 PM                                                                                                                                                                        
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯                                                                                                                                                                        
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  01M5A1W8WHV1SRDJ9KFMV94F1K | Opus 5.5 | ctx 6% | $0.53
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← 1 agent   

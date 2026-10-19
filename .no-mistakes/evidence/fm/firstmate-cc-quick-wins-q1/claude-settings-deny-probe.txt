@@ -1,0 +1,4 @@
+### with --settings $LAB/config/claude-primary-settings.json (deny Agent,Task)
+AGENT_ABSENT
+### without --settings (same worktree)
+AGENT_PRESENT

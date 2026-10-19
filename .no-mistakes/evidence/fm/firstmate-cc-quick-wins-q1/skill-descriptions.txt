@@ -1,0 +1,30 @@
+ 259  afk                            Load when the captain invokes /afk or says they are going afk, when `state/.afk-contract` 
+  83  agent-skill-trigger-index      Load only when auditing or maintaining the complete agent-only skill trigger index.
+ 211  ahoy                           Recap visible session events and guide the captain through visibly unanswered decisions wh
+ 279  ask-user-authority             Load before deciding any ask-user finding. Single owner of finding-decision policy: decide
+ 117  away-quiet-supervision         Load whenever /afk or /quiet is invoked, an away or quiet record exists, or a marked away-
+ 326  bearings                       Use when the captain invokes /bearings or asks for a bearings report, morning brief, statu
+ 619  bootstrap-diagnostics          Load whenever the session-start digest's bootstrap or network-checks section, or a standal
+ 304  captain-hold-lifecycle         Load before treating an investigation, scout report, or structured or Lavish review as com
+ 254  castoff                        Load when the captain invokes /castoff (Cast Off) or asks for their terminal replies on th
+ 222  diagnostic-reasoning           Load before scoping a reported bug and before acting on a diagnostic report. Owns end-user
+ 295  firstmate-codexapp             Load before creating, reading, steering, archiving, debugging, or reviewing a Codex App vi
+ 284  firstmate-coding-guidelines    Load before editing firstmate's shared, tracked material per AGENTS.md section 1, whether 
+ 243  firstmate-orca                 Agent-only operator checklist for Firstmate's Orca runtime backend. Use when switching to 
+ 303  fmx-respond                    Load when Relay is enabled and a check wake carries "x-mention <request_id>", "x-mode-erro
+ 280  harness-adapters               Load before spawning or recovering a crewmate or secondmate, handling a trust dialog, send
+ 219  makefast                       Turn off the phone mirror when the captain invokes /makefast (Make Fast) or asks to stop s
+ 119  operational-home-layout        Load when locating, interpreting, or changing Firstmate home, config, data, state, project
+ 262  process-event-sources          Load before arming a long-polling source, before registering a deterministic condition->ac
+ 237  project-management             Load before adding, creating, cloning, registering, removing, or initializing a project, a
+ 290  quiet                          Load when the captain invokes /quiet or asks for quiet mode, quiet-while-present, or fewer
+ 195  quota-array-dispatch           Load when a crew-dispatch rule or default resolves to more than one profile candidate. Ran
+ 135  scout-completion               Load when a scout reports completion, presents a visual artifact for iteration, or is bein
+ 300  secondmate-provisioning        Load when creating, seeding, validating, launching, recovering, handing backlog to, pushin
+ 138  session-start-recovery         Load when the session-start digest reports unfinished checks, actionable diagnostics, reco
+ 108  ship-landing                   Load when a ship reports a PR or ready branch, when deciding or monitoring landing, and be
+ 264  stow                           Use when the captain invokes /stow (e.g. "stow what you've learned"), before a session res
+ 321  stuck-crewmate-recovery        Load when the session-start digest reports an ordinary direct report's endpoint dead or me
+ 269  task-intake                    Load before classifying or routing a captain request, writing a crewmate brief, dispatchin
+ 274  updatefirstmate                Use when the captain invokes /updatefirstmate (e.g. "update firstmate", "pull the latest f
+ 182  validation-supervision         Load when a ship starts or already has an active no-mistakes validation run, including a m

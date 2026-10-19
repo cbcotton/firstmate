@@ -1,0 +1,30 @@
+ 259 afk                            Load when the captain invokes /afk or says they are going af
+  83 agent-skill-trigger-index      Load only when auditing or maintaining the complete agent-on
+ 211 ahoy                           Recap visible session events and guide the captain through v
+ 279 ask-user-authority             Load before deciding any ask-user finding. Single owner of f
+ 117 away-quiet-supervision         Load whenever /afk or /quiet is invoked, an away or quiet re
+ 326 bearings                       Use when the captain invokes /bearings or asks for a bearing
+ 619 bootstrap-diagnostics          Load whenever the session-start digest's bootstrap or networ
+ 304 captain-hold-lifecycle         Load before treating an investigation, scout report, or stru
+ 254 castoff                        Load when the captain invokes /castoff (Cast Off) or asks fo
+ 222 diagnostic-reasoning           Load before scoping a reported bug and before acting on a di
+ 295 firstmate-codexapp             Load before creating, reading, steering, archiving, debuggin
+ 284 firstmate-coding-guidelines    Load before editing firstmate's shared, tracked material per
+ 233 firstmate-orca                 Load when switching to Orca, spawning or supervising Orca-ba
+ 303 fmx-respond                    Load when Relay is enabled and a check wake carries "x-menti
+ 280 harness-adapters               Load before spawning or recovering a crewmate or secondmate,
+ 219 makefast                       Turn off the phone mirror when the captain invokes /makefast
+ 119 operational-home-layout        Load when locating, interpreting, or changing Firstmate home
+ 262 process-event-sources          Load before arming a long-polling source, before registering
+ 237 project-management             Load before adding, creating, cloning, registering, removing
+ 290 quiet                          Load when the captain invokes /quiet or asks for quiet mode,
+ 195 quota-array-dispatch           Load when a crew-dispatch rule or default resolves to more t
+ 135 scout-completion               Load when a scout reports completion, presents a visual arti
+ 300 secondmate-provisioning        Load when creating, seeding, validating, launching, recoveri
+ 138 session-start-recovery         Load when the session-start digest reports unfinished checks
+ 108 ship-landing                   Load when a ship reports a PR or ready branch, when deciding
+ 264 stow                           Use when the captain invokes /stow (e.g. "stow what you've l
+ 321 stuck-crewmate-recovery        Load when the session-start digest reports an ordinary direc
+ 269 task-intake                    Load before classifying or routing a captain request, writin
+ 274 updatefirstmate                Use when the captain invokes /updatefirstmate (e.g. "update 
+ 182 validation-supervision         Load when a ship starts or already has an active no-mistakes

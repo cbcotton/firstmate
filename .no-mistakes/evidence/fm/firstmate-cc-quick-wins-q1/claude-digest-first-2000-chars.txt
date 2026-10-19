@@ -1,0 +1,43 @@
+FIRSTMATE SESSION-START HEADLINE (the digest below is NOT optional reading)
+FULL DIGEST: 439 lines / 26330 bytes. Claude Code shows only the first 2,000 characters of a large
+startup payload and saves the rest to a file: if this output was cut off, Read that saved file IN
+FULL before acting - 400 lines per Read call, offsets 1, 401.
+lock: held - this session owns the fleet
+queued wakes: 2 | open decisions: 1
+network checks: IN PROGRESS - none confirmed (bin/fm-startup-network.sh report)
+live tasks (41), dead or unreadable endpoints first:
+  task-alive-one DEAD
+  task-ghost-with-long-name-1 DEAD
+  task-ghost-with-long-name-10 DEAD
+  task-ghost-with-long-name-11 DEAD
+  task-ghost-with-long-name-12 DEAD
+  task-ghost-with-long-name-13 DEAD
+  task-ghost-with-long-name-14 DEAD
+  task-ghost-with-long-name-15 DEAD
+  task-ghost-with-long-name-16 DEAD
+  task-ghost-with-long-name-17 DEAD
+  task-ghost-with-long-name-18 DEAD
+  task-ghost-with-long-name-19 DEAD
+  task-ghost-with-long-name-2 DEAD
+  task-ghost-with-long-name-20 DEAD
+  task-ghost-with-long-name-21 DEAD
+  task-ghost-with-long-name-22 DEAD
+  task-ghost-with-long-name-23 DEAD
+  ... 24 more in FLEET STATE
+
+
+================================================================================
+SESSION START - /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.eMO9jL
+================================================================================
+
+LOCK
+--------------------------------------------------------------------------------
+lock acquired: harness pid 73944
+
+BOOTSTRAP
+--------------------------------------------------------------------------------
+BOOTSTRAP_INFO: lavish-axi >=0.1.80 enables confirmed board replies; this older compatible version retains the legacy reply path, but upgrade to prevent handing back a board before its reply is accepted
+
+WAKE QUEUE
+--------------------------------------------------------------------------------
+1792412967	1	signal	task-ghost-with-long-name-1.status	needs-decision: [key=li

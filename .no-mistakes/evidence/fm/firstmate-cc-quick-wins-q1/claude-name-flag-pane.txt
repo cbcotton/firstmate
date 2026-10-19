@@ -1,0 +1,9 @@
+ ▐▛███▛█   Claude Code v2.1.303
+▝▜██████▀  Opus 5.5 · Claude Max
+ ▝▝   ▝▝   ~/.no-mistakes/worktrees/e74e4e411ceb/01M5A1W8WHV1SRDJ9KFMV94F1K
+                                                             tmux detected · scroll with PgUp/PgDn · or add 'set -g mouse on' to ~/.tmux.conf for wheel scroll
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── task-lab-demo ─
+❯ Try "how does fm-privateer.test.sh work?"
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  01M5A1W8WHV1SRDJ9KFMV94F1K | Opus 5.5 | ctx ? | $0.00
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← 1 agent

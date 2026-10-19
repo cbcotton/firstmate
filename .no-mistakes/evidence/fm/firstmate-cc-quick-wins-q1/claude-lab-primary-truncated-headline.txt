@@ -1,0 +1,60 @@
+                                                                                                    
+⏺ Captain, the startup output said to read the saved file in full before acting, 400 lines per read starting at line 1. The digest is 300 lines, so one read-only call starting at line 1 covered all of
+  it. Nothing else was run or changed.                                                                                                                                                                  
+                                                                                                    
+  FLEET STATE task count: 17. The "Work under way" list has task-dead, task-extra-1 through task-extra-15, and task-live. That matches the 17 live tasks in the headline. All 17 are ship tasks marked  
+  alive. Only task-dead has status history, and it is waiting on an open decision to pick a library. The backlog file is reported ABSENT.
+                                                                                                                                                                                                        
+  Sections present in what I read:                                                                                                                                                                      
+  - CONTEXT: present, with a heading and five subsections. All five say ABSENT: data/projects.md, data/secondmates.md, data/captain.md, data/captain-shared.md, data/learnings.md.                      
+  - CAPTAIN: there is no standalone CAPTAIN heading. The captain files appear only as subsections inside CONTEXT, and both say ABSENT.                                                                  
+  - Learnings: there is no standalone heading either. data/learnings.md is a subsection inside CONTEXT and says ABSENT.
+                                                                                                    
+  The full digest has more beyond what the preview showed. None of this was acted on:                                                                                                                   
+  - There are 2 queued notifications and an instruction to clear them, then acknowledge with --ack-through 2.                                                                                         
+  - A warning says supervision is off because no watcher has reported in.                           
+  - Network checks were still in progress.                                                                                                                                                            
+  - The last section says the digest is complete, so I didn't re-read any of the files it covers.                                                                                                       
+                                                                                                                                                                                                        
+✻ Crunched for 13s · done 3:04 PM                                                                                                                                                                     
+                                                                                                                                                                                                        
+❯ Test step, read-only fleet: run exactly this one Bash command and show me its output verbatim in a code block, nothing else: FM_SESSION_START_TIMEOUT=2 FM_TIMEOUT_MECHANISM_OVERRIDE=bash            
+  bin/fm-session-start.sh --reemit | head -c 1600                                                                                                                                                       
+
+  Ran 1 shell command 
+
+⏺ FIRSTMATE SESSION-START HEADLINE (the digest below is NOT optional reading)                                                                                                                           
+  FULL DIGEST: 38 lines / 2707 bytes. Claude Code shows only the first 2,000 characters of a large                                                                                                      
+  startup payload and saves the rest to a file: if this output was cut off, Read that saved file IN
+  FULL before acting - 400 lines per Read call, offsets 1.
+  lock: held - this session owns the fleet                                                                                                                                                              
+  queued wakes: ? | open decisions: ? 
+  posture: unknown - fleet-state never ran or did not finish                                                                                                                                            
+  STARTUP TRUNCATED (exit 124): never ran: bootstrap wake-queue supervision-instructions read-once fleet-state network-checks privateer context next-step - rerun bin/fm-session-start.sh               
+  live tasks: unknown - fleet-state never ran or did not finish (see FLEET STATE / rerun)                                                                                                             
+                                                                                                                                                                                                        
+                                                                                                                                                                                  
+  ================================================================================                                                                                                
+  SESSION START (CONTEXT RE-EMIT) - /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.MAGTj4                                                                                                     
+  ================================================================================                                                                                                                    
+  This session already took the helm at its own startup and has only lost its                                                                                                                           
+  context. Lock ownership is re-verified and the durable records below are                                                                                                                          
+  reprinted, but the sweeps startup already reconciled - project clone refresh,                                                                                                                         
+  secondmate convergence and liveness, pending remote handoff                                                                                                                                         
+  retry, X-mode artifact writes, and stale Herdr child cleanup - are NOT repeated.                                                                                                                      
+  Queued wakes ARE still drained: they arrived after startup and are this turn work.                                                                                                                    
+
+  LOCK                                                                                                       
+  --------------------------------------------------------------------------------
+  lock acquired: harness pid 39137                                                                                                                                                                      
+
+  BOOTSTRAP
+  --------------------                                                                                                                                                                                  
+
+✻ Crunched for 14s · done 3:08 PM                                                
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯                                                                                                                                                                        
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  01M5A1W8WHV1SRDJ9KFMV94F1K | Opus 5.5 | ctx 6% | $0.49
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← 1 agent   
