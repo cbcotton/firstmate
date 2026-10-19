@@ -1261,10 +1261,15 @@ test_login_sailor_launches_as_its_own_worker_app() {
   enable_login_sailors "$HOME_DIR" "$FAKEBIN_DIR"
   : > "$HOME_DIR/config/fleet-ledger"
   : > "$HOME_DIR/config/sailor-sandbox"
+  # The sailor commit identity hook keys on the sailor name, endpoint or login.
+  write_identity_map "$HOME_DIR" 'project Chris <{sailor}.chris@euroradar.nl>'
 
   out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR" --harness codex --sailor teach --effort high)
   status=$?
   expect_code 0 "$status" "a codex spawn on a signed-in login sailor should succeed"$'\n'"$out"
+  assert_equals "teach.chris@euroradar.nl" "$(git -C "$WT_DIR" config user.email)" "a login sailor's copy must commit under the sailor's own address"
+  assert_equals "" "$(git -C "$PROJ_DIR" config --worktree --get user.email 2>/dev/null || true)" "the primary checkout must not gain the login sailor's identity"
+  assert_grep "commit_email=teach.chris@euroradar.nl" "$HOME_DIR/state/$id.meta" "meta must record the login sailor's applied address"
   assert_contains "$out" "spawned $id harness=codex kind=ship mode=no-mistakes yolo=off sailor=teach window=" "spawn must report the login sailor on its own harness, outside the sailor sandbox"
   assert_meta_profile "$HOME_DIR/state/$id.meta" codex gpt-6-sol high
   assert_grep "sailor=teach" "$HOME_DIR/state/$id.meta" "meta missing sailor=teach"
@@ -1277,7 +1282,7 @@ test_login_sailor_launches_as_its_own_worker_app() {
   assert_not_contains "$launch" "OPENCODE_CONFIG_CONTENT" "a login sailor takes no OpenCode provider"
   assert_not_contains "$launch" "with-token" "a login sailor takes no token"
   [ ! -e "$WT_DIR/.opencode/plugins/fm-sailor-system-fold.js" ] || fail "a login sailor launch must not write the OpenCode system-fold plugin"
-  pass "a login sailor launches as its own worker app on the sailor's model, recording the sailor and its login label"
+  pass "a login sailor launches as its own worker app on the sailor's model with its commit identity, recording the sailor and its login label"
 }
 
 test_login_sailor_requires_its_own_harness() {

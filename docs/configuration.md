@@ -1499,7 +1499,7 @@ Each line maps a registered project name to a `Name <address>` template whose ad
 gpr3d Chris <{sailor}.chris@euroradar.nl>
 ```
 
-- `fm-spawn.sh` applies it to every crewmate or scout launched with `--sailor` on a mapped project, and a relaunch on the same copy keeps it; with no file, or no line for the project, a spawn behaves as before, and a launch without a sailor gets no identity.
+- `fm-spawn.sh` applies it to every crewmate or scout launched with `--sailor` on a mapped project, a login sailor's worker app included, and a relaunch on the same copy keeps it; with no file, or no line for the project, a spawn behaves as before, and a launch without a sailor gets no identity.
   A fresh spawn whose copy gets no identity removes any worktree-scoped `user.name` and `user.email` an earlier sailor task left in that reused copy, so it commits under the repository's usual identity.
 - The identity is set in that copy's own worktree configuration (`extensions.worktreeConfig` with `git config --worktree`), so the repository's shared `user.*` settings, the primary checkout, and global configuration stay unchanged.
   A restricted sailor's permission profile denies `git -c user.*` and environment-prefixed commits, which is why firstmate sets the identity at launch rather than leaving it to the sailor.
