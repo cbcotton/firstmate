@@ -11,12 +11,15 @@
 # of living in its own backend session.
 #
 # This scoped PreToolUse guard is the shipped mechanism.
-# Claude primaries should also use an untracked per-home local
-# `permissions.deny` list as hardening for known Claude delegation tools,
-# because it removes them from the model's schema entirely.
+# Claude primaries should also use a home-only `permissions.deny` list,
+# passed with `claude --settings <file>`, as hardening for known Claude
+# delegation tools, because it removes them from the model's schema entirely.
 # That deny list must not be tracked: it is Claude-only rather than
 # harness-agnostic, and tracked project settings propagate into linked
 # worktrees where they disarm legitimate crewmates.
+# It must not sit in .claude/settings.local.json either: in a git worktree
+# Claude Code reads the main checkout's root settings.local.json, so that file
+# reaches every linked worktree too (docs/subagent-guard.md).
 # The tracked Claude matcher is deliberately `.*`: a stem-enumerating matcher
 # would reintroduce the fail-open-by-enumeration problem this guard exists to
 # solve, because any future tool name outside the matcher would never reach this
@@ -89,10 +92,12 @@ Usage: fm-subagent-pretool-check.sh [--tool <tool-name>] [--claude]
 With no --tool, reads a PreToolUse-style JSON payload on stdin (Claude/Codex
 tool_name, or Grok toolName).
 Denies a delegation-SHAPED tool name in a genuine primary home.
-Claude primaries may also add an untracked per-home permissions.deny list that
-removes known delegation tools from the model schema before this hook is needed.
-Do not ship that Claude-only list in tracked project settings, because linked
-worktrees inherit it and legitimate crewmates would lose their delegation tools.
+Claude primaries may also pass a home-only permissions.deny list with
+`claude --settings <file>` that removes known delegation tools from the model
+schema before this hook is needed.
+Do not ship that Claude-only list in tracked project settings or in
+.claude/settings.local.json, because linked worktrees read both and legitimate
+crewmates would lose their delegation tools.
 This hook remains as the shipped guard for future delegation-shaped names
 outside any local fixed list.
 Fires only in a genuine firstmate primary home; it is a silent no-op in a
