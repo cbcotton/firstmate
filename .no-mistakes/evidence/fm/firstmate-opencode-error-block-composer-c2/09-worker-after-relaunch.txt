@@ -1,0 +1,45 @@
+  ┃
+  ┃  # Definition of done                                                                                                        New session - 2026-10-19T16:05:51.
+  ┃  Write your findings to `/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.EI3ldA/home/data/scout1/report.md`.        755Z
+  ┃  The report must stand alone: what you did, what you found, the evidence (commands run, output, file:line references),
+  ┃  and what you recommend.                                                                                                     Context
+  ┃  If your deliverable is a visual artifact the captain will review and iterate on, use the lavish-axi rule: arm your          0 tokens
+  ┃  board with bin/fm-procevent-lavish.sh arm <artifact.html> --for <task-id>; never run lavish-axi poll yourself. Re-arm       0% used
+  ┃  with the reply after each nonterminal round to acknowledge it, route the board feedback through your steering inbox,        $0.00 spent
+  ┃  write needs-decision [key=board-review] with the live board URL when the captain owes a decision, and stop at
+  ┃  session_ended or an empty End without re-arming - acknowledge that final round with bin/fm-procevent.sh handled <source-    LSP
+  ┃  id> <sequence> to conclude and retire your board.                                                                           LSPs are disabled
+  ┃  Before reporting done, read and follow `/Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M5AB5AJ658Y2Z8FMAGYT5RTW/.
+  ┃  agents/skills/captain-hold-lifecycle/SKILL.md` and pass its shared completion gate for the report and any visual review.
+  ┃  When the report is complete, append `done [at=<epoch>]: {one-line conclusion}` to the status file and stop.
+  ┃  If your findings reveal work that should ship (e.g. you reproduced a bug and the fix is clear), say so in the report;
+  ┃  firstmate may promote this task in place, and you would then receive mode-specific ship instructions as a follow-up
+  ┃  message.
+  ┃
+  ┃  ## Progress note (2026-10-19T16:05:42Z)
+  ┃
+  ┃  This task was relaunched. Continue from here; the local copy and every
+  ┃  uncommitted change are exactly as the previous worker left them.
+  ┃
+  ┃  First, check your instruction inbox: list /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.EI3ldA/home/state/
+  ┃  scout1.inbox/*.msg, act on
+  ┃  each message in numeric order, then mv each handled file into
+  ┃  /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.EI3ldA/home/state/scout1.inbox/handled/. A steer sent before
+  ┃  the relaunch survives there.
+  ┃
+  ┃  lab test
+  ┃
+
+  ┃
+  ┃  System message must be at the beginning.
+  ┃
+
+     ▣  Build · Stub Model
+
+  ┃
+  ┃
+  ┃
+  ┃  Build · Stub Model Stub                                                                                                     ~/.treehouse/proj-5a2b36/1/proj
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+   /Users/cotton/.treehouse/proj-5a2b36/1/proj                                                    tab agents  ctrl+p commands    • OpenCode 1.18.33
+

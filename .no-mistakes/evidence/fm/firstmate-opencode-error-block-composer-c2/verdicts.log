@@ -1,0 +1,6 @@
+01-169col-error-idle: cursor=39 size=169x45 base=pending target=empty
+02-169col-error-draft: cursor=39 size=169x45 base=pending target=pending
+03-169col-error-after-clear: cursor=39 size=169x45 base=pending target=empty
+04-110col-error-idle: cursor=39 size=110x45 base=empty target=empty
+05-110col-error-draft: cursor=39 size=110x45 base=pending target=pending
+06-169col-success-idle: cursor=39 size=169x45 base=pending target=empty

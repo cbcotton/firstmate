@@ -1,0 +1,45 @@
+  ┃  message in numeric order, then acknowledge each handled message by moving it: `mv '/var/folders/3c/
+  ┃  4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.EI3ldA/home/state/scout1.inbox'/NNN.msg '/var/folders/3c/                          OK
+  ┃  4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.EI3ldA/home/state/scout1.inbox'/handled/`.
+  ┃  The move IS the acknowledgement: without it firstmate rings again and eventually treats you as stuck. An empty or           Context
+  ┃  absent inbox needs no action.                                                                                               0 tokens
+  ┃                                                                                                                              0% used
+  ┃  # Definition of done                                                                                                        $0.00 spent
+  ┃  Write your findings to `/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.EI3ldA/home/data/scout1/report.md`.
+  ┃  The report must stand alone: what you did, what you found, the evidence (commands run, output, file:line references),       LSP
+  ┃  and what you recommend.                                                                                                     LSPs are disabled
+  ┃  If your deliverable is a visual artifact the captain will review and iterate on, use the lavish-axi rule: arm your
+  ┃  board with bin/fm-procevent-lavish.sh arm <artifact.html> --for <task-id>; never run lavish-axi poll yourself. Re-arm
+  ┃  with the reply after each nonterminal round to acknowledge it, route the board feedback through your steering inbox,
+  ┃  write needs-decision [key=board-review] with the live board URL when the captain owes a decision, and stop at
+  ┃  session_ended or an empty End without re-arming - acknowledge that final round with bin/fm-procevent.sh handled <source-
+  ┃  id> <sequence> to conclude and retire your board.
+  ┃  Before reporting done, read and follow `/Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M5AB5AJ658Y2Z8FMAGYT5RTW/.
+  ┃  agents/skills/captain-hold-lifecycle/SKILL.md` and pass its shared completion gate for the report and any visual review.
+  ┃  When the report is complete, append `done [at=<epoch>]: {one-line conclusion}` to the status file and stop.
+  ┃  If your findings reveal work that should ship (e.g. you reproduced a bug and the fix is clear), say so in the report;
+  ┃  firstmate may promote this task in place, and you would then receive mode-specific ship instructions as a follow-up
+  ┃  message.
+  ┃
+
+     OK
+
+     ▣  Build · Stub Model · 5.0s
+
+  ┃
+  ┃  continue
+  ┃
+
+  ┃
+  ┃  System message must be at the beginning.
+  ┃
+
+     ▣  Build · Stub Model
+
+  ┃
+  ┃
+  ┃
+  ┃  Build · Stub Model Stub                                                                                                     ~/.treehouse/proj-5a2b36/1/proj
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+   /Users/cotton/.treehouse/proj-5a2b36/1/proj                                                    tab agents  ctrl+p commands    • OpenCode 1.18.33
+
