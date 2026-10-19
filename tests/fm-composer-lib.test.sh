@@ -782,6 +782,65 @@ test_matrix_opencode_wrapped_footer() {
   pass "matrix: opencode's wrapped footer and idle hint read empty, and drafts beside them still refuse"
 }
 
+# oc_wide_row <bar-sgr> <box-bg> <content> [sidebar-text]: one row of an
+# OpenCode 1.18.33 session view in a pane wide enough for its right-hand
+# session sidebar, styled as the live 169-column capture draws it. The row
+# opens on the page background, the bar and its box carry their own, and a
+# two-column gutter returns to the page background before the sidebar panel's
+# own background carries its gray text.
+oc_wide_row() {
+  printf '%s[48;2;10;10;10m  %s[%sm┃%s[38;2;255;255;255m%s[48;2;%sm%s%s[48;2;10;10;10m  %s[48;2;20;20;20m  %s[38;2;128;128;128m%s%s[38;2;255;255;255m\n' \
+    "$ESC" "$ESC" "$1" "$ESC" "$ESC" "$2" "$3" "$ESC" "$ESC" "$ESC" "${4:-}" "$ESC"
+}
+
+# oc_wide_screen <thread> <input> <sidebar-row...>: a wide OpenCode view whose
+# composer's input row holds <input>. <thread> is `error`, for a model-server
+# error block above the composer, or anything else for none; the sidebar rows
+# land on the composer's last three rows, where the live sidebar's working
+# directory and version sit. The composer's footer shares its row with them.
+oc_wide_screen() {
+  local thread=$1 input=$2 blue='38;2;92;156;245' red='38;2;224;108;117' side1=${3:-} side2=${4:-} side3=${5:-}
+  if [ "$thread" = error ]; then
+    oc_wide_row "$red" '20;20;20' ''
+    oc_wide_row "$red" '20;20;20' "  ${ESC}[38;2;128;128;128mNot Found: System message must be at the beginning."
+    oc_wide_row "$red" '20;20;20' ''
+    printf '\n     ▣  Build · Stub Model\n'
+  else
+    printf '\n     OK\n\n     ▣  Build · Stub Model · 386ms\n'
+  fi
+  oc_wide_row "$blue" '30;30;30' ''
+  oc_wide_row "$blue" '30;30;30' "$input" "$side1"
+  oc_wide_row "$blue" '30;30;30' '' "$side2"
+  oc_wide_row "$blue" '30;30;30' "  ${ESC}[38;2;92;156;245mBuild${ESC}[38;2;255;255;255m ${ESC}[38;2;128;128;128m·${ESC}[38;2;255;255;255m ${ESC}[38;2;238;238;238mStub Model${ESC}[38;2;255;255;255m ${ESC}[38;2;128;128;128mStub" "$side3"
+  printf '  %s[48;2;10;10;10m%s[38;2;92;156;245m╹%s[38;2;30;30;30m▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀\n' "$ESC" "$ESC" "$ESC"
+}
+
+test_matrix_opencode_sidebar_text() {
+  # OpenCode draws its right-hand session sidebar once the pane is wide and the
+  # session has a message. Its bottom block (the working directory wrapped over
+  # rows, then the version) lands on the composer's own rows, and that gray
+  # text after the box was read as typed input: a 169-column pane with an empty
+  # composer read `pending`, with or without an error block in the thread, the
+  # verdict that refused `fm-control.sh <id> relaunch`.
+  local t screen s1 s2 s3
+  t="${ESC}[38;2;238;238;238m"
+  s1='/Users/crew/.treehouse/firstmate-1/' s2='-firstmate/session/' s3='scratchpad/work'
+  screen=$(oc_wide_screen ok '' "$s1" "$s2" "$s3")
+  assert_screen "opencode sidebar beside an empty composer on tmux" empty "$CAPS_TMUX" "$screen" 5
+  screen=$(oc_wide_screen error '' "$s1" "$s2" "$s3")
+  assert_screen "opencode sidebar and error block beside an empty composer on tmux" empty "$CAPS_TMUX" "$screen" 6
+  # The error block is thread furniture in its own run: with no sidebar it
+  # never reads pending.
+  screen=$(oc_wide_screen error '')
+  assert_screen "opencode error block above an empty composer on tmux" empty "$CAPS_TMUX" "$screen" 6
+  # Counterweight: typed text in the box still refuses beside the sidebar.
+  screen=$(oc_wide_screen ok "  ${t}refactor the parser please" "$s1" "$s2" "$s3")
+  assert_screen "opencode draft beside the sidebar on tmux" pending "$CAPS_TMUX" "$screen" 5
+  screen=$(oc_wide_screen error "  ${t}refactor the parser please" "$s1" "$s2" "$s3")
+  assert_screen "opencode draft under an error block beside the sidebar on tmux" pending "$CAPS_TMUX" "$screen" 6
+  pass "matrix: opencode's sidebar text beside an empty composer reads empty, and a draft there still refuses"
+}
+
 test_matrix_grok_titled_bottom_border() {
   # Grok 1.0.5 widened its titled BOTTOM border three columns past the top and
   # content rows. This is the idle capture from issue #3436; Herdr has no
@@ -1059,6 +1118,7 @@ test_matrix_pi_separated_needs_identity
 test_matrix_pi_dollar_status_footer_is_empty
 test_matrix_opencode_leftbar_signals
 test_matrix_opencode_wrapped_footer
+test_matrix_opencode_sidebar_text
 test_matrix_grok_titled_bottom_border
 test_matrix_kimi_bordered_shell_glyph_box
 test_matrix_claude_inside_zellij_ansi_dump
