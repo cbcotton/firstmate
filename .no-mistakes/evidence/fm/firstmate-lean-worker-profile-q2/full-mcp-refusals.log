@@ -1,0 +1,7 @@
+$ fm-spawn.sh labrefuse-scout projects/notes --scout --harness codex --full-mcp
+error: --full-mcp requires --harness claude, the one harness whose workers launch with a lean MCP surface
+exit=1
+$ fm-spawn.sh labrefuse-mate --secondmate --full-mcp
+error: --full-mcp applies to crewmate and scout spawns only; a secondmate always keeps the full MCP surface
+exit=1
+ls: /private/tmp/fmlab.ZGvoNm/home/state/labrefuse-scout.meta: No such file or directory

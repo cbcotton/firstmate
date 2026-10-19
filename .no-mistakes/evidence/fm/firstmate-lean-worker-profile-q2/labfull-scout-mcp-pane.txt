@@ -1,0 +1,22 @@
+   Manage MCP servers
+   16 servers
+     User MCPs (/Users/cotton/.claude.json)
+   ❯ ✔ openart                         17 tools
+     claude.ai
+     ✔ claude.ai Claude Docs           8 tools
+     ⚠ claude.ai Gmail                 needs authentication
+     ⚠ claude.ai Google Calendar       needs authentication
+     ⚠ claude.ai Google Drive          needs authentication
+     → Show unused connectors          2 hidden
+     Built-in MCPs (always available)
+     ◯ computer-use
+     ⚠ plugin:design:atlassian         needs authentication
+     ⚠ plugin:design:figma             needs authentication                          
+     ◯ plugin:design:gmail             not configured                                                                                                                                                                    
+     ◯ plugin:design:google calendar   not configured                                                                                                                                                                     
+     ⚠ plugin:design:intercom          needs authentication                                                                                                                                                           
+     ⚠ plugin:design:linear            needs authentication                                                                                                                                                               
+     ⚠ plugin:design:notion            needs authentication
+     ⚠ plugin:design:slack             needs authentication
+   https://code.claude.com/docs/en/mcp for help
+   ↑/↓ to navigate · Enter to confirm · Esc to cancel                                                                                                                                                                       

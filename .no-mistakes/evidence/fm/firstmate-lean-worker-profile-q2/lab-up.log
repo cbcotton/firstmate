@@ -1,0 +1,13 @@
+lab: /private/tmp/fmlab.ZGvoNm (tear down with: bin/fm-live-lab.sh down /private/tmp/fmlab.ZGvoNm)
+tree: 16aa3ea4705d4bac8e19c4c5d7b8c8bf898602b2 from /Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M59RTXZJRGP511CJJVP4SD4Q
+spawned lab435100cabe3c-worker harness=claude kind=ship mode=local-only yolo=on window=firstmate:fm-lab435100cabe3c-worker worktree=/private/tmp/fmlab.ZGvoNm/treehouse/.treehouse/notes-8ba5e7/1/notes
+gate: /private/tmp/fmlab.ZGvoNm/home/data/lab435100cabe3c-worker/gate (touch, then message the worker to resume)
+primary: claude --setting-sources project,local --model sonnet --effort medium --permission-mode auto
+ok primary: claude pid 36167 in /private/tmp/fmlab.ZGvoNm/home
+ok probe: the primary answered LABREADY-435100cabe3c
+ok trust: /private/tmp/fmlab.ZGvoNm/home is trusted in the Claude store
+fail host: supervision host pid 58812 runs (expected none)
+ok watcher: live watcher with a fresh beacon
+ok worker: lab435100cabe3c-worker parked on /private/tmp/fmlab.ZGvoNm/home/data/lab435100cabe3c-worker/gate
+ok treehouse: ~/.treehouse unchanged
+not ready after 400s; the lab is left up for inspection: bin/fm-live-lab.sh pane /private/tmp/fmlab.ZGvoNm, then bin/fm-live-lab.sh down /private/tmp/fmlab.ZGvoNm

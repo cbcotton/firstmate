@@ -1,0 +1,15 @@
+ok - non-claude harnesses do not receive the claude CLAUDE_CONFIG_DIR prefix
+ok - a claude task launch establishes only Firstmate's task control channels through the system prompt
+ok - a persistent claude secondmate keeps its supervisor contract without a task-worker authority overlay
+ok - fm-spawn: a Claude launch longer than 1024 bytes is delivered intact through the staging path
+ok - a claude crewmate launch carries the attribution-off policy in its own settings
+ok - keep-ai-trailers omits Claude attribution settings and the pane strip hooks
+ok - keep-ai-trailers is inherited so a secondmate's crew launch keeps AI trailers
+ok - a claude secondmate launch carries the attribution-off policy too
+ok - claude ship and scout launches load no inherited MCP server by default
+ok - --full-mcp keeps the inherited MCP surface, is recorded on the task, and reaches batch pairs
+ok - a lean claude launch keeps a project's committed .mcp.json servers, and --full-mcp still restores everything
+ok - a persistent claude secondmate keeps the full MCP surface
+ok - --full-mcp refuses a non-claude harness, a raw launch command, and a secondmate
+ok - active crew-dispatch profile does not block secondmate launches
+# all fm-spawn-dispatch-profile tests passed

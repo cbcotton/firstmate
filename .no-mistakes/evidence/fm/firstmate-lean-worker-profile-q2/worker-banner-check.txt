@@ -1,0 +1,3 @@
+lean worker transcript: /Users/cotton/.claude/projects/-private-tmp-fmlab-ZGvoNm-treehouse--treehouse-notes-8ba5e7-1-notes/fc1d9f71-2597-41fc-b97b-5a15e175bb11.jsonl
+banner markers (Agent ergonomic|hook_success|startup hook): 0
+captain settings SessionStart guards:

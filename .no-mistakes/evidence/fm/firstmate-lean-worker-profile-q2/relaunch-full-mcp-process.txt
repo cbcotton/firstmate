@@ -1,0 +1,1 @@
+claude --permission-mode auto --add-dir /private/tmp/fmlab.ZGvoNm/home/state/operational-inbox --add-dir /private/tmp/fmlab.ZGvoNm/home/state/labfull-scout.inbox --add-dir /private/tmp/fmlab.ZGvoNm/home/data/labfull-scout --add-dir /private/tmp/fmlab.ZGvoNm/home/.agents/skills --settings {"feedbackDrafts":"off","attribution":{"commit":"","pr":"","sessionUrl":false}} 

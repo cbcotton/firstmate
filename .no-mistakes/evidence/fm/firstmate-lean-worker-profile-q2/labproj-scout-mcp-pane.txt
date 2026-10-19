@@ -1,0 +1,8 @@
+   Manage MCP servers                                                                
+   2 servers                                                                                                                                                                                                             
+     Built-in MCPs (always available)                                                                                                                                                                                 
+   ❯ ◯ computer-use                                                                                                                                                                                                       
+     ✘ lab-project-docs
+   ※ Run claude --debug to see error logs
+   https://code.claude.com/docs/en/mcp for help
+   ↑/↓ to navigate · Enter to confirm · Esc to cancel                                                                                                                                                                       
