@@ -76,6 +76,7 @@ Default model: grok-4.7
 drwx------@ 3 cotton  staff    96 Oct 19 18:59 ~/.kimi-code/credentials
 ```
 
+`health` and `status` read only `codex login status`, `~/.grok/auth.json`, and the kimi credentials file, within `FM_SAILOR_PROBE_TIMEOUT`, so a heartbeat never waits on a vendor endpoint; `grok models` and the kimi test prompt run only in `check`, within `FM_SAILOR_LOGIN_TIMEOUT` and `FM_SAILOR_SMOKE_TIMEOUT`.
 The kimi credentials directory held one `kimi-code-env-*.json` file, and `kimi -p "Reply with the single word OK." --output-format text` from an empty scratch directory exited 0 within a few seconds, which is the test prompt `check` sends before each kimi task.
 
 ## Signed-out behavior

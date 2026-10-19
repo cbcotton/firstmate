@@ -1274,7 +1274,9 @@ test_sync_refuses_a_malformed_registry_naming_the_slot() {
 .slots.stoker += {harness: "claude", model: "m"}~slot stoker harness claude is not one of codex, kimi, grok
 .slots.stoker += {harness: "codex", model: "m", auth_env: "X"}~slot stoker is a login slot, which takes no auth_env, unlisted_models, or model_settings
 .slots.stoker.login = "chatgpt"~slot stoker login names a sign-in label, which only a login slot carries
-.slots.stoker += {harness: "codex", model: "m", login: 1}~slot stoker login must be a non-empty string
+.slots.stoker += {harness: "codex", model: "m", login: 1}~slot stoker login must be a non-empty string without spaces or quotes
+.slots.stoker += {harness: "codex", model: "m", login: "ChatGPT Plus"}~slot stoker login must be a non-empty string without spaces or quotes
+.slots.stoker += {harness: "codex", model: "m", login: "x\nsailor=other"}~slot stoker login must be a non-empty string without spaces or quotes
 .slots.stoker += {harness: "codex", model: "m", capacity: 0}~slot stoker capacity must be a positive whole number
 .slots.lookout.server = "ghost"~slot lookout names server ghost, which $CASE_DIR/servers.json does not list
 .slots["bonsai-1"].homes.firstmate = 3~slot bonsai-1 shares 4 tasks among its homes, above its capacity of 3
@@ -1465,8 +1467,10 @@ test_validate_and_list_know_login_sailors() {
 {"sailors":{"x":{"harness":"codex","auth_env":"OPENAI_API_KEY","status":"live","models":["m"]}}}~sailor x is a login sailor, which takes no auth_env, unlisted_models, model_settings, or host
 {"sailors":{"x":{"harness":"kimi","host":"this Mac","status":"live","models":["m"]}}}~sailor x is a login sailor, which takes no auth_env, unlisted_models, model_settings, or host
 {"sailors":{"x":{"endpoint":"http://127.0.0.1:1/v1","login":"chatgpt","status":"live","models":["m"]}}}~sailor x login names a sign-in label, which only a login sailor carries
-{"sailors":{"x":{"harness":"codex","login":1,"status":"live","models":["m"]}}}~sailor x login must be a non-empty string
-{"sailors":{"x":{"harness":"codex","login":"","status":"live","models":["m"]}}}~sailor x login must be a non-empty string
+{"sailors":{"x":{"harness":"codex","login":1,"status":"live","models":["m"]}}}~sailor x login must be a non-empty string without spaces or quotes
+{"sailors":{"x":{"harness":"codex","login":"","status":"live","models":["m"]}}}~sailor x login must be a non-empty string without spaces or quotes
+{"sailors":{"x":{"harness":"codex","login":"ChatGPT Plus","status":"live","models":["m"]}}}~sailor x login must be a non-empty string without spaces or quotes
+{"sailors":{"x":{"harness":"codex","login":"x\nsailor=other","status":"live","models":["m"]}}}~sailor x login must be a non-empty string without spaces or quotes
 {"sailors":{"x":{"harness":"codex","status":"live","models":["m"]}},"default":{"harness":"opencode","sailor":"x","model":"m"}}~sailor x profile must use harness codex
 {"sailors":{"x":{"harness":"grok","status":"live","models":["m"]}},"default":{"harness":"kimi","sailor":"x","model":"m"}}~sailor x profile must use harness grok
 {"sailors":{"x":{"endpoint":"http://127.0.0.1:1/v1","status":"live","models":["m"]}},"default":{"harness":"codex","sailor":"x","model":"m"}}~sailor x profile must use harness opencode
@@ -1581,7 +1585,7 @@ test_pick_takes_a_login_sailor_by_grade_through_its_sign_in_check() {
 }
 
 test_health_and_status_read_a_login_sailor_without_a_prompt() {
-  local out
+  local out start
   make_login_case login-health "$LOGIN_MAP"
   out=$(run_login health)
   expect_code 0 "$?" "health must succeed: $out"
@@ -1597,6 +1601,20 @@ test_health_and_status_read_a_login_sailor_without_a_prompt() {
   assert_contains "$out" "teach live answering harness=codex tasks=0/1 grade=specialist models=gpt-6-sol(signed-in) login=chatgpt" "status must show a signed-in login sailor"
   assert_contains "$out" "bonny live answering harness=kimi tasks=0/1 grade=sailor models=kimi-for-coding(signed-in)" "status must omit the label of a login sailor without one"
   assert_not_contains "$(cat "$LOGIN_LOG")" "kimi" "status must never send kimi a prompt"
+  assert_not_contains "$(cat "$LOGIN_LOG")" "grok models" "health and status must never run grok, which reaches its vendor"
+
+  : > "$LOGIN_HOME/codex.sleep"
+  : > "$LOGIN_HOME/grok.sleep"
+  start=$SECONDS
+  out=$(FM_SAILOR_PROBE_TIMEOUT=1 FM_SAILOR_LOGIN_TIMEOUT=30 run_login health)
+  [ $((SECONDS - start)) -lt 4 ] || fail "health must bound a slow sign-in check by the probe timeout, not the login timeout: took $((SECONDS - start))s"
+  assert_contains "$out" "teach down login:codex" "health must read a codex that does not answer within the probe timeout as down"
+  assert_contains "$out" "mary up login:grok" "health must read grok by its auth.json alone"
+  start=$SECONDS
+  out=$(FM_SAILOR_PROBE_TIMEOUT=1 FM_SAILOR_LOGIN_TIMEOUT=30 run_login status)
+  [ $((SECONDS - start)) -lt 4 ] || fail "status must bound a slow sign-in check by the probe timeout, not the login timeout: took $((SECONDS - start))s"
+  assert_contains "$out" "teach live not-answering harness=codex" "status must read a codex that does not answer within the probe timeout as not answering"
+  rm "$LOGIN_HOME/codex.sleep" "$LOGIN_HOME/grok.sleep"
 
   : > "$LOGIN_HOME/codex.down"
   rm "$LOGIN_HOME/.kimi-code/credentials/kimi-code-env-0123abcd.json"
@@ -1608,7 +1626,7 @@ test_health_and_status_read_a_login_sailor_without_a_prompt() {
   assert_contains "$out" "teach live not-answering harness=codex tasks=1/1 grade=specialist models=gpt-6-sol(signed-out) login=chatgpt" "status must show a signed-out login sailor and its tasks"
   assert_contains "$out" "bonny live not-answering harness=kimi tasks=0/1 grade=sailor models=kimi-for-coding(signed-out)" "status must show kimi as signed out without its file"
   assert_not_contains "$out" "leaked-key" "status must never print a value from the environment"
-  pass "health and status read a login sailor by its sign-in check alone, up or answering when signed in, and never send kimi a prompt"
+  pass "health and status read a login sailor by its local sign-in evidence within the probe timeout, up or answering when signed in, and never run grok or send kimi a prompt"
 }
 
 test_login_sailors_take_no_provider_or_warm_up_and_add_registers_one() {

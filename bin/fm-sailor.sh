@@ -17,18 +17,22 @@
 # `login` is a label for the account, never a credential. This script never
 # reads, prints, or copies a stored login: every sign-in check runs the worker
 # app itself, under `env -i` with HOME, PATH, and, when set, TMPDIR, USER, and
-# LOGNAME, so an ambient API key never stands in for the login. The checks:
+# LOGNAME, so an ambient API key never stands in for the login. check, before
+# a spawn, runs the full check:
 #   codex: `codex login status` exits 0 within FM_SAILOR_LOGIN_TIMEOUT seconds
 #     (default 30);
 #   grok: ${GROK_HOME:-~/.grok}/auth.json exists and `grok models` exits 0
 #     within that bound;
 #   kimi: a credentials file ~/.kimi-code/credentials/kimi-code-env-*.json
-#     exists; check alone also sends `kimi -p` one test prompt, which must
-#     exit 0 within FM_SAILOR_SMOKE_TIMEOUT seconds (default 120), from an
-#     empty scratch directory, so a stale login surfaces before a worker is
-#     launched on it rather than inside its first turn. That prompt is the
-#     one request these commands send a login sailor; health and status never
-#     send it.
+#     exists and `kimi -p` answers one test prompt with exit 0 within
+#     FM_SAILOR_SMOKE_TIMEOUT seconds (default 120), from an empty scratch
+#     directory, so a stale login surfaces before a worker is launched on it
+#     rather than inside its first turn. That prompt is the one request these
+#     commands send a login sailor.
+# health and status read only local, network-free sign-in evidence, so a
+# periodic tick never waits on a vendor endpoint: `codex login status` exits 0
+# within FM_SAILOR_PROBE_TIMEOUT seconds, and for grok and kimi the auth.json
+# or credentials file above exists.
 # An app that is not installed, times out, or exits non-zero reads as signed
 # out, and every reason names the app and never a value.
 #
@@ -119,8 +123,7 @@
 #   5. GET <endpoint>/models answers within FM_SAILOR_PROBE_TIMEOUT seconds
 #      (default 3) with an OpenAI-style model list that includes <model>, or,
 #      for a sailor with unlisted_models, with any model list.
-# For a login sailor, steps 4 and 5 are its sign-in check (above), with the
-# kimi test prompt. It prints `ok: ...` and exits 0, or prints `refused: ...`
+# For a login sailor, steps 4 and 5 are its full sign-in check (above). It prints `ok: ...` and exits 0, or prints `refused: ...`
 # and exits 1. When the model list carries a `loaded` flag, the ok line says
 # whether the model is loaded or only listed. No probe here or in status or
 # health ever asks an endpoint for a completion, so none spends a paid
@@ -171,8 +174,8 @@
 # and an ungraded sailor's line omits it. A sailor missing its token is not
 # probed: its line reads no-token in place of the answer and ends with
 # auth_env=<variable>. A login sailor's line carries harness=<harness> in
-# place of endpoint=<url>, answering or not-answering by its sign-in check
-# without the kimi test prompt, each model as signed-in or signed-out, and
+# place of endpoint=<url>, answering or not-answering by its local sign-in
+# evidence (above), each model as signed-in or signed-out, and
 # ends with login=<label> when it has one. Every sailor is
 # probed at once, so the run takes about one probe timeout however many are
 # down. It exits 0 whatever the sailors answer.
@@ -185,8 +188,8 @@
 # FM_SAILOR_PROBE_TIMEOUT seconds, the longest matching baseURL winning; any
 # other sailor is up when GET <endpoint>/models does. A sailor missing its
 # token is down without a probe. A login sailor's line reads `<sailor> up
-# login:<harness>` or `<sailor> down login:<harness>` by its sign-in check
-# without the kimi test prompt, so the periodic watch sends no prompt. Every
+# login:<harness>` or `<sailor> down login:<harness>` by its local sign-in
+# evidence (above), so the periodic watch sends no prompt and no request. Every
 # sailor is probed at once, so the whole run takes about one probe timeout
 # however many there are. bin/fm-watch.sh turns its changes into wakes. It
 # exits 0 whatever the sailors answer.
@@ -302,7 +305,7 @@
 #     server or harness without a model or a model without either, a slot
 #     with both, a harness outside codex, kimi, and grok, a login slot with
 #     auth_env, unlisted_models, or model_settings, a login label on a slot
-#     without a harness or that is not a non-empty string, a server the
+#     without a harness or that is not safe text (no spaces or quotes), a server the
 #     mlx-serve registry does not list exactly once or whose baseURL is not
 #     http(s), a capacity or share that is not a whole number, a share for a
 #     home `homes` does not name, shares above the capacity, a grade outside
@@ -505,7 +508,7 @@ validate_file() {
       elif ($s | has("harness")) and (($s.harness | type) != "string" or ($login | index($s.harness)) == null) then "sailor \($n) harness must be one of \($login | join(", "))"
       elif ($s | has("harness")) and ($s | has("auth_env") or has("unlisted_models") or has("model_settings") or has("host")) then "sailor \($n) is a login sailor, which takes no auth_env, unlisted_models, model_settings, or host"
       elif ($s | has("login")) and (($s | has("harness")) | not) then "sailor \($n) login names a sign-in label, which only a login sailor carries"
-      elif ($s | has("login")) and (($s.login | type) != "string" or ($s.login | length) == 0) then "sailor \($n) login must be a non-empty string"
+      elif ($s | has("login")) and (($s.login | safe_text) | not) then "sailor \($n) login must be a non-empty string without spaces or quotes"
       elif (["live", "placeholder"] | index($s.status)) == null then "sailor \($n) status must be live or placeholder"
       elif ($s.models | type) != "array" or ($s.models | length) == 0 then "sailor \($n) needs a non-empty models list"
       elif ($s.models | all(safe_text)) | not then "sailor \($n) models must be non-empty strings without spaces or quotes"
@@ -678,20 +681,21 @@ login_env() {
   [ -z "${LOGNAME:-}" ] || CLEAN_ENV+=("LOGNAME=$LOGNAME")
 }
 
-# login_up <harness> [smoke]: whether the worker app is signed in, by the
-# sign-in check the header describes; with `smoke`, kimi must also answer a
-# test prompt. Returns 1 with LOGIN_REASON set when it is not.
+# login_up <harness> [full]: whether the worker app is signed in, by its local
+# sign-in evidence within the probe timeout, or with `full` by the full check
+# the header describes. Returns 1 with LOGIN_REASON set when it is not.
 login_up() {
-  local harness=$1 smoke=${2:-} bin rc grok_home scratch
+  local harness=$1 full=${2:-} bin rc grok_home scratch bound=$PROBE_TIMEOUT
   LOGIN_REASON=
+  [ "$full" != full ] || bound=$LOGIN_TIMEOUT
   login_env
   bin=$(command -v "$harness" 2>/dev/null) || { LOGIN_REASON="$harness is not installed"; return 1; }
   case "$harness" in
     codex)
-      fm_run_timed "$LOGIN_TIMEOUT" "${CLEAN_ENV[@]}" "$bin" login status >/dev/null 2>&1 </dev/null
+      fm_run_timed "$bound" "${CLEAN_ENV[@]}" "$bin" login status >/dev/null 2>&1 </dev/null
       rc=$?
       if fm_timed_out "$rc"; then
-        LOGIN_REASON="codex login status did not answer within $LOGIN_TIMEOUT seconds"
+        LOGIN_REASON="codex login status did not answer within $bound seconds"
         return 1
       fi
       [ "$rc" = 0 ] || { LOGIN_REASON="codex login status reports no login (exit $rc)"; return 1; }
@@ -699,6 +703,7 @@ login_up() {
     grok)
       grok_home=${GROK_HOME:-${HOME:-}/.grok}
       [ -f "$grok_home/auth.json" ] || { LOGIN_REASON="no $grok_home/auth.json, so grok holds no login"; return 1; }
+      [ "$full" = full ] || return 0
       fm_run_timed "$LOGIN_TIMEOUT" "${CLEAN_ENV[@]}" "GROK_HOME=$grok_home" "$bin" models >/dev/null 2>&1 </dev/null
       rc=$?
       if fm_timed_out "$rc"; then
@@ -710,7 +715,7 @@ login_up() {
     kimi)
       set -- "${HOME:-}"/.kimi-code/credentials/kimi-code-env-*.json
       [ -f "$1" ] || { LOGIN_REASON="no credentials file under ${HOME:-}/.kimi-code/credentials, so kimi holds no login"; return 1; }
-      [ "$smoke" = smoke ] || return 0
+      [ "$full" = full ] || return 0
       scratch=$(mktemp -d "${TMPDIR:-/tmp}/fm-sailor-smoke.XXXXXX") || { LOGIN_REASON="cannot create a scratch directory for the kimi test prompt"; return 1; }
       (cd "$scratch" && fm_run_timed "$SMOKE_TIMEOUT" "${CLEAN_ENV[@]}" "$bin" -p "Reply with the single word OK." --output-format text >/dev/null 2>&1 </dev/null)
       rc=$?
@@ -742,7 +747,7 @@ cmd_check() {
   fi
   if [ -n "$harness" ]; then
     load_timeouts
-    login_up "$harness" smoke || refuse "sailor $sailor is signed out of $harness: $LOGIN_REASON"
+    login_up "$harness" full || refuse "sailor $sailor is signed out of $harness: $LOGIN_REASON"
     echo "ok: sailor $sailor runs $model on its $harness login ($busy of $max tasks busy; signed in)"
     return 0
   fi
@@ -929,7 +934,7 @@ cmd_status() {
 }
 
 # probe_up <target>: whether a health target answers: for `login:<harness>`,
-# the worker app's sign-in check; otherwise whether GET <target> answers
+# the worker app's local sign-in evidence; otherwise whether GET <target> answers
 # without an HTTP error status within the probe timeout.
 probe_up() {
   case "$1" in
@@ -1500,6 +1505,7 @@ registry_problem() {
   jq -nr --argjson reg "$1" --argjson srv "$2" --argjson grades "$SAILOR_GRADES" --argjson login "$LOGIN_HARNESSES" --arg file "$SERVERS_FILE" '
     def whole: type == "number" and . == floor;
     def name: type == "string" and test("^[a-z][a-z0-9]*(-[a-z0-9]+)*$");
+    def safe_text: type == "string" and length > 0 and (test("[[:space:][:cntrl:]\"'"'"'\\\\]") | not);
     [$srv.servers[]? | select(type == "object")] as $servers
     | def slot_bad($homes; $n; $s):
         [$servers[] | select(.id? == $s.server)] as $match
@@ -1515,7 +1521,7 @@ registry_problem() {
           elif $bound | not then empty
           elif ($s | has("harness")) and (($s.harness | type) != "string" or ($login | index($s.harness)) == null) then "slot \($n) harness \($s.harness | tostring) is not one of \($login | join(", "))"
           elif ($s | has("harness")) and ($s | has("auth_env") or has("unlisted_models") or has("model_settings")) then "slot \($n) is a login slot, which takes no auth_env, unlisted_models, or model_settings"
-          elif ($s | has("login")) and (($s.login | type) != "string" or ($s.login | length) == 0) then "slot \($n) login must be a non-empty string"
+          elif ($s | has("login")) and (($s.login | safe_text) | not) then "slot \($n) login must be a non-empty string without spaces or quotes"
           elif ($s | has("server")) and ($match | length) == 0 then "slot \($n) names server \($s.server | tostring), which \($file) does not list"
           elif ($s | has("server")) and ($match | length) > 1 then "slot \($n) names server \($s.server), which \($file) lists more than once"
           elif ($s | has("server")) and (($match[0].baseURL | type) != "string" or ($match[0].baseURL | test("^https?://[^/]") | not)) then "slot \($n) is on server \($s.server), whose baseURL \($match[0].baseURL | tostring) is not an http(s) URL"

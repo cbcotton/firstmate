@@ -5,8 +5,9 @@
 # while it stays down, and writes one sailor.state fleet-ledger event per
 # change. The sailor's endpoint belongs to a stub mlx-serve registry entry, so
 # the watch reads the server's healthPath, and a login sailor on a fake codex
-# is read by its sign-in check alone. bin/fm-sailor.sh owns the probe and
-# docs/configuration.md ("Named sailors") the contract.
+# is read by its local sign-in check alone, bounded by the probe timeout.
+# bin/fm-sailor.sh owns the probe and docs/configuration.md ("Named sailors")
+# the contract.
 set -u
 
 # shellcheck source=tests/wake-helpers.sh
@@ -244,6 +245,7 @@ make_login_case() {
   cat > "$dir/fakebin/codex" <<'SH'
 #!/usr/bin/env bash
 printf 'codex %s\n' "$*" >> "$HOME/codex.log"
+[ ! -e "$HOME/codex.sleep" ] || sleep 20
 [ ! -e "$HOME/codex.down" ] || exit 1
 exit 0
 SH
@@ -280,9 +282,24 @@ tiller up" "$(sort "$state/.sailor-health" 2>/dev/null)" "the watch must record 
   pass "watch: a login sailor signing out and back in wakes exactly twice, by its sign-in check alone"
 }
 
+test_login_sailor_check_is_bounded_by_the_probe_timeout() {
+  local dir
+  start_stub
+  set_health 200
+  dir=$(make_login_case login-slow)
+
+  HOME="$dir/home" quiet_leg "$dir" signed-in
+  drain_leg "$dir" signed-in
+  : > "$dir/home/codex.sleep"
+  HOME="$dir/home" FM_SAILOR_PROBE_TIMEOUT=1 FM_SAILOR_LOGIN_TIMEOUT=60 waking_leg "$dir" stalled
+  assert_equals "check: sailor teach down" "$(cat "$dir/watch-stalled.out")" "a codex that stalls past the probe timeout must read as down on the next tick, not after the login timeout"
+  pass "watch: a stalled login sailor's sign-in check is bounded by the probe timeout, not the login timeout"
+}
+
 test_sailor_flipping_up_down_up_wakes_exactly_twice
 test_sailor_first_seen_down_wakes_once
 test_home_without_sailors_stays_silent
 test_login_sailor_signing_out_wakes_once_without_a_prompt
+test_login_sailor_check_is_bounded_by_the_probe_timeout
 
 echo "# all fm-watch-sailor-health tests passed"
