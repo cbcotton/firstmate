@@ -493,6 +493,35 @@ jobs:
             exit 1
           }
 
+          # The liveness probe, its relaunch, and a doorbell send are the same
+          # main-shell read on stock Bash, so each blocks and must still stop.
+          probe_output=$(FM_TEST_ONLY=test_term_stops_a_watcher_blocked_in_the_liveness_probe \
+            /bin/bash tests/fm-watch-triage.test.sh)
+          printf '%s\n' "$probe_output"
+          probe_count=$(printf '%s\n' "$probe_output" | grep -c '^ok - ')
+          [ "$probe_count" -eq 1 ] || {
+            echo "::error::expected 1 liveness-probe TERM bash 3.2 regression, got $probe_count"
+            exit 1
+          }
+
+          relaunch_output=$(FM_TEST_ONLY=test_term_stops_a_watcher_blocked_in_the_liveness_relaunch \
+            /bin/bash tests/fm-watch-triage.test.sh)
+          printf '%s\n' "$relaunch_output"
+          relaunch_count=$(printf '%s\n' "$relaunch_output" | grep -c '^ok - ')
+          [ "$relaunch_count" -eq 1 ] || {
+            echo "::error::expected 1 liveness-relaunch TERM bash 3.2 regression, got $relaunch_count"
+            exit 1
+          }
+
+          doorbell_output=$(FM_TEST_ONLY=test_term_stops_a_watcher_blocked_in_a_doorbell_send \
+            /bin/bash tests/fm-watch-triage.test.sh)
+          printf '%s\n' "$doorbell_output"
+          doorbell_count=$(printf '%s\n' "$doorbell_output" | grep -c '^ok - ')
+          [ "$doorbell_count" -eq 1 ] || {
+            echo "::error::expected 1 doorbell-send TERM bash 3.2 regression, got $doorbell_count"
+            exit 1
+          }
+
           # The fork-free hot-path helpers must stay byte-identical to the
           # commands they replace under stock Bash 3.2, which lacks the
           # printf %(...)T clock and falls back to date.
