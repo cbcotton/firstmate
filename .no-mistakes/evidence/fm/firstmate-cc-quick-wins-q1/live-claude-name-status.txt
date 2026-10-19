@@ -1,0 +1,15 @@
+✻ Churned for 1s · done 12:43 PM
+▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔
+   Settings  Status   Config   Usage   Stats
+   Version:           2.1.303
+   Session name:      task-q1-probe
+   Session ID:        db763b1e-bee4-44a8-81c0-f2d9f9a58b71
+   Session kind:      interactive
+   cwd:               /private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-lab.u3BE27/scratch
+   Login method:      Claude Max account
+   Cloud sessions:    Not set up · /web-setup to connect GitHub
+   Model:             claude-opus-5-5
+   MCP servers:       2 connected, 11 need auth, 1 disabled, 2 failed · /mcp
+   Setting sources:   User settings
+   Auto mode server:  Enabled
+   Esc to cancel

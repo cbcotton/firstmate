@@ -1,0 +1,39 @@
+    s/-private-var-folders-3c-4w5d0nf515l-hw4zg0pcvq880000gn-T-fm-lab-u3BE27-checkout/715863ea-4429-4297-adbb-6b314bb92a94/tool-results/hook-607be386-06c7-4997-a99a-7e8d7649b2e8-stdout.txt. I haven't
+    read it because you said not to run tools, so a skill named later in the section would not show up here.
+  - The skill pointer is in the always-loaded rules. Those standing instructions, not the startup output, say to load session-start-recovery when the startup report shows actionable diagnostics. The
+    TANGLE warning would count.
+  - I left the branch alone. I didn't run the switch-back command. It changes the main local copy, and this is a no-tools probe.
+✻ Sautéed for 10s · done 12:33 PM
+❯ Now act on your post-compaction startup context exactly as its instructions require (you may use tools; this is a disposable lab home, do not spawn crew or touch git branches). When done, report
+  which skills you loaded and which line told you to load each.
+  Read 1 file
+⏺ Skill(bootstrap-diagnostics)
+  ⎿  Successfully loaded skill
+⏺ Skill(session-start-recovery)
+  ⎿  Successfully loaded skill
+⏺ Captain, I've worked through the post-compaction startup output. The only thing it asks for is putting the main local copy back on main, and I didn't do that because you said not to touch git
+  branches. Nothing else needed action.
+  Skills loaded, and what told me to load each
+  1. bootstrap-diagnostics: line 31 of the full startup output says, right after the TANGLE line: Load the bootstrap-diagnostics skill before acting on the diagnostic line(s) above. That line was past
+     the 2KB preview cut, so it only showed up once I read the saved file in full, as line 2 of the output tells you to.
+  2. session-start-recovery: no line in the startup output names it. I loaded it because the project instructions (AGENTS.md section 3) say to load it whenever the startup output reports actionable
+     problems, and the TANGLE line counts. It also says the lavish-axi notice needs no skill.
+  What each item asked for, and what I did
+  - Branch problem (TANGLE). The skill's step is to switch the main local copy from fm/tangle-probe back to main with the printed command, then re-check that branch in an isolated copy. The skill
+    calls this a safe branch switch that loses nothing. I didn't run it or the re-check, so the main local copy is still on fm/tangle-probe and the warning will keep coming back until it's switched.
+  - Review tool version (lavish-axi). This is information only. An older compatible version is installed, and visual reviews work on the older path. Upgrading to 0.1.80 or later is optional, and I
+    didn't install anything.
+  - Waiting notifications and decisions. There were none waiting and no open decisions, so there was nothing to acknowledge.
+  - Monitoring. On this setup it restarts on its own at the end of each turn, so there was nothing for me to start.
+  - Network checks. They finished: GitHub sign-in is fine.
+  - Missing records. The task list, project list, captain preferences and learnings files don't exist yet. The instructions only require rebuilding the project list before handing out work, and none
+    is being handed out, so I left them as they are.
+  Still open
+  - Branch switch. If you want the switch done, give the word and I'll run that one command.
+  - Workers with no task-list entries. The three demo workers are running, but none has a matching entry in the task list. They'll need to be squared up before any new work goes out.
+✻ Sautéed for 22s · done 12:35 PM
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  checkout | Opus 5.5 | ctx 6% | $0.87
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← 1 agent

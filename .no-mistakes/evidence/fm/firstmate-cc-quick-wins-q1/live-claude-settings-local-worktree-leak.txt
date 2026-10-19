@@ -1,0 +1,3 @@
+### claude -p in linked worktree /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.u3BE27/leakwt (no .claude dir in the worktree; main checkout has untracked .claude/settings.local.json denying Agent,Workflow,Monitor)
+Bash
+Read

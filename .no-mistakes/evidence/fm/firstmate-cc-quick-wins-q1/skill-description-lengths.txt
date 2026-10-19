@@ -1,0 +1,29 @@
+ 262 changed afk
+  83         agent-skill-trigger-index
+ 211         ahoy
+ 282 changed ask-user-authority
+ 117         away-quiet-supervision
+ 329 changed bearings
+ 622 changed bootstrap-diagnostics
+ 340 changed captain-hold-lifecycle
+ 257 changed castoff
+ 275         diagnostic-reasoning
+ 298 changed firstmate-codexapp
+ 287 changed firstmate-coding-guidelines
+ 243         firstmate-orca
+ 306 changed fmx-respond
+ 283 changed harness-adapters
+ 222         makefast
+ 119         operational-home-layout
+ 265 changed process-event-sources
+ 320         project-management
+ 293 changed quiet
+ 252         quota-array-dispatch
+ 135         scout-completion
+ 303 changed secondmate-provisioning
+ 138         session-start-recovery
+ 108         ship-landing
+ 267 changed stow
+ 349 changed stuck-crewmate-recovery
+ 277 changed updatefirstmate
+ 182         validation-supervision

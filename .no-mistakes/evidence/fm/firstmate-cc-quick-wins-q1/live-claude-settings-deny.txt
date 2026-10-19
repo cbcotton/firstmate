@@ -1,0 +1,9 @@
+### without --settings
+Agent
+Bash
+Read
+Workflow
+Monitor
+### with --settings config/claude-primary-settings.json (deny Task,Agent,Workflow,Monitor)
+Bash
+Read

@@ -1,0 +1,30 @@
+✻ Cogitated for 17s · done 12:30 PM
+❯ /compact
+  ⎿  Compacted (ctrl+o to see full summary)
+  ⎿  Referenced file AGENTS.md
+❯ Test probe, do not run any tools: after this compaction, quote the BOOTSTRAP section lines of the re-emitted startup context verbatim, and name which skill (if any) that context tells you to load
+  for them.
+⏺ Captain, the BOOTSTRAP section as it appears in the preview I received after compaction is quoted below. The preview stops right after the TANGLE line, so there may be more BOOTSTRAP lines that I
+  can't see:
+  BOOTSTRAP
+  --------------------------------------------------------------------------------
+  BOOTSTRAP_INFO: lavish-axi >=0.1.80 enables confirmed board replies; this older compatible version retains the legacy reply path, but upgrade to prevent handing back a board before its reply is
+  accepted
+  TANGLE: primary checkout on feature branch 'fm/tangle-probe' (expected 'main'); the work is safe on that ref - restore the primary with: git -C
+  /private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-lab.u3BE27/checkout checkout main, then re-validate the branch in a proper worktree
+  ...
+  Which skill it says to load: none in the visible lines. The BOOTSTRAP_INFO line only recommends upgrading the review tool. The TANGLE line gives a command to switch the main local copy back to main
+  but names no skill.
+  Caveats:
+  - The full output is in a file. The preview header says the full digest is 198 lines / 15681 bytes, and Claude Code's wrapper reports 15KB. The full output was saved to /Users/cotton/.claude/project
+    s/-private-var-folders-3c-4w5d0nf515l-hw4zg0pcvq880000gn-T-fm-lab-u3BE27-checkout/715863ea-4429-4297-adbb-6b314bb92a94/tool-results/hook-607be386-06c7-4997-a99a-7e8d7649b2e8-stdout.txt. I haven't
+    read it because you said not to run tools, so a skill named later in the section would not show up here.
+  - The skill pointer is in the always-loaded rules. Those standing instructions, not the startup output, say to load session-start-recovery when the startup report shows actionable diagnostics. The
+    TANGLE warning would count.
+  - I left the branch alone. I didn't run the switch-back command. It changes the main local copy, and this is a no-tools probe.
+✻ Sautéed for 10s · done 12:33 PM
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  checkout | Opus 5.5 | ctx 4% | $0.67
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← 1 agent

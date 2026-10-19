@@ -1,0 +1,37 @@
+  ●  WORKTREE TANGLE - PRIMARY CHECKOUT IS ON A FEATURE BRANCH
+  ●  /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-lab.u3BE27/checkout is on 'fm/tangle-probe', not its default branch 'main'.
+  ●  A crewmate likely branched/committed in the primary instead of its own worktree.
+  ●  The work is SAFE on the 'fm/tangle-probe' ref.
+  ●  Restore the primary to 'main':
+  ●      git -C /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-lab.u3BE27/checkout checkout main
+  ●  then re-validate 'fm/tangle-probe' in a proper isolated worktree.
+  ●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  WARNING: queued wakes pending - drain them with bin/fm-wake-drain.sh before anything else.
+  Skill loaded: process-event-sources. Line 2 of the output named it: wake drain: a process-event row is queued - load process-event-sources to read and acknowledge it.
+  What I didn't do:
+  - The event itself: I didn't read its result or mark it handled. Under the skill, that would mean reading the stored result for lab-src number 1, interpreting it with the process-event script's
+    classify command, then recording it with bin/fm-procevent.sh handled lab-src 1.
+  - The queue acknowledgement: I didn't run the printed --ack-through 1 command, because the drain says to run it only after handling is complete. The notification is still queued and will appear
+    again on the next drain until it's handled and acknowledged.
+  - The branch switch: the warning that the main local copy is on fm/tangle-probe came back. I left it alone because you said not to touch git branches.
+✻ Brewed for 16s · done 12:38 PM
+⏺ Stop hook feedback
+  Ran 1 shell command
+⏺ Same single event. Reading its stored result as data and asking the adapter to classify it:
+  Ran 2 shell commands
+⏺ The event points to a missing stored result with no registered source, so there's nothing to read or classify. That check counts as the handling, so I'm acknowledging the queued notification now to
+  stop it from waking the session again.
+  Ran 1 shell command
+⏺ Captain, the fake external-process notification came back on its own. I handled it this time and cleared it from the queue, and nothing in the fleet changed.
+  - Reloaded skill: the notification again named process-event-sources (check: process-event result captured: procevent:lab-src:1 - load process-event-sources). I followed that skill, which was
+    already loaded earlier in this session.
+  - Nothing behind it: draining the queue showed the same single event (lab-src number 1). The stored result it points to doesn't exist, the folder those results go in doesn't exist, and no
+    external-process source is registered. With no result to read, interpret, or act on, I skipped the skill's per-result "mark handled" step rather than record one for a source that doesn't exist.
+  - Queue cleared: with that confirmed, I ran the acknowledgement command the queue printed, and it succeeded. The notification won't come back, and monitoring restarts on its own when this turn ends.
+  - Branch still unchanged: the main local copy is still on fm/tangle-probe instead of main. As you instructed, I left that alone, so the warning will keep showing until the branch is switched.
+✻ Brewed for 28s · done 12:38 PM
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  checkout | Opus 5.5 | ctx 7% | $1.24
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← 1 agent

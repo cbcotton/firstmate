@@ -1,0 +1,25 @@
+⏺ Captain, the fake external-process notification came back on its own. I handled it this time and cleared it from the queue, and nothing in the fleet changed.
+  - Reloaded skill: the notification again named process-event-sources (check: process-event result captured: procevent:lab-src:1 - load process-event-sources). I followed that skill, which was
+    already loaded earlier in this session.
+  - Nothing behind it: draining the queue showed the same single event (lab-src number 1). The stored result it points to doesn't exist, the folder those results go in doesn't exist, and no
+    external-process source is registered. With no result to read, interpret, or act on, I skipped the skill's per-result "mark handled" step rather than record one for a source that doesn't exist.
+  - Queue cleared: with that confirmed, I ran the acknowledgement command the queue printed, and it succeeded. The notification won't come back, and monitoring restarts on its own when this turn ends.
+  - Branch still unchanged: the main local copy is still on fm/tangle-probe instead of main. As you instructed, I left that alone, so the warning will keep showing until the branch is switched.
+✻ Brewed for 28s · done 12:38 PM
+❯ Test probe, no tools: from your available-skills listing, (a) is a skill named decision-hold-lifecycle listed? (b) quote verbatim the listed descriptions of bootstrap-diagnostics and
+  process-event-sources.
+⏺ Captain, I can't answer either part from a skills listing, because none is visible to me in this conversation now. It was probably dropped in the compaction.
+  (a) decision-hold-lifecycle: I can't confirm whether it's listed, and I won't guess. The project instructions (AGENTS.md sections 8 and 10) only ever name a similar skill, captain-hold-lifecycle,
+  for held captain decisions. I haven't seen decision-hold-lifecycle named anywhere.
+  (b) Descriptions of bootstrap-diagnostics and process-event-sources: I can't quote them, because I don't have their listing descriptions. What I do have is the bodies those two skills loaded when I
+  ran them, which are different text:
+  - process-event-sources has a trigger paragraph near the top, but that's from the skill body, not the listing.
+  - The bootstrap-diagnostics body that loaded starts straight into its instructions, with no description line.
+  Quoting either as a "listed description" would be making it up.
+  If you want the exact listing text, I can read each skill's file and its front matter in a turn where tools are allowed.
+✻ Worked for 7s · done 12:40 PM
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ read the two skill files and quote their descriptions
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  checkout | Opus 5.5 | ctx 7% | $1.29
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← 1 agent

@@ -1,0 +1,50 @@
+
+ ▐▛███▛█   Claude Code v2.1.303
+▝▜██████▀  Opus 5.5 · Claude Max
+ ▝▝   ▝▝   /private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-lab.u3BE27/checkout
+
+
+❯ Test probe, do not run any tools: quote verbatim the first 16 lines of the firstmate SessionStart hook context you received (the fm-sessionstart-run output), inside a code block. Then say whether
+  the context told you the rest was saved to a file and give that path and the stated full size.
+
+⏺ Captain, here are the first 16 lines of the firstmate session-start output, quoted exactly. Lines 12 and 13 are blank in the original.
+
+  FIRSTMATE SESSION-START HEADLINE (the digest below is NOT optional reading)
+  FULL DIGEST: 186 lines / 14599 bytes. Claude Code shows only the first 2,000 characters of a large
+  startup payload and saves the rest to a file: if this output was cut off, Read that saved file IN
+  FULL before acting - 400 lines per Read call, offsets 1.
+  lock: held - this session owns the fleet
+  queued wakes: 0 | open decisions: 0
+  network checks: IN PROGRESS - none confirmed (bin/fm-startup-network.sh report)
+  live tasks (3), dead or unreadable endpoints first:
+    task-q1-demo-1 alive
+    task-q1-demo-2 alive
+    task-q1-demo-3 alive
+
+
+  ================================================================================
+  SESSION START - /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.u3BE27
+  ================================================================================
+
+  Was I told the rest was saved to a file? Yes. Claude Code wrapped the output in a <persisted-output> notice that said "Output too large (14.3KB)" and gave this path:
+
+  /Users/cotton/.claude/projects/-private-var-folders-3c-4w5d0nf515l-hw4zg0pcvq880000gn-T-fm-lab-u3BE27-checkout/715863ea-4429-4297-adbb-6b314bb92a94/tool-results/hook-b87bca4b-a4e9-4947-a213-3fc72585
+  9b2d-stdout.txt
+
+  Stated full size: there are two figures, and they agree:
+  - Claude Code's notice says 14.3KB.
+  - The firstmate headline itself says 186 lines / 14599 bytes.
+
+  I only saw a preview of about 2KB, which ended in .... As you asked, I didn't open the saved file.
+
+  One oddity: the headline's read instruction ends "400 lines per Read call, offsets 1." The offsets list looks cut short, since covering 186 lines in 400-line reads needs only offset 1 anyway.
+
+✻ Cogitated for 17s · done 12:30 PM
+
+
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  checkout | Opus 5.5 | ctx 5% | $0.35
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← 1 agent
