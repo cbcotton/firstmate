@@ -3,8 +3,10 @@
 This document is the authoritative human-readable contract for the guard that stops a firstmate primary from delegating work outside the fleet.
 
 The shipped mechanism is `bin/fm-subagent-pretool-check.sh`, a PreToolUse guard that denies a delegation-SHAPED tool name in a genuine primary home.
-Claude primaries should also use an untracked per-home local `permissions.deny` list as hardening for known Claude delegation tools, because it removes them from the model's schema entirely.
+Claude primaries should also use a home-only `permissions.deny` list as hardening for known Claude delegation tools, because it removes them from the model's schema entirely.
+Keep it in a settings file inside the home's gitignored `config/` directory and pass it to the primary with `claude --settings <file>` at launch.
 That deny list must not ship in tracked `.claude/settings.json` because it is Claude-only rather than harness-agnostic, and because tracked project settings propagate into linked worktrees where they disarm legitimate crewmates.
+It must not live in `.claude/settings.local.json` either, because in a git worktree Claude Code reads the main checkout's root `settings.local.json`, so that untracked file reaches every linked worktree of this repository, crewmates included.
 
 ## Why this exists
 
@@ -69,7 +71,7 @@ That future-name behavior is the reason the tracked matcher must match all tools
 
 ## Recommended Local Claude Deny List
 
-Claude primaries should add this deny list in untracked per-home local settings, never in tracked `.claude/settings.json`:
+Claude primaries should add this deny list to a home-only settings file such as `config/claude-primary-settings.json` and launch the primary with `claude --settings config/claude-primary-settings.json`, never in tracked `.claude/settings.json` and never in `.claude/settings.local.json`:
 
 ```json
 {
@@ -101,11 +103,16 @@ The model is never offered the tool, so there is no call to intercept, no matche
 This is removal, not interception, and it is strictly stronger than any hook.
 
 This list is recommended local hardening because it closes the known Claude surface before the hook is needed.
-It is not tracked for two reasons.
+It is kept out of both settings files a worktree reads, for three reasons.
 
 - It is Claude-only, so it can never be the harness-agnostic shipped fix.
 - A tracked `.claude/settings.json` propagates into linked worktrees and disarms legitimate crewmates.
   This was verified when a Claude session in a task worktree of this repo lost its `Agent` tool.
+- The untracked `.claude/settings.local.json` propagates the same way, because Claude Code resolves it at the main checkout's root from every linked worktree.
+  It also carries any other main-only key in that file, such as `autoCompactWindow`, into those worktrees.
+
+A file passed with `--settings` applies only to the session launched with it, so it reaches the primary and nothing else.
+Main-only allow rules and the primary's `autoCompactWindow` belong in the same file.
 
 The width of the list remains a captain-owned decision, because denying some of these changes how the captain works with the primary session.
 Keep it as one flat local array that is reviewable at a glance and narrowable in one line.
@@ -145,7 +152,7 @@ A non-firstmate repo is out of scope.
 Any failure to confirm the home is inert, never a block, so a broken environment can never deny a tool call.
 
 A local Claude deny list is upstream of hook scope and removes known Claude delegation tools wherever Claude applies it.
-Do not put that list in tracked project settings, because linked worktrees inherit those settings and would lose legitimate delegation tools.
+Do not put that list in tracked project settings or in `.claude/settings.local.json`, because linked worktrees read both and would lose legitimate delegation tools.
 The hook scope is the shipped enforcement boundary, and the linked-worktree negative case proves the script itself does not block legitimate crewmate delegation.
 
 ## Escape hatch
@@ -180,7 +187,7 @@ Applicability turns on one question: does the harness expose built-in delegation
 
 | Harness | Delegation surface | Status |
 | --- | --- | --- |
-| Claude | 16 known tools, listed above | Scoped guard wired and live-verified; untracked local deny list verified and recommended. |
+| Claude | 16 known tools, listed above | Scoped guard wired and live-verified; home-only deny list passed with `--settings` verified and recommended. |
 | Codex | none | Not applicable, verified empirically below. Codex 0.144.1 exposes no subagent, sub-task, or delegated-agent tool, so there is nothing to remove or intercept. `.codex/hooks.json` is unchanged. |
 | Grok | present, exact tokens unconfirmed | Not wired pending live verification. See below. |
 | omp | present, per bundled material | Not wired and unverified. omp ships a built-in task delegation tool: its bundled docs list `tools/task.md` and the captain-level `task.maxConcurrency` setting governs it. No Firstmate delegation seatbelt is wired for it yet, and its status stays unverified until a live tool enumeration is recorded the way the Codex row was. |
@@ -297,6 +304,7 @@ This distinction matters when reading the next result: a tool absent from a plai
 
 Run in a scratch firstmate-shaped project containing `AGENTS.md`, `state/`, a full copy of `bin/`, and a Claude settings file containing the local deny list exactly as recommended on that date, which was the 18-name form that still included `TaskCreate` and `TaskUpdate`.
 The result validates that local deny list rather than tracked repo state, and the recommendation above has since dropped those two session-local todo tools.
+On 2026-10-19, Claude Code 2.1.303 offered `Agent`, `Workflow`, and `Monitor` to a non-interactive session, and offered none of them when the same session was launched with `--settings <file>` naming `Task`, `Agent`, `Workflow`, and `Monitor` under `permissions.deny`, so a deny list delivered through `--settings` removes tools exactly as one in a settings file does.
 Asking for deferred entries explicitly returned:
 
 ```text

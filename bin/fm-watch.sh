@@ -107,7 +107,8 @@
 #                          failure episode, and a later cycle that finds the
 #                          source owned closes that episode); the queued
 #                          payload names what to check. These three kinds are
-#                          joined with `;` when more than one surfaces in a cycle
+#                          joined with `;` when more than one surfaces in a cycle,
+#                          and the headline ends with ` - load process-event-sources`
 #   check: undelivered queued wake: <keys>
 #                          another writer (a captain inbox note, a mail or
 #                          contributions check) appended check rows to this
@@ -2124,6 +2125,8 @@ procevent_surface_queued() {
     [ "$reason" = "check:" ] || reason="$reason;"
     reason="$reason process-event source failed to start:$unstarted"
   fi
+  # The skill listing that carries this skill's trigger is gone after a compaction.
+  reason="$reason - load process-event-sources"
   # shellcheck disable=SC2034 # Consumed by wake() in the separately linted transition owner.
   FM_WAKE_POST_OUTPUT_ACTION=procevent_surface_after_output
   wake "$reason"

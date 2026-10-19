@@ -1149,7 +1149,7 @@ Make the home a clone of firstmate that is itself the home, at `forks/<name>` in
 Its `bin/` is then the home's own, so no worker can rewrite the scripts that govern it; a checkout nested below the home works too, since the session denies its `bin/` as well, and so does pointing `FM_HOME` at the home from a checkout outside it.
 Before creating `forks/`, add a `forks/` line to the Claude-orchestrated checkout's `.git/info/exclude`.
 The tracked `.gitignore` excludes `forks/` too, but only once that checkout carries the entry, and until then the untracked directory makes the checkout dirty, so its self-update skips it.
-Add `"Read(./forks/**)"` to the `permissions.deny` list in that checkout's `.claude/settings.local.json`, so its Claude first mate never reads the Privateer home's private projects.
+Add `"Read(./forks/**)"` to the `permissions.deny` list of the home-only settings file passed to that checkout's Claude first mate with `claude --settings <file>`, so it never reads the Privateer home's private projects; do not use `.claude/settings.local.json`, which every linked worktree of the checkout reads too ([`docs/subagent-guard.md`](subagent-guard.md) explains why).
 To update the Privateer home, stop its session with `stop`, run `/updatefirstmate` (or `git -C forks/<name> pull --ff-only`), and start it again; the session cannot update itself, because its `bin/`, instructions, skills, docs, and plugins are denied to it.
 A project the home shares with a Claude-orchestrated home takes its own ship-branch prefix in this home's `data/projects.md`.
 The flag is not inherited, because a Privateer home spawns no secondmate.

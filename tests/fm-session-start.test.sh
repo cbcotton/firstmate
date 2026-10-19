@@ -24,6 +24,12 @@
 #   - composition: the script invokes the real fm-lock.sh/fm-bootstrap.sh/
 #     fm-wake-drain.sh (their real, distinctive output appears verbatim), it
 #     does not reimplement their logic
+#   - the Claude headline: the first 2,000 characters of the digest carry the
+#     lock verdict, queued-wake and open-decision counts, every live task with
+#     its liveness, the truncation marker, and the full-read instruction with the
+#     digest's real size, while every other harness keeps its streamed digest
+#   - the producing lines that name their skill after a compaction (a bootstrap
+#     diagnostic, a queued process-event row)
 #   - the deferred startup stage: slow network and inactive current-state reads
 #     do not delay the digest, the work still runs and lands durable findings, a
 #     network result surfaces exactly once (inline or as a wake, never both), a
@@ -3089,6 +3095,163 @@ EOF
   pass "session start rejects Pi loaded markers from previous sessions"
 }
 
+# --- Claude headline: the 2,000-character preview must stand alone -------------
+
+# headline_of <digest>: the first 2,000 characters, which is all Claude Code
+# shows of a startup payload over 10,000 characters.
+headline_of() {
+  printf '%s' "$1" | head -c 2000
+}
+
+test_claude_headline_is_self_sufficient_in_the_first_2000_characters() {
+  local rec root home fakebin out head size_line lines bytes
+  rec=$(new_world claude-headline)
+  IFS='|' read -r root home fakebin <<EOF
+$rec
+EOF
+  make_fake_toolchain "$fakebin"
+  make_fake_ps_claude "$fakebin"
+  make_fake_tmux "$fakebin" "fm-sess:live-window"
+  printf 'window=fm-sess:live-window\nkind=ship\n' > "$home/state/task-live.meta"
+  printf 'window=fm-sess:dead-window\nkind=ship\n' > "$home/state/task-dead.meta"
+  printf 'needs-decision: [key=cap] pick a library\n' > "$home/state/task-dead.status"
+  append_wake "$home/state" signal task-dead.status "needs-decision: [key=cap] pick a library" || fail "seed wake failed"
+
+  out=$(run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+  head=$(headline_of "$out")
+
+  assert_contains "$head" "FIRSTMATE SESSION-START HEADLINE" "the digest does not open with the headline"
+  assert_contains "$head" "lock: held" "the headline lost the lock verdict"
+  assert_contains "$head" "queued wakes: 1 | open decisions: 1" "the headline lost the wake and decision counts"
+  assert_contains "$head" "task-live alive" "the headline lost a live task's liveness"
+  assert_contains "$head" "task-dead DEAD" "the headline lost a dead task's liveness"
+  assert_contains "$head" "Read that saved file IN" "the headline lost the full-read instruction"
+  assert_not_contains "$head" "READ-ONCE CONTRACT" "the headline is not ahead of the digest it summarizes"
+  assert_contains "$out" "SESSION START - $home" "the headline displaced the digest it fronts"
+
+  # The stated size is the real size of everything the agent receives.
+  size_line=$(printf '%s\n' "$out" | grep -m1 '^FULL DIGEST: ')
+  lines=$(printf '%s\n' "$size_line" | sed -n 's/^FULL DIGEST: \([0-9]*\) lines.*/\1/p')
+  bytes=$(printf '%s\n' "$size_line" | sed -n 's/^FULL DIGEST: [0-9]* lines \/ \([0-9]*\) bytes.*/\1/p')
+  assert_equals "$(printf '%s\n' "$out" | awk 'END { print NR }')" "$lines" "the headline misstates the digest's line count"
+  assert_equals "$(printf '%s\n' "$out" | wc -c | tr -d ' ')" "$bytes" "the headline misstates the digest's byte count"
+
+  pass "the Claude headline states the lock, counts, task liveness, and true digest size inside 2,000 characters"
+}
+
+test_claude_headline_stays_inside_the_preview_for_a_large_fleet() {
+  local rec root home fakebin out head n
+  rec=$(new_world claude-headline-large)
+  IFS='|' read -r root home fakebin <<EOF
+$rec
+EOF
+  make_fake_toolchain "$fakebin"
+  make_fake_ps_claude "$fakebin"
+  make_fake_tmux "$fakebin" "fm-sess:live-window"
+  n=0
+  while [ "$n" -lt 40 ]; do
+    printf 'window=fm-sess:live-window\nkind=ship\n' > "$home/state/task-with-a-long-identifier-$n.meta"
+    n=$((n + 1))
+  done
+  printf 'window=fm-sess:dead-window\nkind=ship\n' > "$home/state/task-zz-dead.meta"
+
+  out=$(run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+  head=$(headline_of "$out")
+
+  assert_contains "$head" "Read that saved file IN" "a large fleet pushed the full-read instruction out of the preview"
+  assert_contains "$head" "task-zz-dead DEAD" "a large fleet pushed a dead task out of the preview"
+  assert_contains "$head" "more in FLEET STATE" "a cut task list did not say it was cut"
+  assert_contains "$out" "--- task-with-a-long-identifier-39 ---" "the headline cut the digest's own task inventory"
+  [ "$(printf '%s\n' "$out" | awk '/^$/ { exit } { n += length($0) + 1 } END { print n }')" -lt 2000 ] \
+    || fail "the headline itself exceeds the 2,000-character preview"
+
+  pass "the Claude headline stays under 2,000 characters however large the fleet is"
+}
+
+test_claude_headline_reports_a_refused_lock_and_a_truncated_startup() {
+  local rec root home fakebin holder_pid out head
+  rec=$(new_world claude-headline-refused)
+  IFS='|' read -r root home fakebin <<EOF
+$rec
+EOF
+  make_fake_toolchain "$fakebin"
+  make_fake_ps_claude "$fakebin"
+  sleep 300 &
+  holder_pid=$!
+  printf '%s\n' "$holder_pid" > "$home/state/.lock"
+  out=$(run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+  kill "$holder_pid" 2>/dev/null || true
+  wait "$holder_pid" 2>/dev/null || true
+  head=$(headline_of "$out")
+  assert_contains "$head" "lock: REFUSED - READ-ONLY session" "the headline hid a refused lock"
+  assert_not_contains "$head" "open decisions:" "a read-only headline claimed decisions it never drained"
+
+  rec=$(new_world claude-headline-truncated)
+  IFS='|' read -r root home fakebin <<EOF
+$rec
+EOF
+  make_fake_toolchain "$fakebin"
+  make_fake_ps_claude "$fakebin"
+  make_hanging_tool "$fakebin" git
+  printf 'window=fm-sess:live-window\nkind=ship\n' > "$home/state/task-unseen.meta"
+  out=$(FM_TIMEOUT_MECHANISM_OVERRIDE=bash FM_SESSION_START_TIMEOUT=3 FM_STARTUP_NETWORK_TIMEOUT=2 \
+    run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+  head=$(headline_of "$out")
+  assert_contains "$head" "STARTUP TRUNCATED (exit 124)" "the headline hid a truncated startup"
+  assert_contains "$head" "bootstrap wake-queue" "the headline did not name the stages that never ran"
+  assert_contains "$head" "live tasks: unknown" "a truncated headline did not mark the task list unknown"
+  assert_not_contains "$head" "live tasks: none" "a truncated headline claimed no live tasks it never counted"
+  assert_contains "$head" "posture: unknown" "a truncated headline did not mark the posture unknown"
+  assert_contains "$out" "STARTUP TRUNCATED - SESSION START HIT ITS" "the truncation banner no longer closes the digest"
+
+  pass "the Claude headline names a refused lock and a truncated startup"
+}
+
+test_other_harnesses_keep_their_streamed_digest_without_a_headline() {
+  local rec root home fakebin out
+  rec=$(new_world headline-other-harness)
+  IFS='|' read -r root home fakebin <<EOF
+$rec
+EOF
+  make_fake_toolchain "$fakebin"
+  make_fake_ps_claude "$fakebin"
+  out=$(FM_FAKE_HARNESS=pi run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+  assert_not_contains "$out" "FIRSTMATE SESSION-START HEADLINE" "a non-Claude harness received the Claude headline"
+  assert_contains "$(printf '%s\n' "$out" | sed -n '1,3p')" "SESSION START - $home" "a non-Claude digest no longer opens with its own banner"
+
+  pass "a non-Claude digest streams unchanged with no headline"
+}
+
+
+# --- post-compaction skill triggers: the producing line names its skill ------
+
+test_producing_lines_name_the_skills_whose_listing_a_compaction_drops() {
+  local rec root home fakebin out
+  rec=$(new_world skill-hints)
+  IFS='|' read -r root home fakebin <<EOF
+$rec
+EOF
+  make_fake_toolchain "$fakebin"
+  make_fake_ps_claude "$fakebin"
+
+  out=$(run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+  assert_contains "$out" "MISSING: tasks-axi" "the fixture no longer prints a bootstrap diagnostic line"
+  assert_contains "$out" "Load the bootstrap-diagnostics skill before acting on the diagnostic line(s) above." \
+    "a printed MISSING diagnostic did not name its skill"
+  assert_not_contains "$out" "process-event-sources" "an empty queue named a process-event skill it did not need"
+
+  git -C "$root" checkout -q -B fm/hint-tangle
+  append_wake "$home/state" check "procevent:lavish-src:3" "check: procevent lavish lavish-src 3" || fail "seed wake failed"
+  out=$(run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+  assert_contains "$out" "TANGLE: primary checkout on feature branch 'fm/hint-tangle'" "the diagnostic fixture did not produce a diagnostic"
+  assert_contains "$out" "Load the bootstrap-diagnostics skill before acting on the diagnostic line(s) above." \
+    "a printed bootstrap diagnostic did not name its skill"
+  assert_contains "$out" "a process-event row is queued - load process-event-sources" \
+    "a queued process-event row did not name its skill"
+
+  pass "a bootstrap diagnostic and a queued process-event row each name the skill that handles them"
+}
+
 test_context_digest_absent_empty_present
 test_lock_refusal_read_only_path
 test_lock_write_failure_read_only_path
@@ -3153,5 +3316,10 @@ test_read_only_pi_compact_refreshes_against_its_own_session_identity
 test_codex_unreachable_reset_sources_do_not_claim_instruction_refresh
 test_agents_baseline_requires_sha256_and_successful_completion
 test_reemit_keeps_repair_ownership_with_the_lock_holder
+test_claude_headline_is_self_sufficient_in_the_first_2000_characters
+test_claude_headline_stays_inside_the_preview_for_a_large_fleet
+test_claude_headline_reports_a_refused_lock_and_a_truncated_startup
+test_other_harnesses_keep_their_streamed_digest_without_a_headline
+test_producing_lines_name_the_skills_whose_listing_a_compaction_drops
 
 echo "# fm-session-start.test.sh: all assertions passed"
