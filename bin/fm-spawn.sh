@@ -125,6 +125,10 @@
 #   sailor spawn rather than launching it unconfined, and a home selecting the
 #   restricted OpenCode profile refuses every sailor spawn without
 #   config/sailor-sandbox; the record gets sandbox=seatbelt.
+#   With config/sailor-commit-identity mapping the project, a sailor launch also
+#   gets that identity in its own copy only (bin/fm-sailor-identity.sh, whose
+#   header owns the format; docs/configuration.md "Sailor commit identity"), a
+#   malformed file refuses the spawn, and the record gets commit_email=<address>.
 #   --full-mcp is the per-task opt-in that gives a Claude crewmate or scout the
 #   captain's whole MCP surface (docs/configuration.md "Claude worker MCP
 #   surface"). Without it, every Claude ship and scout launch is lean: it
@@ -3334,6 +3338,22 @@ else
   WT=""
   BRIEF="$DATA/$ID/brief.md"
 fi
+# Sailor commit identity (header above; docs/configuration.md "Sailor commit
+# identity"). Resolved, and the whole mapping file validated, before any endpoint
+# or worktree exists, so a malformed line refuses the spawn rather than letting
+# the sailor commit under the machine's default identity.
+SAILOR_IDENTITY_NAME=
+SAILOR_IDENTITY_EMAIL=
+if [ -n "$SAILOR" ] && [ "$KIND" != secondmate ]; then
+  SAILOR_IDENTITY=$("$SCRIPT_DIR/fm-sailor-identity.sh" resolve "$CONFIG" "$(basename "$PROJ_ABS")" "$SAILOR") || {
+    echo "error: sailor $SAILOR cannot take task $ID: config/sailor-commit-identity is malformed (see above); fix or remove it and spawn again" >&2
+    exit 1
+  }
+  if [ -n "$SAILOR_IDENTITY" ]; then
+    SAILOR_IDENTITY_NAME=${SAILOR_IDENTITY%%$'\t'*}
+    SAILOR_IDENTITY_EMAIL=${SAILOR_IDENTITY#*$'\t'}
+  fi
+fi
 if [ "$RELAUNCH" -eq 0 ] && [ "$KIND" != secondmate ] && [ "$BACKEND" != orca ]; then
   SPAWN_TREEHOUSE_PROJECT_LOCK=$(fm_treehouse_project_lock_path "$PROJ_ABS") || {
     echo "error: could not resolve the shared Treehouse project lock for $PROJ_ABS" >&2
@@ -4660,6 +4680,12 @@ fi
 # tab's original project directory.
 spawn_enter_recorded_worktree
 spawn_assert_agent_worktree
+if [ -n "$SAILOR_IDENTITY_EMAIL" ]; then
+  "$SCRIPT_DIR/fm-sailor-identity.sh" apply "$WT" "$SAILOR_IDENTITY_NAME" "$SAILOR_IDENTITY_EMAIL" || {
+    echo "error: could not set sailor $SAILOR's commit identity in $WT; refusing to launch a worker that would commit under the wrong identity" >&2
+    exit 1
+  }
+fi
 
 # Pre-register Claude's workspace trust for the directory this launch starts in,
 # at the first point that directory is known and before any per-task state is
@@ -5250,7 +5276,7 @@ SPAWN_META_PATH=$SPAWN_META_TMP
 preserve_relaunch_meta() {
   awk -F= '
     BEGIN {
-      split("window endpoint_task_id worktree project harness kind mode yolo branch tasktmp model effort sailor spend mcp sandbox account account_provider busy_gen spawn_gen traceparent backend herdr_session herdr_workspace_id herdr_tab_id herdr_pane_id zellij_session zellij_tab_id zellij_pane_id orca_worktree_id terminal cmux_workspace_id cmux_surface_id home projects control_relaunch_tx", keys, " ")
+      split("window endpoint_task_id worktree project harness kind mode yolo branch tasktmp model effort sailor spend mcp sandbox commit_email account account_provider busy_gen spawn_gen traceparent backend herdr_session herdr_workspace_id herdr_tab_id herdr_pane_id zellij_session zellij_tab_id zellij_pane_id orca_worktree_id terminal cmux_workspace_id cmux_surface_id home projects control_relaunch_tx", keys, " ")
       for (i in keys) owned[keys[i]] = 1
     }
     !($1 in owned)
@@ -5273,6 +5299,7 @@ spawn_compose_meta() {
   [ -z "$SAILOR" ] || [ "$SPEND" = 0 ] || echo "spend=allowed"
   [ "$FULL_MCP" = 0 ] || echo "mcp=full"
   [ "$SAILOR_SANDBOX" = 0 ] || echo "sandbox=seatbelt"
+  [ -z "$SAILOR_IDENTITY_EMAIL" ] || echo "commit_email=$SAILOR_IDENTITY_EMAIL"
   # The dispatch stamp a task-scoped permission grant binds to
   # (bin/fm-permission-grant.sh): written once, kept across relaunches, so a
   # later task that reuses this id never inherits this one's grants.
