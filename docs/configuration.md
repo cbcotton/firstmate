@@ -872,7 +872,21 @@ It is refused for another harness, a raw launch command, or a secondmate, before
 
 A secondmate is a firstmate primary in its own home and always keeps the full surface, while its own Claude crewmates launch lean.
 Other harnesses are unchanged.
-The SessionStart banners that the axi tools' `setup hooks` installs in the captain's user settings, and the captain's plugin skill listing, still reach every Claude worker, because Claude Code has no clean per-launch control that removes them without also dropping the rest of the user settings; the [Claude adapter reference](../.agents/skills/harness-adapters/references/harness/claude.md#worker-mcp-surface) records what was verified.
+The captain's plugin skill listing still reaches every Claude worker.
+So do the SessionStart banners that the axi tools' `setup hooks` installs in the captain's user settings, unless the operator guards them as below, because Claude Code has no clean per-launch control that removes user-scope hooks without also dropping the rest of the user settings; the [Claude adapter reference](../.agents/skills/harness-adapters/references/harness/claude.md#worker-mcp-surface) records what was verified.
+
+### Lean worker banners (recommended operator setup)
+
+Keep the axi banners out of worker sessions by guarding each axi SessionStart hook command in `~/.claude/settings.json` (or the `settings.json` under `CLAUDE_CONFIG_DIR`) on `FM_TASK_ID`, which every ship and scout pane exports before its launch:
+
+```json
+{ "type": "command", "command": "[ -n \"${FM_TASK_ID:-}\" ] || lavish-axi", "timeout": 10 }
+```
+
+Apply the same `[ -n "${FM_TASK_ID:-}" ] || <tool>` form to the `gh-axi` and `chrome-devtools-axi` entries.
+A worker then gets no banner, while the main, secondmates, and Claude sessions outside Firstmate, none of which export `FM_TASK_ID`, keep them.
+Firstmate never edits the captain's user settings, so this is a manual operator step after `<tool> setup hooks`.
+Rerunning `setup hooks` rewrites its own entry's command and drops the guard, so reapply it afterwards.
 
 ## OpenCode permission profile (config/opencode-permission-profile)
 

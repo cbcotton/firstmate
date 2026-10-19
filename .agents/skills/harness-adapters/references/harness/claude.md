@@ -70,6 +70,7 @@ Hooks merge across settings scopes, and on 2.1.303 a per-launch `--settings '{"h
 `disableAllHooks` would also remove the worker's own busy and turn-end hooks and every project hook.
 `--setting-sources project,local` removed the banners and cut 30 plugins to 4 and 229 skills to 27, but it drops every user setting with them: the session fell back from the user `auto` permission default to `default`.
 Claude's settings reference also scopes `skipDangerousModePermissionPrompt` to user, local, or managed settings, so a bypass-mode worker would lose the setting that keeps the bypass confirmation away.
+The operator-side guard in [`Lean worker banners`](../../../../../docs/configuration.md#lean-worker-banners-recommended-operator-setup) works instead: on 2.1.303, hook commands guarded on `FM_TASK_ID` printed nothing with it set and all three banners without it.
 
 ## Task control channel
 
