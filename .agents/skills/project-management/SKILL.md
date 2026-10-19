@@ -1,10 +1,8 @@
 ---
 name: project-management
 description: >-
-  Agent-only procedure for Firstmate project management.
-  Use before adding, creating, removing, or initializing a project, and before resolving a ship task's delivery posture at intake.
-  Cloning or registering a project is add intake and uses the same trigger.
-  Owns project add, create, clone, remove, initialization, registry, delivery-mode, autonomy, and outward-consent decisions.
+  Load before adding, creating, cloning, registering, removing, or initializing a project, and before resolving a ship task's delivery posture at intake.
+  Owns the project registry and delivery-mode, autonomy, and outward-consent decisions.
 user-invocable: false
 metadata:
   internal: true

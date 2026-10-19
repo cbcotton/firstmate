@@ -12,6 +12,7 @@ Busy hooks verified 2026-07-28 on Claude Code 2.1.220.
 | Skill | `/<skill>`, for example `/no-mistakes`. |
 | Model | `--model <model>`; discover through the interactive `/model` picker, with alias or full-name shape documented by `claude --help`. |
 | Effort | `--effort <low\|medium\|high\|xhigh\|max>`, verified on 2.1.196. |
+| Session name | `--name <task-id>` on every spawned Claude, so `/resume`, the agent view, and Remote Control show the task id; it names only the session, and a launch with it left the tmux window name unchanged on 2.1.303. |
 | Permissions | `--dangerously-skip-permissions` by default, or `--permission-mode auto` when `config/claude-permission-mode` is `auto`; the `auto` shape verified on 2.1.269. See [`Claude permission mode`](../../../../../docs/configuration.md#claude-permission-mode-configclaude-permission-mode) for the launch grant and configuration. |
 
 ## Workspace trust
@@ -101,8 +102,8 @@ Claude's PreToolUse seatbelt blocks directly, and its deny is honored only with 
 
 Claude delegation, scheduling, and worktree tools can create work without `state/<id>.meta`, making guards unable to count it.
 `../../../bin/fm-subagent-pretool-check.sh` denies delegation-shaped tool names.
-A primary should also keep an untracked home-local `permissions.deny` for known delegation tools so they disappear from the schema.
-Never track it in project `.claude/settings.json`, which is Claude-only and propagates to worker copies where it would disarm legitimate delegation.
+A primary should also keep a home-only `permissions.deny` for known delegation tools, passed with `claude --settings <file>` at launch, so they disappear from the schema.
+Never put it in project `.claude/settings.json` or `.claude/settings.local.json`; linked worktrees read both, so it would disarm legitimate delegation in worker copies.
 `../../../docs/subagent-guard.md` owns the contract, recommendation, `FM_ALLOW_SUBAGENT=1`, and applicability review.
 
 On Claude 2.1.217 the tool presents as `Agent`, and both `Agent` and `Task` worked as deny keys in an A/B with nonsense control.

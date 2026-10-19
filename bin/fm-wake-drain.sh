@@ -1060,6 +1060,10 @@ case "${FM_WAKE_DRAIN_TEST_DELAY_BEFORE_COMMIT:-0}" in
 esac
 if [ -n "$RAW_ROWS" ]; then
   printf '%s\n' "$RAW_ROWS" || exit "$?"
+  # The skill listing that carries this skill's trigger is gone after a compaction.
+  if printf '%s\n' "$RAW_ROWS" | awk -F '\t' '$4 ~ /^procevent:/ { found = 1 } END { exit !found }'; then
+    printf 'wake drain: a process-event row is queued - load process-event-sources to read and acknowledge it\n'
+  fi
 fi
 fm_recovery_marker_snapshot "$RECOVERY_MARKER" || exit 1
 RECOVERY_MARKER_TOKEN=$FM_RECOVERY_MARKER_TOKEN

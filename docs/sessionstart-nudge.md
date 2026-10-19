@@ -158,7 +158,7 @@ So no supported host runs the digest unbounded.
 
 ### When the child stops early
 
-The child streams into the native transport as it runs.
+The child streams into the native transport as it runs; under a Claude primary the parent instead buffers it and prints it behind a headline, as the `bin/fm-session-start.sh` header's CLAUDE HEADLINE note describes.
 So everything emitted before the child stopped is retained for delivery.
 The parent then prints a `STARTUP TRUNCATED` banner on any nonzero child exit, not only the bound, that names:
 

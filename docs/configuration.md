@@ -1149,7 +1149,7 @@ Make the home a clone of firstmate that is itself the home, at `forks/<name>` in
 Its `bin/` is then the home's own, so no worker can rewrite the scripts that govern it; a checkout nested below the home works too, since the session denies its `bin/` as well, and so does pointing `FM_HOME` at the home from a checkout outside it.
 Before creating `forks/`, add a `forks/` line to the Claude-orchestrated checkout's `.git/info/exclude`.
 The tracked `.gitignore` excludes `forks/` too, but only once that checkout carries the entry, and until then the untracked directory makes the checkout dirty, so its self-update skips it.
-Add `"Read(./forks/**)"` to the `permissions.deny` list in that checkout's `.claude/settings.local.json`, so its Claude first mate never reads the Privateer home's private projects.
+Add `"Read(./forks/**)"` to the `permissions.deny` list of the home-only settings file passed to that checkout's Claude first mate with `claude --settings <file>`, so it never reads the Privateer home's private projects; do not use `.claude/settings.local.json`, which every linked worktree of the checkout reads too ([`docs/subagent-guard.md`](subagent-guard.md) explains why).
 To update the Privateer home, stop its session with `stop`, run `/updatefirstmate` (or `git -C forks/<name> pull --ff-only`), and start it again; the session cannot update itself, because its `bin/`, instructions, skills, docs, and plugins are denied to it.
 A project the home shares with a Claude-orchestrated home takes its own ship-branch prefix in this home's `data/projects.md`.
 The flag is not inherited, because a Privateer home spawns no secondmate.
@@ -1489,6 +1489,24 @@ A sailor is a named place that ordinary work can run on: an endpoint sailor, an 
   "sailor_fallback": { "harness": "claude", "model": "claude-opus-5-5" }
 }
 ```
+
+**Sailor commit identity**
+
+The optional local, gitignored file `config/sailor-commit-identity` gives a named sailor's task copy its own commit identity, so its commits do not fall back to the machine's default.
+Each line maps a registered project name to a `Name <address>` template whose address holds `{sailor}`; blank lines and `#` comments are ignored:
+
+```text
+gpr3d Chris <{sailor}.chris@euroradar.nl>
+```
+
+- `fm-spawn.sh` applies it to every crewmate or scout launched with `--sailor` on a mapped project, and a relaunch on the same copy keeps it; with no file, or no line for the project, a spawn behaves as before, and a launch without a sailor gets no identity.
+  A fresh spawn whose copy gets no identity removes any worktree-scoped `user.name` and `user.email` an earlier sailor task left in that reused copy, so it commits under the repository's usual identity.
+- The identity is set in that copy's own worktree configuration (`extensions.worktreeConfig` with `git config --worktree`), so the repository's shared `user.*` settings, the primary checkout, and global configuration stay unchanged.
+  A restricted sailor's permission profile denies `git -c user.*` and environment-prefixed commits, which is why firstmate sets the identity at launch rather than leaving it to the sailor.
+- The task record gets `commit_email=<address>`.
+- A malformed line anywhere in the file, such as a missing `{sailor}`, a missing `Name`, an address that is not `user@host`, or a project named twice, refuses every sailor spawn with the line named, before any endpoint or record exists; fix or remove the file and spawn again.
+- The file is read per home and is not inherited by secondmate homes.
+- `bin/fm-sailor-identity.sh` owns the format and the mechanics, and `tests/fm-spawn-dispatch-profile.test.sh` covers the behavior.
 
 **External sailor: Hugging Face Inference**
 

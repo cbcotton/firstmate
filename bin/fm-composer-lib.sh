@@ -1291,11 +1291,62 @@ _fm_composer_classify_bare_wrap() {  # <screen> <styled> <glyph-row> <cursor-row
   if [ "$styled" = 1 ]; then printf 'pending'; else printf 'unknown'; fi
 }
 
+# _fm_composer_leftbar_box_row: a styled left-bar row, on stdin, cut where its
+# composer box ends. A wide opencode pane draws a session sidebar on the same
+# rows, past a gutter that returns to the page background the row opened on
+# (the one in effect at the bar glyph); the box carries a different background
+# of its own. The cut is the first background that switches back to the page
+# background after the box's, so sidebar text is never read as typed input and
+# a differently shaded span inside the box (a paste chip) stays. A row that
+# never sets both backgrounds passes through unchanged.
+_fm_composer_leftbar_box_row() {
+  LC_ALL=C awk '
+    # sgr_color_len: params a colour code takes after itself, so an RGB payload
+    # such as 38;2;44;100;42 is never read as a basic background code.
+    function sgr_color_len(a, p, k) {
+      if (index(a[p], ":") > 0) return 0
+      if (a[p + 1] == "2") return 4
+      if (a[p + 1] == "5") return 2
+      return 1
+    }
+    {
+      n = length($0); i = 1; cur = ""; pagebg = ""; box = 0; seen = 0; out = ""
+      while (i <= n) {
+        if (substr($0, i, 1) == "\033" && substr($0, i + 1, 1) == "[") {
+          j = i + 2; params = ""
+          while (j <= n && substr($0, j, 1) !~ /[@-~]/) { params = params substr($0, j, 1); j++ }
+          if (j <= n && substr($0, j, 1) == "m") {
+            k = split(params, a, ";")
+            for (p = 1; p <= k; p++) {
+              code = a[p]; sub(/:.*/, "", code); key = ""
+              if (code == "38" || code == "58") { p += sgr_color_len(a, p, k); continue }
+              if (code == "48") {
+                key = (index(a[p], ":") > 0) ? a[p] : a[p] ";" a[p + 1] ";" a[p + 2] ";" a[p + 3] ";" a[p + 4]
+                p += sgr_color_len(a, p, k)
+              } else if ((code + 0 >= 40 && code + 0 <= 47) || (code + 0 >= 100 && code + 0 <= 107)) key = code
+              if (key == "") continue
+              if (seen && box && pagebg != "" && key == pagebg) { n = 0; break }
+              if (seen && key != pagebg) box = 1
+              cur = key
+            }
+            if (n == 0) break
+          }
+          out = out substr($0, i, j - i + 1); i = j + 1; continue
+        }
+        if (!seen && substr($0, i, 3) == "\342\224\203") { seen = 1; pagebg = cur }
+        out = out substr($0, i, 1); i++
+      }
+      print out
+    }'
+}
+
 # _fm_composer_leftbar_content: the classification content of left-bar row <n>,
 # with its bar stripped.
 _fm_composer_leftbar_content() {  # <screen> <styled> <n>
-  local content
-  content=$(_fm_composer_row_content "$(_fm_composer_screen_row "$3" "$1")" "$2")
+  local content raw
+  raw=$(_fm_composer_screen_row "$3" "$1")
+  [ "$2" != 1 ] || raw=$(printf '%s\n' "$raw" | _fm_composer_leftbar_box_row)
+  content=$(_fm_composer_row_content "$raw" "$2")
   case "$content" in '┃'*) content=${content#┃} ;; esac
   fm_composer_normalize_trim_var content
   printf '%s' "$content"
@@ -1366,6 +1417,7 @@ _fm_composer_classify_leftbar() {  # <screen> <styled> <first-row> <last-row> [c
   row=$first
   while [ "$row" -lt "$footer" ]; do
     raw=$(_fm_composer_screen_row "$row" "$screen")
+    [ "$styled" != 1 ] || raw=$(printf '%s\n' "$raw" | _fm_composer_leftbar_box_row)
     content=$(_fm_composer_row_content "$raw" "$styled")
     case "$content" in
       '┃'*) content=${content#┃} ;;

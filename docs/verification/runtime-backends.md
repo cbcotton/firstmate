@@ -831,8 +831,8 @@ The spaces around the `·` go first, then the agent label breaks across rows (`P
 The fresh-session idle hint (`Ask anything… "…"`) wraps the same way, with the cursor parked on its first row.
 The classifier matched only the run's last row against the footer pattern, so a narrowed empty composer read `pending`, the verdict behind the `bin/fm-privateer.sh stop --stow` refusal; this fix covers that narrow-pane footer wrap.
 
-Follow-up, cause not established: the same morning `bin/fm-control.sh <task> relaunch` refused an OpenCode worker for visibly pending composer text on a 169-column pane that showed an OpenCode model-server error block, and one C-c cleared it.
-That pane was too wide for the footer to wrap, so this fix does not claim to explain or resolve that refusal.
+Follow-up: the same morning `bin/fm-control.sh <task> relaunch` refused an OpenCode worker for visibly pending composer text on a 169-column pane that showed an OpenCode model-server error block, and one C-c cleared it.
+That pane was too wide for the footer to wrap, so this fix does not explain that refusal; [the wide-pane sidebar record](#2026-10-19-opencode-11833-wide-pane-sidebar-through-tmux) does.
 
 Each scratch pane was resized with `tmux resize-window` and read with the shipped tmux adapter through a `-L` wrapper, then given a typed probe that was never submitted:
 
@@ -869,6 +869,30 @@ ok - opencode (1.18.33): typed text above the wrapped footer still classifies pe
 ```
 
 The same guard run against the pre-fix classifier failed with `not ok - opencode (1.18.33): idle composer with its footer wrapped at 60 columns read pending, expected empty`.
+
+### 2026-10-19 opencode 1.18.33 wide-pane sidebar through tmux
+
+Verified on 2026-10-19 on macOS arm64 (Darwin 25.6.0) against opencode 1.18.33 on tmux 3.7c, in scratch tmux sessions with an isolated OpenCode XDG tree and an `@ai-sdk/openai-compatible` provider pointed at a loopback stub that answered every chat completion with HTTP 404 and `Not Found: System message must be at the beginning.`, or with a one-word reply.
+Each pane was read with `tmux capture-pane -e -p` and the cursor row from `#{cursor_y}`, then classified by `fm_composer_classify_screen` with the tmux capabilities.
+
+Verdicts before the fix:
+
+| Pane | Columns | Error block | Sidebar | Verdict |
+|---|---|---|---|---|
+| Idle after an error | 169 | yes | yes | `pending` |
+| Idle after a normal reply | 169 | no | yes | `pending` |
+| Idle after an error | 110 | yes | no | `empty` |
+| Normal reply, sidebar text blanked on the composer rows | 169 | no | blanked | `empty` |
+
+The error block is a thread block: a red (`38;2;224;108;117`) left bar on a `48;2;20;20;20` background with gray (128) text, in its own left-bar run above the `▣ Build · <model>` row.
+The composer run sits at the pane bottom with a blue (`38;2;92;156;245`) bar.
+Its box carries `48;2;30;30;30`, a two-column gutter returns to the page background (`48;2;10;10;10`) the row opened on, and the sidebar panel carries `48;2;20;20;20` with gray (128) text, which the ghost threshold deliberately keeps.
+The sidebar's working directory (wrapped over several rows) and version sit on the composer's input, pad, and footer rows, so that text read as typed input.
+A pasted multi-line chip carries its own background (`48;2;245;167;66`) inside the box and resets after it.
+
+The classifier now cuts each styled left-bar row where its background returns to the page background after the box's.
+After the fix the 169-column error, 169-column success, and 110-column error captures read `empty`, and a typed draft and a typed draft plus a paste chip at 169 columns with the sidebar read `pending`.
+`test_matrix_opencode_sidebar_text` in `tests/fm-composer-lib.test.sh` carries the captured layout and pins the draft counterweights; the live refresh is repeating the capture above.
 
 ## Steering-inbox doorbell
 

@@ -41,6 +41,15 @@ A pane narrower than OpenCode 1.18.33's mode/model footer wraps that footer, and
 The shared classifier in `../../../bin/fm-composer-lib.sh` reads both as furniture, so an empty composer in a narrow pane still reads `empty`; a refusal that names pending text there is a real draft or an unrecognized shape, not the width.
 [`runtime-backends.md`](../../../../../docs/verification/runtime-backends.md#2026-10-12-opencode-11833-narrow-pane-footer-through-tmux) records the evidence and its live refresh.
 
+## Wide-pane sidebar and error block
+
+A pane wide enough for OpenCode 1.18.33's right-hand session sidebar (shown once the session has a message; verified at 169 columns, absent at 110) draws the sidebar's working directory and version on the same rows as the composer.
+The composer box keeps its own background, a two-column gutter returns to the page background the row opened on, and the sidebar panel carries a third background with gray text.
+The shared classifier in `../../../bin/fm-composer-lib.sh` cuts each left-bar row where its background returns to the page background after the box's, so sidebar text is never read as typed input and an idle wide pane reads `empty`.
+A model-server error block (verified with `Not Found: System message must be at the beginning.`) is a thread block with a red left bar, drawn above the `▣ Build · <model>` row and apart from the composer's run, so it never reads as composer text.
+The wide-pane `pending` verdict that refused `../../../bin/fm-control.sh <id> relaunch` was the sidebar, reproduced with no error block at all.
+[`runtime-backends.md`](../../../../../docs/verification/runtime-backends.md#2026-10-19-opencode-11833-wide-pane-sidebar-through-tmux) records the evidence.
+
 ## Primary integration
 
 The primary integration was verified on 2026-07-08 with OpenCode 1.17.6.
