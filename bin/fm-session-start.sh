@@ -124,7 +124,9 @@
 # its own: the lock verdict, the queued-wake and open-decision counts, any away
 # posture, any STARTUP TRUNCATED or IN PROGRESS marker, every live task with its
 # endpoint liveness (dead ones first), and one line stating the full size and
-# the Read offsets that cover it, with the instruction to read all of it. The
+# the Read offsets that cover it, with the instruction to read all of it. When a
+# truncated run may not have finished FLEET STATE, the task list and posture say
+# unknown rather than none. The
 # facts come from the digest's own variables, which the child records in
 # FM_SESSION_START_FACTS_FILE as it prints; nothing is scraped from the rendered
 # digest. The payload below the headline is unchanged, and every other harness
@@ -320,7 +322,8 @@ HEADLINE_READ_LINES=400
 render_headline() {
   local total_lines=$1 total_bytes=$2 facts=$3 rc=$4 pending=$5
   local lock wakes decisions afk network tasks_total offsets off line shown_chars=0 shown=0 chunks=0
-  local tasks_budget=620
+  local tasks_budget=620 fleet_unknown=
+  case " $pending " in *" fleet-state "*|*" (unknown "*) [ "$rc" -eq 0 ] || fleet_unknown=1 ;; esac
   lock=$(awk -F '\t' '$1 == "lock" { v = $2 } END { print v }' "$facts" 2>/dev/null)
   wakes=$(awk -F '\t' '$1 == "wakes" { v = $2 } END { print v }' "$facts" 2>/dev/null)
   decisions=$(awk -F '\t' '$1 == "decisions" { v = $2 } END { print v }' "$facts" 2>/dev/null)
@@ -350,12 +353,18 @@ render_headline() {
   else
     printf 'queued wakes: %s | open decisions: %s\n' "${wakes:-?}" "${decisions:-?}"
   fi
-  [ -z "$afk" ] || printf 'posture: %s mode recorded (load its skill)\n' "$afk"
+  if [ -n "$afk" ]; then
+    printf 'posture: %s mode recorded (load its skill)\n' "$afk"
+  elif [ -n "$fleet_unknown" ]; then
+    printf 'posture: unknown - fleet-state never ran or did not finish\n'
+  fi
   if [ "$rc" -ne 0 ]; then
     printf 'STARTUP TRUNCATED (exit %s): never ran: %s - rerun bin/fm-session-start.sh\n' "$rc" "${pending% }"
   fi
   [ "$network" != in-progress ] || printf 'network checks: IN PROGRESS - none confirmed (bin/fm-startup-network.sh report)\n'
-  if [ "$tasks_total" -eq 0 ]; then
+  if [ -n "$fleet_unknown" ]; then
+    printf 'live tasks: unknown - fleet-state never ran or did not finish (see FLEET STATE / rerun)\n'
+  elif [ "$tasks_total" -eq 0 ]; then
     printf 'live tasks: none\n'
   else
     printf 'live tasks (%s), dead or unreadable endpoints first:\n' "$tasks_total"

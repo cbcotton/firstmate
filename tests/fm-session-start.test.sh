@@ -3193,11 +3193,15 @@ EOF
   make_fake_toolchain "$fakebin"
   make_fake_ps_claude "$fakebin"
   make_hanging_tool "$fakebin" git
+  printf 'window=fm-sess:live-window\nkind=ship\n' > "$home/state/task-unseen.meta"
   out=$(FM_TIMEOUT_MECHANISM_OVERRIDE=bash FM_SESSION_START_TIMEOUT=3 FM_STARTUP_NETWORK_TIMEOUT=2 \
     run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
   head=$(headline_of "$out")
   assert_contains "$head" "STARTUP TRUNCATED (exit 124)" "the headline hid a truncated startup"
   assert_contains "$head" "bootstrap wake-queue" "the headline did not name the stages that never ran"
+  assert_contains "$head" "live tasks: unknown" "a truncated headline did not mark the task list unknown"
+  assert_not_contains "$head" "live tasks: none" "a truncated headline claimed no live tasks it never counted"
+  assert_contains "$head" "posture: unknown" "a truncated headline did not mark the posture unknown"
   assert_contains "$out" "STARTUP TRUNCATED - SESSION START HIT ITS" "the truncation banner no longer closes the digest"
 
   pass "the Claude headline names a refused lock and a truncated startup"
