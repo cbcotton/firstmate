@@ -1786,6 +1786,40 @@ test_full_mcp_opt_in_keeps_the_inherited_surface_and_is_recorded() {
   pass "--full-mcp keeps the inherited MCP surface, is recorded on the task, and reaches batch pairs"
 }
 
+# A project's own committed .mcp.json is not part of the captain's global
+# surface, so a lean launch hands that file to --mcp-config and only the
+# inherited servers stay out; --full-mcp still lifts the restriction entirely.
+test_lean_claude_launch_keeps_the_projects_committed_mcp_servers() {
+  local rec id full out status launch args config
+  id=profile-claude-proj-mcp-m7
+  full=profile-claude-proj-mcp-full-m8
+  rec=$(make_spawn_case profile-claude-proj-mcp claude "$id" "$full")
+  read_case_record "$rec"
+  printf '%s\n' '{"mcpServers":{"docs":{"type":"stdio","command":"docs-server"}}}' > "$PROJ_DIR/.mcp.json"
+  git -C "$PROJ_DIR" add .mcp.json
+  git -C "$PROJ_DIR" -c user.name='Firstmate Tests' -c user.email='tests@example.invalid' commit -qm "add project mcp"
+  git -C "$PROJ_DIR" push -q origin main
+
+  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR")
+  status=$?
+  expect_code 0 "$status" "claude spawn in a worktree with a committed .mcp.json should succeed"$'\n'"$out"
+  launch=$(cat "$LAUNCH_LOG")
+  args=$(claude_mcp_args "$launch")
+  config=${args%%$'\n'*}
+  [ "${args#*$'\n'}" = strict=1 ] || fail "a project-MCP launch must still restrict the inherited surface: $args"
+  [ -f "$config" ] && [ "$config" -ef "$WT_DIR/.mcp.json" ] \
+    || fail "--mcp-config must name the worktree's committed .mcp.json, got: $args"
+  [ "$(claude_launch_brief_arg "$launch" | "$ROOT/bin/fm-operational-input.sh" doorbell-kind)" = launch-brief ] \
+    || fail "the project .mcp.json path displaced the brief doorbell from the end of the launch"
+
+  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$full" "$PROJ_DIR" --full-mcp)
+  status=$?
+  expect_code 0 "$status" "--full-mcp spawn with a committed .mcp.json should succeed"$'\n'"$out"
+  [ "$(claude_mcp_args "$(cat "$LAUNCH_LOG")")" = strict=0 ] \
+    || fail "--full-mcp must not restrict the MCP surface even when the project ships a .mcp.json"
+  pass "a lean claude launch keeps a project's committed .mcp.json servers, and --full-mcp still restores everything"
+}
+
 test_claude_secondmate_launch_keeps_the_full_mcp_surface() {
   local rec id sm out status
   id=profile-secondmate-mcp-m5
@@ -2402,6 +2436,7 @@ test_keep_ai_trailers_reaches_secondmate_crew_launches
 test_claude_secondmate_launch_carries_the_attribution_policy
 test_claude_task_launches_are_lean_by_default
 test_full_mcp_opt_in_keeps_the_inherited_surface_and_is_recorded
+test_lean_claude_launch_keeps_the_projects_committed_mcp_servers
 test_claude_secondmate_launch_keeps_the_full_mcp_surface
 test_full_mcp_refuses_where_no_lean_launch_exists
 test_active_dispatch_profile_does_not_block_secondmate_launch

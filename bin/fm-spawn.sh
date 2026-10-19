@@ -128,8 +128,9 @@
 #   --full-mcp is the per-task opt-in that gives a Claude crewmate or scout the
 #   captain's whole MCP surface (docs/configuration.md "Claude worker MCP
 #   surface"). Without it, every Claude ship and scout launch is lean: it
-#   carries --strict-mcp-config --mcp-config '{"mcpServers":{}}', so no user,
-#   project, plugin, or claude.ai connector MCP server loads for that worker. A
+#   carries --strict-mcp-config, so no user, plugin, or claude.ai connector MCP
+#   server loads for that worker, and its --mcp-config is the worktree's
+#   committed .mcp.json when there is one, or else '{"mcpServers":{}}'. A
 #   secondmate is a firstmate primary in its own home and always keeps the full
 #   surface. The flag requires the canonical claude launch and is refused for a
 #   secondmate, a raw launch command, or any other harness. The record then gets
@@ -404,7 +405,8 @@
 #   Launch templates live in launch_template() below; placeholders replaced before launch:
 #     __BRIEF__    absolute path to data/<task-id>/brief.md
 #     __CLAUDEPERMFLAG__ the claude permission flag selected by config/claude-permission-mode
-#     __CLAUDEMCP__ the lean MCP flags for a claude ship or scout, empty under
+#     __CLAUDEMCP__ the lean MCP flags for a claude ship or scout, naming the
+#                  worktree's committed .mcp.json when present; empty under
 #                  --full-mcp and for a secondmate (supplies its own trailing space)
 #     __CLAUDEADDDIRS__ quoted --add-dir flags granting exactly this task's
 #                  Firstmate channel directories (claude_add_dirs_flag below;
@@ -2102,10 +2104,12 @@ launch_template() {
   # project and fetched content. A persistent secondmate receives its own
   # supervisor contract instead, so this task-worker statement does not apply.
   # __CLAUDEMCP__ makes a ship or scout lean unless the task opted into
-  # --full-mcp: --strict-mcp-config with an empty --mcp-config loads no user,
-  # project, plugin, or claude.ai connector MCP server (verified on 2.1.303,
-  # where 15 inherited servers dropped to none). --mcp-config is variadic, so
-  # the next option (--settings) must follow it or it swallows the brief.
+  # --full-mcp: --strict-mcp-config loads no user, plugin, or claude.ai
+  # connector MCP server (verified on 2.1.303, where 15 inherited servers
+  # dropped to none), and its --mcp-config is the worktree's committed
+  # .mcp.json when there is one, so project servers still load, or else an
+  # empty config. --mcp-config is variadic, so the next option (--settings)
+  # must follow it or it swallows the brief.
   claude)
     printf '%s' 'CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=false CLAUDE_CODE_SEND_FEEDBACK=0 claude __CLAUDEPERMFLAG__ __CLAUDEADDDIRS____CLAUDEMCP__--settings '\''{"feedbackDrafts":"off"__CLAUDEATTRIBUTION__}'\'' '
     if [ "$kind" != secondmate ]; then
@@ -5485,7 +5489,13 @@ fi
 LAUNCH=${LAUNCH//__PIRESUME__/$RESUME_ARGS}
 LAUNCH=${LAUNCH//__CLAUDEPERMFLAG__/$CLAUDE_PERM_FLAG}
 CLAUDE_MCP_FLAGS=
-[ "$KIND" = secondmate ] || [ "$FULL_MCP" = 1 ] || CLAUDE_MCP_FLAGS="--strict-mcp-config --mcp-config '{\"mcpServers\":{}}' "
+if [ "$KIND" != secondmate ] && [ "$FULL_MCP" = 0 ]; then
+  if [ -f "$WT/.mcp.json" ] && git -C "$WT" ls-files --error-unmatch -- .mcp.json >/dev/null 2>&1; then
+    CLAUDE_MCP_FLAGS="--strict-mcp-config --mcp-config $(shell_quote "$WT/.mcp.json") "
+  else
+    CLAUDE_MCP_FLAGS="--strict-mcp-config --mcp-config '{\"mcpServers\":{}}' "
+  fi
+fi
 LAUNCH=${LAUNCH//__CLAUDEMCP__/$CLAUDE_MCP_FLAGS}
 if [ "$KEEP_AI_TRAILERS" = 1 ]; then
   LAUNCH=${LAUNCH//__CLAUDEATTRIBUTION__/}

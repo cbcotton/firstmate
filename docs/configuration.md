@@ -856,13 +856,14 @@ The [Claude adapter reference](../.agents/skills/harness-adapters/references/har
 
 ## Claude worker MCP surface
 
-Every Claude crewmate and scout launches lean by default: `bin/fm-spawn.sh` passes `--strict-mcp-config` with an empty `--mcp-config`.
-The worker then loads none of the MCP servers an ordinary Claude session would: the captain's user servers, plugin-provided servers, claude.ai connectors, and any project `.mcp.json` servers.
+Every Claude crewmate and scout launches lean by default: `bin/fm-spawn.sh` passes `--strict-mcp-config`.
+The worker then loads none of the captain's global MCP surface: user servers, plugin-provided servers, and claude.ai connectors.
 This keeps tool schemas, server instructions, and connection handshakes that almost no task uses out of every worker session.
+The project's own servers still load: when the task worktree has a committed `.mcp.json` at its root, the spawn passes that file as the `--mcp-config` value, and otherwise an empty config.
 
 ### Opting a task into the full surface
 
-Pass `--full-mcp` on the spawn when a task needs one of those servers, for example Figma or Slack.
+Pass `--full-mcp` on the spawn when a task needs one of the captain's global servers, for example Figma or Slack.
 That worker launches with the same MCP configuration as an ordinary Claude session.
 The opt-in is recorded as `mcp=full` in the task record and on the spawn's output line, so a control-plane relaunch that keeps Claude keeps it; a relaunch onto another harness drops it.
 `--full-mcp` applies only to canonical Claude crewmate and scout launches.

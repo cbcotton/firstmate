@@ -62,8 +62,9 @@ The controls are scoped to the launched process and never modify the captain's g
 
 ## Worker MCP surface
 
-A Claude ship or scout launches with `--strict-mcp-config --mcp-config '{"mcpServers":{}}'` unless the task opted into `--full-mcp`; [`Claude worker MCP surface`](../../../../../docs/configuration.md#claude-worker-mcp-surface) owns the opt-in and its record.
+A Claude ship or scout launches with `--strict-mcp-config` unless the task opted into `--full-mcp`, and its `--mcp-config` is the worktree's committed `.mcp.json` when one exists, or else `'{"mcpServers":{}}'`; [`Claude worker MCP surface`](../../../../../docs/configuration.md#claude-worker-mcp-surface) owns the opt-in and its record.
 On 2.1.303, a print-mode init event in a firstmate worktree listed 15 MCP servers without those flags (user, plugin, and claude.ai connector servers) and none with them; the only built-in tools that dropped were the three MCP resource tools.
+With a project `.mcp.json` passed as the `--mcp-config` file instead, the init event listed only that file's one server, with source `dynamic`.
 `--mcp-config` is variadic, so the launch keeps another option after its value: followed directly by the positional prompt, it read the prompt as a config file path and exited.
 User-scope SessionStart hooks, such as the axi tools' banners, cannot be removed per launch.
 Hooks merge across settings scopes, and on 2.1.303 a per-launch `--settings '{"hooks":{"SessionStart":[]}}'` left all three axi banners in place (264, 315, and 9,634 characters).
