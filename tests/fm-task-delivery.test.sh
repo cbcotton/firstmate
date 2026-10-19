@@ -160,7 +160,7 @@ EOF
 # The registry is the captain's standing posture, so dropping below its rigor is
 # allowed but never silent, while matching or exceeding it stays quiet. An
 # unregistered project resolves to the same no-mistakes standing default
-# (AGENTS.md section 7), so a downgrade there is announced too. A conditional
+# (the project-management skill), so a downgrade there is announced too. A conditional
 # policy is excluded because both of its legs are legitimate classifications.
 test_spawn_notices_a_rigor_downgrade_against_the_registry() {
   local rec home proj fakebin out label mode registry expect registered n=0
