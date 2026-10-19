@@ -912,9 +912,25 @@ test_identity_is_untouched_for_unmapped_projects_and_non_sailor_spawns() {
   pass "unmapped projects and non-sailor spawns get no identity and no commit_email"
 }
 
+test_fresh_spawn_without_identity_clears_a_reused_copys_sailor_identity() {
+  local id=identity-reused-s5 out status
+  identity_case identity-reused "$id" ""
+  # An earlier sailor task in this pool slot left its identity in the copy.
+  "$ROOT/bin/fm-sailor-identity.sh" apply "$WT_DIR" Chris tiller.chris@euroradar.nl
+  git -C "$PROJ_DIR" config user.email shared@example.com
+  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR" --harness opencode --model qwen-coder)
+  status=$?
+  expect_code 0 "$status" "a non-sailor spawn into a reused copy should succeed"$'\n'"$out"
+  assert_equals "" "$(git -C "$WT_DIR" config --worktree --get user.name 2>/dev/null || true)" "the earlier sailor's name must be removed from the reused copy"
+  assert_equals "" "$(git -C "$WT_DIR" config --worktree --get user.email 2>/dev/null || true)" "the earlier sailor's address must be removed from the reused copy"
+  assert_equals "shared@example.com" "$(git -C "$WT_DIR" config user.email)" "the reused copy must fall back to the repository's shared identity"
+  assert_equals "shared@example.com" "$(git -C "$PROJ_DIR" config --local user.email)" "the repository's shared user.* settings must stay untouched"
+  pass "a fresh spawn that gets no identity clears an earlier sailor's identity from its reused copy only"
+}
+
 test_malformed_identity_template_refuses_before_any_endpoint() {
   local line id out status n=0
-  for line in 'project Chris <chris@euroradar.nl>' 'project Chris tiller@euroradar.nl' 'project <{sailor}.chris@euroradar.nl>' 'project Chris <{sailor}.chris>' 'project Chris <{sailor}.chris@euroradar.nl> extra'; do
+  for line in 'project Chris <chris@euroradar.nl>' 'project Chris tiller@euroradar.nl' 'project <{sailor}.chris@euroradar.nl>' 'project Chris <{sailor}.chris>' 'project Chris <{sailor}.chris@euroradar.nl> extra' $'project Chris\tX <{sailor}.chris@euroradar.nl>'; do
     n=$((n + 1))
     id=identity-bad-s$n
     identity_case "identity-bad-$n" "$id" "$line"
@@ -2481,6 +2497,7 @@ test_opencode_sailor_launch_points_at_the_sailor
 test_sailor_spawn_on_a_mapped_project_sets_the_worktree_identity
 test_sailor_identity_apply_is_idempotent_and_refuses_the_primary_checkout
 test_identity_is_untouched_for_unmapped_projects_and_non_sailor_spawns
+test_fresh_spawn_without_identity_clears_a_reused_copys_sailor_identity
 test_malformed_identity_template_refuses_before_any_endpoint
 test_sailor_launch_folds_the_opencode_system_prompt
 test_non_sailor_opencode_launch_drops_the_system_fold

@@ -129,6 +129,8 @@
 #   gets that identity in its own copy only (bin/fm-sailor-identity.sh, whose
 #   header owns the format; docs/configuration.md "Sailor commit identity"), a
 #   malformed file refuses the spawn, and the record gets commit_email=<address>.
+#   A fresh spawn whose copy gets no identity clears one an earlier sailor task
+#   left in that reused copy.
 #   --full-mcp is the per-task opt-in that gives a Claude crewmate or scout the
 #   captain's whole MCP surface (docs/configuration.md "Claude worker MCP
 #   surface"). Without it, every Claude ship and scout launch is lean: it
@@ -4683,6 +4685,11 @@ spawn_assert_agent_worktree
 if [ -n "$SAILOR_IDENTITY_EMAIL" ]; then
   "$SCRIPT_DIR/fm-sailor-identity.sh" apply "$WT" "$SAILOR_IDENTITY_NAME" "$SAILOR_IDENTITY_EMAIL" || {
     echo "error: could not set sailor $SAILOR's commit identity in $WT; refusing to launch a worker that would commit under the wrong identity" >&2
+    exit 1
+  }
+elif [ "$RELAUNCH" -eq 0 ] && [ "$KIND" != secondmate ]; then
+  "$SCRIPT_DIR/fm-sailor-identity.sh" clear "$WT" || {
+    echo "error: could not remove an earlier sailor's commit identity from $WT; refusing to launch a worker that would commit under the wrong identity" >&2
     exit 1
   }
 fi
