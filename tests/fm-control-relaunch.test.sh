@@ -799,6 +799,38 @@ test_escalation_off_a_sailor_drops_it() {
   pass "fm-control relaunch: escalating a sailor task onto another harness drops the sailor"
 }
 
+test_same_harness_relaunch_keeps_the_full_mcp_opt_in() {
+  local dir out rc
+  dir=$(new_case keepmcp rl-mcp)
+  add_ship_task "$dir" rl-mcp
+  printf 'mcp=full\n' >> "$dir/home/state/rl-mcp.meta"
+  out=$(run_control "$dir" rl-mcp relaunch --note "still needs figma"); rc=$?
+  expect_code 0 "$rc" "a same-harness relaunch of a full-MCP task should succeed"$'\n'"$out"
+  [ "$(grep -c '^mcp=full$' "$dir/home/state/rl-mcp.meta")" = 1 ] || fail "the record must keep mcp=full exactly once"
+  assert_grep "Firstmate operational input waiting: read" "$dir/fake/literal" "the replacement should have been launched"
+  assert_no_grep "--strict-mcp-config" "$dir/fake/literal" "the replacement launch must keep the full MCP surface"
+  pass "fm-control relaunch: a same-harness relaunch keeps a task's full MCP surface"
+}
+
+test_lean_claude_relaunch_stays_lean_and_a_switch_drops_the_opt_in() {
+  local dir out rc
+  dir=$(new_case leanmcp rl-lean)
+  add_ship_task "$dir" rl-lean
+  out=$(run_control "$dir" rl-lean relaunch --note "same lean runtime"); rc=$?
+  expect_code 0 "$rc" "a same-harness relaunch of a lean task should succeed"$'\n'"$out"
+  assert_grep "--strict-mcp-config --mcp-config" "$dir/fake/literal" "a lean task's replacement launch must stay lean"
+  ! grep -q '^mcp=' "$dir/home/state/rl-lean.meta" || fail "a lean relaunch must record no mcp= line"
+
+  dir=$(new_case switchmcp rl-switch)
+  add_ship_task "$dir" rl-switch
+  printf 'mcp=full\n' >> "$dir/home/state/rl-switch.meta"
+  printf 'codex' > "$dir/fake/becomes"
+  out=$(run_control "$dir" rl-switch relaunch --harness codex --note "switch runtime"); rc=$?
+  expect_code 0 "$rc" "switching a full-MCP task onto codex should succeed"$'\n'"$out"
+  ! grep -q '^mcp=' "$dir/home/state/rl-switch.meta" || fail "a task moved off Claude must no longer record mcp=full"
+  pass "fm-control relaunch: a lean claude relaunch stays lean, and a harness switch drops the MCP opt-in"
+}
+
 test_native_ultra_relaunch_preserves_profile_and_rejects_before_stop() {
   local dir out rc id=rl-ultra
   dir=$(new_case native-ultra "$id")
@@ -2468,6 +2500,8 @@ test_same_harness_relaunch_keeps_the_profile_axes
 test_same_harness_relaunch_keeps_the_sailor
 test_same_harness_relaunch_keeps_a_paid_sailors_spend
 test_escalation_off_a_sailor_drops_it
+test_same_harness_relaunch_keeps_the_full_mcp_opt_in
+test_lean_claude_relaunch_stays_lean_and_a_switch_drops_the_opt_in
 test_native_ultra_relaunch_preserves_profile_and_rejects_before_stop
 test_signed_out_worker_account_pin_refuses_before_stop
 test_worker_account_pin_follows_the_relaunch

@@ -854,6 +854,41 @@ The file is a captain-wide safety preference, so it is inherited into secondmate
 
 The [Claude adapter reference](../.agents/skills/harness-adapters/references/harness/claude.md) records the permission-mode observations and the distinct startup dialogs.
 
+## Claude worker MCP surface
+
+Every Claude crewmate and scout launches lean by default: `bin/fm-spawn.sh` passes `--strict-mcp-config`.
+The worker then loads none of the captain's global MCP surface: user servers, plugin-provided servers, and claude.ai connectors.
+This keeps tool schemas, server instructions, and connection handshakes that almost no task uses out of every worker session.
+The project's own servers still load: when the task worktree has a committed `.mcp.json` at its root, the spawn passes that file as the `--mcp-config` value, and otherwise an empty config.
+
+### Opting a task into the full surface
+
+Pass `--full-mcp` on the spawn when a task needs one of the captain's global servers, for example Figma or Slack.
+That worker launches with the same MCP configuration as an ordinary Claude session.
+The opt-in is recorded as `mcp=full` in the task record and on the spawn's output line, so a control-plane relaunch that keeps Claude keeps it; a relaunch onto another harness drops it.
+`--full-mcp` applies only to canonical Claude crewmate and scout launches.
+It is refused for another harness, a raw launch command, or a secondmate, before any endpoint, worktree, or record exists.
+
+### What the lean surface leaves unchanged
+
+A secondmate is a firstmate primary in its own home and always keeps the full surface, while its own Claude crewmates launch lean.
+Other harnesses are unchanged.
+The captain's plugin skill listing still reaches every Claude worker.
+So do the SessionStart banners that the axi tools' `setup hooks` installs in the captain's user settings, unless the operator guards them as below, because Claude Code has no clean per-launch control that removes user-scope hooks without also dropping the rest of the user settings; the [Claude adapter reference](../.agents/skills/harness-adapters/references/harness/claude.md#worker-mcp-surface) records what was verified.
+
+### Lean worker banners (recommended operator setup)
+
+Keep the axi banners out of worker sessions by guarding each axi SessionStart hook command in `~/.claude/settings.json` (or the `settings.json` under `CLAUDE_CONFIG_DIR`) on `FM_TASK_ID`, which every ship and scout pane exports before its launch:
+
+```json
+{ "type": "command", "command": "[ -n \"${FM_TASK_ID:-}\" ] || lavish-axi", "timeout": 10 }
+```
+
+Apply the same `[ -n "${FM_TASK_ID:-}" ] || <tool>` form to the `gh-axi` and `chrome-devtools-axi` entries.
+A worker then gets no banner, while the main, secondmates, and Claude sessions outside Firstmate, none of which export `FM_TASK_ID`, keep them.
+Firstmate never edits the captain's user settings, so this is a manual operator step after `<tool> setup hooks`.
+Rerunning `setup hooks` rewrites its own entry's command and drops the guard, so reapply it afterwards.
+
 ## OpenCode permission profile (config/opencode-permission-profile)
 
 The optional local, gitignored `config/opencode-permission-profile` selects the permission block every OpenCode crewmate and scout launch carries, including control-plane relaunches.
@@ -1284,7 +1319,7 @@ Per-machine Cursor `cli-config.json` attribution-off is not this contract: it do
 
 `config/crew-dispatch.json` is an optional local, gitignored file containing natural-language rules that firstmate reads before dispatching a crewmate or scout.
 Firstmate chooses the best matching rule with judgment; shell scripts do not match the natural-language rules.
-Firstmate resolves the rule's profile object or array under `AGENTS.md` section 4 and `quota-array-dispatch`, then passes only concrete `--harness`, `--model`, and `--effort` flags to `fm-spawn.sh`.
+Firstmate resolves the rule's profile object or array under the `harness-adapters` dispatch reference and `quota-array-dispatch`, then passes only concrete `--harness`, `--model`, and `--effort` flags to `fm-spawn.sh`.
 
 **Spawn requirements**
 
@@ -1295,7 +1330,7 @@ Firstmate resolves the rule's profile object or array under `AGENTS.md` section 
 **Contract owners**
 
 This section is the single owner of the canonical schema and its per-field semantics.
-`AGENTS.md` section 4 owns the always-loaded dispatch intake boundary, and `quota-array-dispatch` owns the completion-aware profile-array selection procedure.
+`AGENTS.md` section 4 owns the always-loaded dispatch triggers, the `harness-adapters` dispatch reference owns routing precedence, and `quota-array-dispatch` owns the completion-aware profile-array selection procedure.
 
 ```json
 {
@@ -1627,7 +1662,7 @@ Every result above exits 0.
 
 **Firstmate retains the dispatch decision**
 
-The tool never replaces firstmate's judgment, `quota-array-dispatch`, the captain-approval gate, or `fm-spawn.sh` validation; `AGENTS.md` section 4 owns what firstmate does with each outcome.
+The tool never replaces firstmate's judgment, `quota-array-dispatch`, the captain-approval gate, or `fm-spawn.sh` validation; the `harness-adapters` dispatch reference owns what firstmate does with each outcome.
 By accepted design, a `clear` result does not enforce catalog/authentication, reasoning-class, or completion-runway gates.
 
 Firstmate passes its profile line unless it states a reason to override, such as the brief's reasoning class or an eligible-unranked-candidate note; every non-clear result returns to the full existing intake.
