@@ -1,8 +1,7 @@
 ---
 name: stuck-crewmate-recovery
 description: >-
-  Load when the session-start digest reports an ordinary direct report's endpoint dead or its metadata has no window, and after a stale wake, looping pane, repeated confusion, an answered-by-brief question, an unresponsive crewmate, or a failed steer.
-  Also load when a live crewmate reports the no-mistakes pipeline dead, unreachable, or timed out.
+  Load when the session-start digest reports an ordinary direct report's endpoint dead or metadata windowless; after a stale wake, looping pane, repeated confusion, answered-by-brief question, unresponsive crewmate, or failed steer; and when a live crewmate reports the no-mistakes pipeline dead, unreachable, or timed out.
 user-invocable: false
 metadata:
   internal: true
