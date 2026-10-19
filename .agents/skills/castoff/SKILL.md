@@ -1,8 +1,8 @@
 ---
 name: castoff
 description: >-
-  Turn on the phone mirror when the captain invokes /castoff (Cast Off) or asks for their terminal replies on the pinnace, and load it whenever `state/.castoff` exists.
-  While the mirror is on, every turn's final message also reaches the pinnace chat, so the first mate keeps its replies extra concise; /makefast (Make Fast) turns it off.
+  Load when the captain invokes /castoff (Cast Off) or asks for their terminal replies on the pinnace, and whenever `state/.castoff` exists.
+  Every final message then also reaches the phone, so keep replies extra concise; /makefast (Make Fast) turns it off.
 user-invocable: true
 metadata:
   internal: true
