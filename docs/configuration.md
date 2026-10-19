@@ -854,6 +854,26 @@ The file is a captain-wide safety preference, so it is inherited into secondmate
 
 The [Claude adapter reference](../.agents/skills/harness-adapters/references/harness/claude.md) records the permission-mode observations and the distinct startup dialogs.
 
+## Claude worker MCP surface
+
+Every Claude crewmate and scout launches lean by default: `bin/fm-spawn.sh` passes `--strict-mcp-config` with an empty `--mcp-config`.
+The worker then loads none of the MCP servers an ordinary Claude session would: the captain's user servers, plugin-provided servers, claude.ai connectors, and any project `.mcp.json` servers.
+This keeps tool schemas, server instructions, and connection handshakes that almost no task uses out of every worker session.
+
+### Opting a task into the full surface
+
+Pass `--full-mcp` on the spawn when a task needs one of those servers, for example Figma or Slack.
+That worker launches with the same MCP configuration as an ordinary Claude session.
+The opt-in is recorded as `mcp=full` in the task record and on the spawn's output line, so a control-plane relaunch that keeps Claude keeps it; a relaunch onto another harness drops it.
+`--full-mcp` applies only to canonical Claude crewmate and scout launches.
+It is refused for another harness, a raw launch command, or a secondmate, before any endpoint, worktree, or record exists.
+
+### What the lean surface leaves unchanged
+
+A secondmate is a firstmate primary in its own home and always keeps the full surface, while its own Claude crewmates launch lean.
+Other harnesses are unchanged.
+The SessionStart banners that the axi tools' `setup hooks` installs in the captain's user settings, and the captain's plugin skill listing, still reach every Claude worker, because Claude Code has no clean per-launch control that removes them without also dropping the rest of the user settings; the [Claude adapter reference](../.agents/skills/harness-adapters/references/harness/claude.md#worker-mcp-surface) records what was verified.
+
 ## OpenCode permission profile (config/opencode-permission-profile)
 
 The optional local, gitignored `config/opencode-permission-profile` selects the permission block every OpenCode crewmate and scout launch carries, including control-plane relaunches.
