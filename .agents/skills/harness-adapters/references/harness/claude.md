@@ -60,6 +60,19 @@ Styled capture stays internal to the boolean detector; `fm-peek` and model-facin
 The spawn disables Claude's `/bug` and `/feedback` model-drafted feedback flow for every Claude worker and secondmate, preventing a fleet-launched agent from queuing or submitting a bug report on the captain's behalf.
 The controls are scoped to the launched process and never modify the captain's global Claude settings; `launch_template()` in `../../../../../bin/fm-spawn.sh` owns their exact mechanics and defense-in-depth rationale.
 
+## Worker MCP surface
+
+A Claude ship or scout launches with `--strict-mcp-config` unless the task opted into `--full-mcp`, and its `--mcp-config` is the worktree's committed `.mcp.json` when one exists, or else `'{"mcpServers":{}}'`; [`Claude worker MCP surface`](../../../../../docs/configuration.md#claude-worker-mcp-surface) owns the opt-in and its record.
+On 2.1.303, a print-mode init event in a firstmate worktree listed 15 MCP servers without those flags (user, plugin, and claude.ai connector servers) and none with them; the only built-in tools that dropped were the three MCP resource tools.
+With a project `.mcp.json` passed as the `--mcp-config` file instead, the init event listed only that file's one server, with source `dynamic`.
+`--mcp-config` is variadic, so the launch keeps another option after its value: followed directly by the positional prompt, it read the prompt as a config file path and exited.
+User-scope SessionStart hooks, such as the axi tools' banners, cannot be removed per launch.
+Hooks merge across settings scopes, and on 2.1.303 a per-launch `--settings '{"hooks":{"SessionStart":[]}}'` left all three axi banners in place (264, 315, and 9,634 characters).
+`disableAllHooks` would also remove the worker's own busy and turn-end hooks and every project hook.
+`--setting-sources project,local` removed the banners and cut 30 plugins to 4 and 229 skills to 27, but it drops every user setting with them: the session fell back from the user `auto` permission default to `default`.
+Claude's settings reference also scopes `skipDangerousModePermissionPrompt` to user, local, or managed settings, so a bypass-mode worker would lose the setting that keeps the bypass confirmation away.
+The operator-side guard in [`Lean worker banners`](../../../../../docs/configuration.md#lean-worker-banners-recommended-operator-setup) works instead: on 2.1.303, hook commands guarded on `FM_TASK_ID` printed nothing with it set and all three banners without it.
+
 ## Task control channel
 
 A Claude task worker's launch brief and Firstmate steering-inbox messages arrive as file-shaped content that is otherwise indistinguishable from indirect prompt injection.
