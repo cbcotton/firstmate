@@ -842,6 +842,109 @@ test_opencode_sailor_launch_points_at_the_sailor() {
   pass "an opencode sailor launch carries the sailor as its provider and records sailor=<name>"
 }
 
+# The sailor commit identity (docs/configuration.md "Sailor commit identity"):
+# a mapped project's sailor copy commits under the sailor's own address, set in
+# that copy's worktree configuration only.
+write_identity_map() { # <home> <line...>
+  local home=$1
+  shift
+  printf '%s\n' "$@" > "$home/config/sailor-commit-identity"
+}
+
+identity_case() { # <name> <id> <map-line>; sets the case record and enables the sailor
+  local name=$1 id=$2 line=$3 rec
+  rec=$(make_spawn_case "$name" opencode "$id")
+  read_case_record "$rec"
+  enable_sailors "$HOME_DIR" "$FAKEBIN_DIR" live
+  [ -z "$line" ] || write_identity_map "$HOME_DIR" "$line"
+}
+
+test_sailor_spawn_on_a_mapped_project_sets_the_worktree_identity() {
+  local id=identity-sailor-s1 out status project shared_before
+  # make_spawn_case names every case's primary checkout "project".
+  identity_case identity-mapped "$id" 'project Chris <{sailor}.chris@euroradar.nl>'
+  project=$PROJ_DIR
+  shared_before=$(git -C "$project" config --local --get-regexp '^user\.' || true)
+
+  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR" --harness opencode --model qwen-coder --sailor tiller)
+  status=$?
+  expect_code 0 "$status" "a sailor spawn on a mapped project should succeed"$'\n'"$out"
+  assert_equals "Chris" "$(git -C "$WT_DIR" config user.name)" "the sailor copy must commit as the mapped name"
+  assert_equals "tiller.chris@euroradar.nl" "$(git -C "$WT_DIR" config user.email)" "the sailor copy must commit under the sailor's own address"
+  assert_grep "commit_email=tiller.chris@euroradar.nl" "$HOME_DIR/state/$id.meta" "meta must record the applied address"
+  assert_equals "$shared_before" "$(git -C "$project" config --local --get-regexp '^user\.' || true)" "the repository's shared user.* settings must stay untouched"
+  assert_equals "" "$(git -C "$project" config --worktree --get user.email 2>/dev/null || true)" "the primary checkout must not gain a worktree identity"
+  pass "a sailor spawn on a mapped project sets the identity in its own copy only and records commit_email"
+}
+
+test_sailor_identity_apply_is_idempotent_and_refuses_the_primary_checkout() {
+  local rec out status
+  rec=$(make_spawn_case identity-apply opencode)
+  read_case_record "$rec"
+  # A relaunch re-runs the same apply on the same copy, so it must converge.
+  "$ROOT/bin/fm-sailor-identity.sh" apply "$WT_DIR" Chris tiller.chris@euroradar.nl
+  "$ROOT/bin/fm-sailor-identity.sh" apply "$WT_DIR" Chris tiller.chris@euroradar.nl
+  assert_equals "tiller.chris@euroradar.nl" "$(git -C "$WT_DIR" config user.email)" "a repeated apply must keep the identity"
+  assert_equals "1" "$(git -C "$WT_DIR" config --worktree --get-all user.email | wc -l | tr -d ' ')" "a repeated apply must not stack values"
+  out=$("$ROOT/bin/fm-sailor-identity.sh" apply "$PROJ_DIR" Chris tiller.chris@euroradar.nl 2>&1)
+  status=$?
+  expect_code 2 "$status" "applying to the primary checkout must be refused"$'\n'"$out"
+  assert_contains "$out" "primary checkout" "the refusal must say why"
+  pass "the sailor identity apply converges on a relaunch and refuses the primary checkout"
+}
+
+test_identity_is_untouched_for_unmapped_projects_and_non_sailor_spawns() {
+  local id out status
+  id=identity-sailor-s3
+  identity_case identity-unmapped "$id" "$(printf 'otherproj Chris <{sailor}.chris@euroradar.nl>')"
+  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR" --harness opencode --model qwen-coder --sailor tiller)
+  status=$?
+  expect_code 0 "$status" "a sailor spawn on an unmapped project should succeed as today"$'\n'"$out"
+  assert_equals "" "$(git -C "$WT_DIR" config --worktree --get user.email 2>/dev/null || true)" "an unmapped project's copy must get no identity"
+  assert_not_contains "$(cat "$HOME_DIR/state/$id.meta")" "commit_email" "an unmapped project must record no commit_email"
+
+  id=identity-nonsailor-s4
+  identity_case identity-nonsailor "$id" "$(printf 'project Chris <{sailor}.chris@euroradar.nl>')"
+  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR" --harness opencode --model qwen-coder)
+  status=$?
+  expect_code 0 "$status" "a non-sailor spawn on a mapped project should succeed as today"$'\n'"$out"
+  assert_equals "" "$(git -C "$WT_DIR" config --worktree --get user.email 2>/dev/null || true)" "a non-sailor copy must get no identity"
+  assert_not_contains "$(cat "$HOME_DIR/state/$id.meta")" "commit_email" "a non-sailor spawn must record no commit_email"
+  pass "unmapped projects and non-sailor spawns get no identity and no commit_email"
+}
+
+test_fresh_spawn_without_identity_clears_a_reused_copys_sailor_identity() {
+  local id=identity-reused-s5 out status
+  identity_case identity-reused "$id" ""
+  # An earlier sailor task in this pool slot left its identity in the copy.
+  "$ROOT/bin/fm-sailor-identity.sh" apply "$WT_DIR" Chris tiller.chris@euroradar.nl
+  git -C "$PROJ_DIR" config user.email shared@example.com
+  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR" --harness opencode --model qwen-coder)
+  status=$?
+  expect_code 0 "$status" "a non-sailor spawn into a reused copy should succeed"$'\n'"$out"
+  assert_equals "" "$(git -C "$WT_DIR" config --worktree --get user.name 2>/dev/null || true)" "the earlier sailor's name must be removed from the reused copy"
+  assert_equals "" "$(git -C "$WT_DIR" config --worktree --get user.email 2>/dev/null || true)" "the earlier sailor's address must be removed from the reused copy"
+  assert_equals "shared@example.com" "$(git -C "$WT_DIR" config user.email)" "the reused copy must fall back to the repository's shared identity"
+  assert_equals "shared@example.com" "$(git -C "$PROJ_DIR" config --local user.email)" "the repository's shared user.* settings must stay untouched"
+  pass "a fresh spawn that gets no identity clears an earlier sailor's identity from its reused copy only"
+}
+
+test_malformed_identity_template_refuses_before_any_endpoint() {
+  local line id out status n=0
+  for line in 'project Chris <chris@euroradar.nl>' 'project Chris tiller@euroradar.nl' 'project <{sailor}.chris@euroradar.nl>' 'project Chris <{sailor}.chris>' 'project Chris <{sailor}.chris@euroradar.nl> extra' $'project Chris\tX <{sailor}.chris@euroradar.nl>'; do
+    n=$((n + 1))
+    id=identity-bad-s$n
+    identity_case "identity-bad-$n" "$id" "$line"
+    out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR" --harness opencode --model qwen-coder --sailor tiller)
+    status=$?
+    expect_code 1 "$status" "a malformed template must refuse the spawn: $line"$'\n'"$out"
+    assert_contains "$out" "sailor-commit-identity" "the refusal must name the config file: $line"
+    assert_absent "$HOME_DIR/state/$id.meta" "a refused spawn must leave no task record: $line"
+    assert_equals "" "$(git -C "$WT_DIR" config --worktree --get user.email 2>/dev/null || true)" "a refused spawn must not set an identity: $line"
+  done
+  pass "a malformed sailor commit identity template refuses the spawn before any record exists"
+}
+
 # fold_system <plugin> <spec-json>: run OpenCode's system-prompt preparation
 # around the generated fold plugin in a plain Node host and print the system
 # messages it would send. The spec holds the `initial` entries and the texts
@@ -2392,6 +2495,11 @@ test_opencode_without_effort_keeps_launch_config_unchanged
 test_opencode_emits_variant_for_openai_family_effort
 test_opencode_omits_variant_when_model_family_lacks_effort
 test_opencode_sailor_launch_points_at_the_sailor
+test_sailor_spawn_on_a_mapped_project_sets_the_worktree_identity
+test_sailor_identity_apply_is_idempotent_and_refuses_the_primary_checkout
+test_identity_is_untouched_for_unmapped_projects_and_non_sailor_spawns
+test_fresh_spawn_without_identity_clears_a_reused_copys_sailor_identity
+test_malformed_identity_template_refuses_before_any_endpoint
 test_sailor_launch_folds_the_opencode_system_prompt
 test_non_sailor_opencode_launch_drops_the_system_fold
 test_placeholder_sailor_refuses_before_endpoint_or_metadata

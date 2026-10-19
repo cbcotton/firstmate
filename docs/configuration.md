@@ -1482,6 +1482,24 @@ A sailor is a named OpenAI-compatible endpoint that ordinary work can run on: us
 }
 ```
 
+**Sailor commit identity**
+
+The optional local, gitignored file `config/sailor-commit-identity` gives a named sailor's task copy its own commit identity, so its commits do not fall back to the machine's default.
+Each line maps a registered project name to a `Name <address>` template whose address holds `{sailor}`; blank lines and `#` comments are ignored:
+
+```text
+gpr3d Chris <{sailor}.chris@euroradar.nl>
+```
+
+- `fm-spawn.sh` applies it to every crewmate or scout launched with `--sailor` on a mapped project, and a relaunch on the same copy keeps it; with no file, or no line for the project, a spawn behaves as before, and a launch without a sailor gets no identity.
+  A fresh spawn whose copy gets no identity removes any worktree-scoped `user.name` and `user.email` an earlier sailor task left in that reused copy, so it commits under the repository's usual identity.
+- The identity is set in that copy's own worktree configuration (`extensions.worktreeConfig` with `git config --worktree`), so the repository's shared `user.*` settings, the primary checkout, and global configuration stay unchanged.
+  A restricted sailor's permission profile denies `git -c user.*` and environment-prefixed commits, which is why firstmate sets the identity at launch rather than leaving it to the sailor.
+- The task record gets `commit_email=<address>`.
+- A malformed line anywhere in the file, such as a missing `{sailor}`, a missing `Name`, an address that is not `user@host`, or a project named twice, refuses every sailor spawn with the line named, before any endpoint or record exists; fix or remove the file and spawn again.
+- The file is read per home and is not inherited by secondmate homes.
+- `bin/fm-sailor-identity.sh` owns the format and the mechanics, and `tests/fm-spawn-dispatch-profile.test.sh` covers the behavior.
+
 **External sailor: Hugging Face Inference**
 
 Hugging Face's Inference Providers router is OpenAI-compatible at `https://router.huggingface.co/v1`, takes `Authorization: Bearer <token>`, and lists its models at `GET /v1/models`.
