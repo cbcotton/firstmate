@@ -1,7 +1,8 @@
 ---
 name: bootstrap-diagnostics
 description: >-
-  Load whenever the session-start digest's bootstrap or network-checks section, or a standalone bin/fm-bootstrap.sh or bin/fm-startup-network.sh run, prints an actionable diagnostic line (MISSING, TANGLE, NEEDS_GH_AUTH, FLEET_SYNC, ...) or reports an interrupted backlog cleanup that may have left an endpoint or local copy.
+  Load whenever the session-start digest's bootstrap or network-checks section, or a standalone bin/fm-bootstrap.sh or bin/fm-startup-network.sh run, prints MISSING, MISSING_MANUAL, PRESENTATION_UNAVAILABLE, BACKEND_INVALID, NEEDS_GH_AUTH, TANGLE, STARTUP_MEMORY_BUDGET, CREW_DISPATCH invalid, PRIVATEER, FLEET_SYNC, NETWORK_CHECKS, HOME_SUMMARY, BACKLOG_RECONCILE, SECONDMATE_SYNC, SECONDMATE_LIVENESS, SECONDMATE_HANDOFF, NUDGE_SECONDMATES, or FMX, or reports an interrupted backlog cleanup that may have left an endpoint or local copy.
+  A silent bootstrap section, or any other BOOTSTRAP_INFO fact, means no skill load.
 user-invocable: false
 metadata:
   internal: true
