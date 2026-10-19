@@ -838,6 +838,12 @@ test_matrix_opencode_sidebar_text() {
   assert_screen "opencode draft beside the sidebar on tmux" pending "$CAPS_TMUX" "$screen" 5
   screen=$(oc_wide_screen error "  ${t}refactor the parser please" "$s1" "$s2" "$s3")
   assert_screen "opencode draft under an error block beside the sidebar on tmux" pending "$CAPS_TMUX" "$screen" 6
+  # A foreground's RGB payload is never a background code: on a palette page
+  # (SGR 40, box SGR 44) the draft's 40 below must not end the box early.
+  screen=$(printf '%s[40m  %s[34m┃%s[44m  %s[38;2;240;230;40mdraft%s[40m  %s[100m  %s[37msidebar\n' "$ESC" "$ESC" "$ESC" "$ESC" "$ESC" "$ESC" "$ESC")
+  assert_screen "opencode draft with a palette-like foreground payload on tmux" pending "$CAPS_TMUX" "$screen" 0
+  screen=$(printf '%s[40m  %s[34m┃%s[44m   %s[40m  %s[100m  %s[37msidebar\n' "$ESC" "$ESC" "$ESC" "$ESC" "$ESC" "$ESC")
+  assert_screen "opencode sidebar on a palette page on tmux" empty "$CAPS_TMUX" "$screen" 0
   pass "matrix: opencode's sidebar text beside an empty composer reads empty, and a draft there still refuses"
 }
 
