@@ -1,0 +1,2 @@
+base AGENTS.md: 49555 bytes, 432 lines
+head AGENTS.md: 31534 bytes, 233 lines (Codex default project_doc_max_bytes = 32768)
