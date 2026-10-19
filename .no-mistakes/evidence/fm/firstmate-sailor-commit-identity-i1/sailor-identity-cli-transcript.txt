@@ -1,0 +1,61 @@
++(eval):3> GLOBAL_BEFORE=+(eval):3> git config --global --get user.email
++(eval):3> GLOBAL_BEFORE='' 
++(eval):4> mkdir -p /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/tmp.EpZ4xcIltW/cfg
++(eval):4> git init -q /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/tmp.EpZ4xcIltW/gpr3d
++(eval):4> git -C /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/tmp.EpZ4xcIltW/gpr3d commit -q --allow-empty -m init -c 'user.name=x'
++(eval):4> git -C /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/tmp.EpZ4xcIltW/gpr3d -c 'user.name=Base' -c 'user.email=base@example.com' commit -q --allow-empty -m init
++(eval):5> git -C /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/tmp.EpZ4xcIltW/gpr3d config user.email shared@example.com
++(eval):5> git -C /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/tmp.EpZ4xcIltW/gpr3d config user.name Shared
++(eval):6> git -C /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/tmp.EpZ4xcIltW/gpr3d worktree add -q /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/tmp.EpZ4xcIltW/slotX -b task1
++(eval):7> printf '# mapping\ngpr3d Chris <{sailor}.chris@euroradar.nl>\n'
++(eval):8> /Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M5AGP9VKWDP3DYZPTG90GTSF/bin/fm-sailor-identity.sh resolve /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/tmp.EpZ4xcIltW/cfg gpr3d drake
++(eval):8> cat -A
+cat: illegal option -- A
+usage: cat [-belnstuv] [file ...]
++(eval):9> /Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M5AGP9VKWDP3DYZPTG90GTSF/bin/fm-sailor-identity.sh resolve /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/tmp.EpZ4xcIltW/cfg otherproj drake
++(eval):9> echo 'unmapped rc=0 (empty output)'
+unmapped rc=0 (empty output)
++(eval):10> IFS=$'\t' +(eval):10> read -r N M
++(eval):11> /Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M5AGP9VKWDP3DYZPTG90GTSF/bin/fm-sailor-identity.sh apply /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/tmp.EpZ4xcIltW/slotX Chris drake.chris@euroradar.nl
++(eval):12> git -C /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/tmp.EpZ4xcIltW/slotX commit -q --allow-empty -m 'sailor commit'
++(eval):12> git -C /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/tmp.EpZ4xcIltW/slotX log -1 '--format=slotX author: %an <%ae>  committer: %cn <%ce>'
+slotX author: Chris <drake.chris@euroradar.nl>  committer: Chris <drake.chris@euroradar.nl>
++(eval):13> git -C /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/tmp.EpZ4xcIltW/gpr3d commit -q --allow-empty -m 'primary commit'
++(eval):13> git -C /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/tmp.EpZ4xcIltW/gpr3d log -1 '--format=primary author: %an <%ae>'
+primary author: Shared <shared@example.com>
++(eval):14> git -C /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/tmp.EpZ4xcIltW/gpr3d config --local --get-regexp '^user\.'
+user.email shared@example.com
+user.name Shared
++(eval):15> git config --global --get user.email
++(eval):15> [ '' '=' '' ']'
++(eval):15> echo yes
++(eval):15> echo 'global unchanged: yes'
+global unchanged: yes
++(eval):16> /Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M5AGP9VKWDP3DYZPTG90GTSF/bin/fm-sailor-identity.sh apply /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/tmp.EpZ4xcIltW/gpr3d Chris x@y
+error: /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/tmp.EpZ4xcIltW/gpr3d is the repository's primary checkout, not a linked worktree
++(eval):16> echo 'apply-to-primary rc=2'
+apply-to-primary rc=2
++(eval):18> /Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M5AGP9VKWDP3DYZPTG90GTSF/bin/fm-sailor-identity.sh clear /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/tmp.EpZ4xcIltW/slotX
++(eval):18> echo 'clear rc=0'
+clear rc=0
++(eval):19> git -C /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/tmp.EpZ4xcIltW/slotX commit -q --allow-empty -m 'reused non-sailor commit'
++(eval):19> git -C /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/tmp.EpZ4xcIltW/slotX log -1 '--format=reused slotX author: %an <%ae>'
+reused slotX author: Shared <shared@example.com>
++(eval):20> /Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M5AGP9VKWDP3DYZPTG90GTSF/bin/fm-sailor-identity.sh clear /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/tmp.EpZ4xcIltW/slotX
++(eval):20> echo 'second clear rc=0 (idempotent)'
+second clear rc=0 (idempotent)
++(eval):21> printf 'gpr3d Chris\tX <{sailor}.chris@euroradar.nl>\n'
++(eval):22> /Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M5AGP9VKWDP3DYZPTG90GTSF/bin/fm-sailor-identity.sh resolve /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/tmp.EpZ4xcIltW/cfg gpr3d drake
+error: /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/tmp.EpZ4xcIltW/cfg/sailor-commit-identity line 1 is malformed (want '<project> <Name> <name-with-{sailor}@host>'): gpr3d Chris	X <{sailor}.chris@euroradar.nl>
++(eval):22> echo 'tab-name rc=2'
+tab-name rc=2
++(eval):23> printf 'gpr3d Chris <chris@euroradar.nl>\n'
++(eval):24> /Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M5AGP9VKWDP3DYZPTG90GTSF/bin/fm-sailor-identity.sh resolve /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/tmp.EpZ4xcIltW/cfg gpr3d drake
+error: /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/tmp.EpZ4xcIltW/cfg/sailor-commit-identity line 1 is malformed (want '<project> <Name> <name-with-{sailor}@host>'): gpr3d Chris <chris@euroradar.nl>
++(eval):24> echo 'no-{sailor} rc=2'
+no-{sailor} rc=2
++(eval):25> printf 'gpr3d Chris <{sailor}.chris@euroradar.nl>\ngpr3d Chris <{sailor}.x@e.nl>\n'
++(eval):26> /Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M5AGP9VKWDP3DYZPTG90GTSF/bin/fm-sailor-identity.sh resolve /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/tmp.EpZ4xcIltW/cfg gpr3d drake
+error: /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/tmp.EpZ4xcIltW/cfg/sailor-commit-identity line 2 maps project gpr3d a second time
++(eval):26> echo 'duplicate rc=2'
+duplicate rc=2

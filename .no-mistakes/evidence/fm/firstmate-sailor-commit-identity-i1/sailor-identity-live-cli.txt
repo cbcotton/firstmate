@@ -1,0 +1,70 @@
++(eval):3> export GIT_CONFIG_GLOBAL=/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-ident.3PuSNI/globalcfg
++(eval):3> git config --global user.name 'Mac Default'
++(eval):3> git config --global user.email default@mac.local
++(eval):4> git init -q -b main /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-ident.3PuSNI/gpr3d
++(eval):4> git -C /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-ident.3PuSNI/gpr3d commit -q --allow-empty -m init
++(eval):5> git -C /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-ident.3PuSNI/gpr3d worktree add -q -b slotX /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-ident.3PuSNI/slotX
++(eval):6> mkdir -p /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-ident.3PuSNI/config
++(eval):6> printf '# map\n\ngpr3d Chris <{sailor}.chris@euroradar.nl>\nother Chris <{sailor}@x.nl>\n'
++(eval):8> /Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M5AGP9VKWDP3DYZPTG90GTSF/bin/fm-sailor-identity.sh resolve /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-ident.3PuSNI/config gpr3d drake
++(eval):8> cat -A
+cat: illegal option -- A
+usage: cat [-belnstuv] [file ...]
++(eval):9> /Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M5AGP9VKWDP3DYZPTG90GTSF/bin/fm-sailor-identity.sh resolve /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-ident.3PuSNI/config gpr3d morgan
+Chris	morgan.chris@euroradar.nl
++(eval):10> /Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M5AGP9VKWDP3DYZPTG90GTSF/bin/fm-sailor-identity.sh resolve /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-ident.3PuSNI/config unmapped drake
++(eval):10> echo 'rc=0 (empty output = unmapped)'
+rc=0 (empty output = unmapped)
++(eval):12> IFS=$'\t' +(eval):12> read -r N E
++(eval):12> /Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M5AGP9VKWDP3DYZPTG90GTSF/bin/fm-sailor-identity.sh apply /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-ident.3PuSNI/slotX Chris drake.chris@euroradar.nl
++(eval):12> echo 'rc=0'
+rc=0
++(eval):13> git -C /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-ident.3PuSNI/slotX commit -q --allow-empty -m 'drake work'
++(eval):13> git -C /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-ident.3PuSNI/slotX log -1 '--format=author=%an <%ae> committer=%cn <%ce>'
+author=Chris <drake.chris@euroradar.nl> committer=Chris <drake.chris@euroradar.nl>
++(eval):14> git -C /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-ident.3PuSNI/gpr3d commit -q --allow-empty -m 'primary work'
++(eval):14> git -C /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-ident.3PuSNI/gpr3d log -1 '--format=primary author=%an <%ae>'
+primary author=Mac Default <default@mac.local>
++(eval):15> git -C /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-ident.3PuSNI/gpr3d config --local --get-regexp '^user\.'
++(eval):15> echo 'shared local user.* rc=1 (1 = none)'
+shared local user.* rc=1 (1 = none)
++(eval):16> git config --global --get user.email
+default@mac.local
++(eval):18> /Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M5AGP9VKWDP3DYZPTG90GTSF/bin/fm-sailor-identity.sh apply /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-ident.3PuSNI/slotX Chris drake.chris@euroradar.nl
++(eval):18> git -C /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-ident.3PuSNI/slotX config --worktree --get-all user.email
+drake.chris@euroradar.nl
++(eval):20> /Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M5AGP9VKWDP3DYZPTG90GTSF/bin/fm-sailor-identity.sh apply /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-ident.3PuSNI/gpr3d Chris x@y
+error: /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-ident.3PuSNI/gpr3d is the repository's primary checkout, not a linked worktree
++(eval):20> echo 'rc=2'
+rc=2
++(eval):22> /Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M5AGP9VKWDP3DYZPTG90GTSF/bin/fm-sailor-identity.sh clear /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-ident.3PuSNI/slotX
++(eval):22> echo 'rc=0'
+rc=0
++(eval):23> git -C /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-ident.3PuSNI/slotX config --worktree --get user.email
++(eval):23> echo 'worktree email rc=1'
+worktree email rc=1
++(eval):24> git -C /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-ident.3PuSNI/slotX commit -q --allow-empty -m 'next non-sailor task'
++(eval):24> git -C /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-ident.3PuSNI/slotX log -1 '--format=author=%an <%ae>'
+author=Mac Default <default@mac.local>
++(eval):25> /Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M5AGP9VKWDP3DYZPTG90GTSF/bin/fm-sailor-identity.sh clear /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-ident.3PuSNI/slotX
++(eval):25> echo 'clear again rc=0'
+clear again rc=0
++(eval):26> /Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M5AGP9VKWDP3DYZPTG90GTSF/bin/fm-sailor-identity.sh clear /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-ident.3PuSNI/gpr3d
++(eval):26> echo 'clear primary rc=0'
+clear primary rc=0
++(eval):28> printf 'gpr3d Chris\tX <{sailor}.chris@euroradar.nl>\n'
++(eval):28> /Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M5AGP9VKWDP3DYZPTG90GTSF/bin/fm-sailor-identity.sh resolve /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-ident.3PuSNI/config gpr3d drake
+error: /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-ident.3PuSNI/config/sailor-commit-identity line 1 is malformed (want '<project> <Name> <name-with-{sailor}@host>'): gpr3d Chris	X <{sailor}.chris@euroradar.nl>
++(eval):28> echo 'rc=2'
+rc=2
++(eval):29> printf 'gpr3d Chris <chris@euroradar.nl>\n'
++(eval):29> /Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M5AGP9VKWDP3DYZPTG90GTSF/bin/fm-sailor-identity.sh resolve /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-ident.3PuSNI/config gpr3d drake
+error: /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-ident.3PuSNI/config/sailor-commit-identity line 1 is malformed (want '<project> <Name> <name-with-{sailor}@host>'): gpr3d Chris <chris@euroradar.nl>
++(eval):29> echo 'rc=2'
+rc=2
++(eval):30> printf 'gpr3d Chris <{sailor}.chris@euroradar.nl>\ngpr3d Chris <{sailor}@b.nl>\n'
++(eval):30> /Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M5AGP9VKWDP3DYZPTG90GTSF/bin/fm-sailor-identity.sh resolve /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-ident.3PuSNI/config gpr3d drake
+error: /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-ident.3PuSNI/config/sailor-commit-identity line 2 maps project gpr3d a second time
++(eval):30> echo 'rc=2'
+rc=2
++(eval):31> set +x

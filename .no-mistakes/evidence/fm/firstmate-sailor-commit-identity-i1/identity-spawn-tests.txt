@@ -1,0 +1,8 @@
+ok - a sailor spawn on a mapped project sets the identity in its own copy only and records commit_email
+ok - the sailor identity apply converges on a relaunch and refuses the primary checkout
+ok - unmapped projects and non-sailor spawns get no identity and no commit_email
+ok - a fresh spawn that gets no identity clears an earlier sailor's identity from its reused copy only
+ok - a malformed sailor commit identity template refuses the spawn before any record exists
+ok - pi-signed shares Pi launch semantics while preserving its configured and recorded identity
+ok - pi-signed is a distinct persistent secondmate runtime with shared Pi supervision semantics
+# all fm-spawn-dispatch-profile tests passed
