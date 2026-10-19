@@ -1,0 +1,38 @@
+### A. map with a login label containing a space
+$ fm-sailor.sh validate
+sailor teach login must be a non-empty string without spaces or quotes
+[exit 1]
+$ fm-sailor.sh check teach gpt-6-sol
+fm-sailor: invalid config/crew-dispatch.json - sailor teach login must be a non-empty string without spaces or quotes
+[exit 2]
+### A2. login label with a newline
+$ fm-sailor.sh validate
+sailor teach login must be a non-empty string without spaces or quotes
+[exit 1]
+### B. slot registry with a login label containing a space
+$ fm-sailor.sh sync bad-registry.json --home firstmate
+refused: this home follows the slot registry <scratch>/sailors.json (config/sailor-registry), not <scratch>/bad-registry.json
+[exit 1]
+$ fm-sailor.sh add x --harness codex --models gpt-6-sol --login "a b"
+refused: sailor x login must be a non-empty string without spaces or quotes
+[exit 1]
+map unchanged after refusals
+### C. health bound: shim codex and grok that hang 60s (stub vendor apps prepended to PATH)
+teach down login:codex
+bonny down login:kimi
+mary up login:grok
+[health exit 0 in 3s with FM_SAILOR_PROBE_TIMEOUT=2]
+teach live not-answering harness=codex tasks=0/1 grade=specialist models=gpt-6-sol(signed-out) login=chatgpt
+bonny live not-answering harness=kimi tasks=0/1 grade=sailor models=kimi-for-coding(signed-out)
+mary live answering harness=grok tasks=0/1 grade=sailor models=grok-4.7(signed-in) login=grok.com
+[status exit 0 in 2s]
+refused: sailor mary is signed out of grok: grok models did not answer within 4 seconds
+[check exit 1 in 5s with FM_SAILOR_LOGIN_TIMEOUT=4]
+### B (retry). registry pointer names the bad registry
+$ fm-sailor.sh sync bad-registry.json --home firstmate
+refused: slot teach login must be a non-empty string without spaces or quotes
+[exit 1]
+$ (newline label) fm-sailor.sh sync bad-registry.json --home firstmate
+refused: slot teach login must be a non-empty string without spaces or quotes
+[exit 1]
+map unchanged after refusals

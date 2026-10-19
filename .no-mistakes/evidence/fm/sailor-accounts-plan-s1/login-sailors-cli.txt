@@ -1,0 +1,46 @@
+$ fm-sailor.sh sync <scratch>/sailors.json --home firstmate
+wrote config/crew-dispatch.json (previous copy: crew-dispatch.json.bak-20261019-195658)
+synced home firstmate from <scratch>/sailors.json: teach, bonny, mary
+workers: the change applies from each worker's next spawn; running workers keep what they launched with
+[exit 0]
+--- projected map
+{"teach":{"harness":"codex","login":"chatgpt","status":"live","models":["gpt-6-sol"],"max_concurrent":1,"grade":"specialist"},"bonny":{"harness":"kimi","status":"live","models":["kimi-for-coding"],"max_concurrent":1,"grade":"sailor"},"mary":{"harness":"grok","login":"grok.com","status":"live","models":["grok-4.7"],"max_concurrent":1,"grade":"sailor"}}
+$ fm-sailor.sh validate
+[exit 0]
+$ fm-sailor.sh list
+teach status=live harness=codex max_concurrent=1 grade=specialist models=gpt-6-sol login=chatgpt
+bonny status=live harness=kimi max_concurrent=1 grade=sailor models=kimi-for-coding
+mary status=live harness=grok max_concurrent=1 grade=sailor models=grok-4.7 login=grok.com
+[exit 0]
+$ time fm-sailor.sh health
+teach up login:codex
+bonny down login:kimi
+mary up login:grok
+[exit 0 in 0s]
+$ fm-sailor.sh status
+teach live answering harness=codex tasks=0/1 grade=specialist models=gpt-6-sol(signed-in) login=chatgpt
+bonny live not-answering harness=kimi tasks=0/1 grade=sailor models=kimi-for-coding(signed-out)
+mary live answering harness=grok tasks=0/1 grade=sailor models=grok-4.7(signed-in) login=grok.com
+[exit 0]
+$ fm-sailor.sh check teach gpt-6-sol
+ok: sailor teach runs gpt-6-sol on its codex login (0 of 1 tasks busy; signed in)
+[exit 0]
+$ fm-sailor.sh check mary grok-4.7
+ok: sailor mary runs grok-4.7 on its grok login (0 of 1 tasks busy; signed in)
+[exit 0]
+$ fm-sailor.sh check bonny kimi-for-coding
+refused: sailor bonny is signed out of kimi: kimi is not installed
+[exit 1]
+$ fm-sailor.sh pick --grade specialist
+teach gpt-6-sol
+[exit 0]
+$ fm-sailor.sh pick --grade sailor
+mary grok-4.7
+[exit 0]
+$ fm-sailor.sh provider-json mary grok-4.7
+refused: sailor mary is a login sailor on grok, which runs as its own worker app and takes no OpenCode provider
+[exit 1]
+--- fleet snapshot sailors[]
+{"name":"teach","status":"live","answering":true,"endpoint":null,"harness":"codex","login":"chatgpt","tasks":0,"capacity":1,"grade":"specialist"}
+{"name":"bonny","status":"live","answering":false,"endpoint":null,"harness":"kimi","login":null,"tasks":0,"capacity":1,"grade":"sailor"}
+{"name":"mary","status":"live","answering":true,"endpoint":null,"harness":"grok","login":"grok.com","tasks":0,"capacity":1,"grade":"sailor"}

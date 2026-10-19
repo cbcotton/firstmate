@@ -1,0 +1,9 @@
+codex-cli 0.163.0
+grok 1.0.62 (1474f9cbdd91) [stable]
+skip-app: kimi is not installed, so its login sailor was not exercised
+ok - sync projects the three login slots from a scratch registry into login sailors
+ok - codex codex-cli 0.163.0: health, status, check, and pick read the teach login as signed in, and check says so without printing a value
+ok - grok grok 1.0.62 (1474f9cbdd91) [stable]: health, status, check, and pick read the mary login as signed in, and check says so without printing a value
+ok - a login sailor takes no OpenCode provider
+# login sailors live guard checked: codex grok (absent: kimi)
+exit 0

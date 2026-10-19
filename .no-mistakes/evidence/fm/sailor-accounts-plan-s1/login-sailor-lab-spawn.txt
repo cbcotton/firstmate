@@ -1,0 +1,44 @@
+$ fm-spawn.sh sail-s1 <lab>/projects/demo --scout --harness codex --sailor teach   (FM_HOME=<lab>, private tmux socket fm-lab)
+fm-gate-refuse: gate agent lifecycle permitted only against lab home <lab>
+spawned sail-s1 harness=codex kind=scout sailor=teach window=primary:fm-sail-s1 worktree=/Users/cotton/.treehouse/demo-6f875a/1/demo
+exit 0
+
+--- state/sail-s1.meta
+window=primary:fm-sail-s1
+endpoint_task_id=sail-s1
+worktree=/Users/cotton/.treehouse/demo-6f875a/1/demo
+project=/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-lab.obC5tk/projects/demo
+harness=codex
+kind=scout
+tasktmp=/tmp/fm-sail-s1
+model=gpt-6-sol
+effort=default
+sailor=teach
+login=chatgpt
+dispatched_at=1792432690
+spawn_gen=s1792432690.92442.32546
+
+--- worker process (first 3 argv)
+codex --model gpt-6-sol --dangerously-bypass-approvals-and-s
+
+--- worker pane (capture-pane)
+  Folder access
+  /Users/cotton/.treehouse/demo-6f875a/1/demo
+  Note: You’re in a subdirectory of a Git project. Trusting will apply to the repository root:
+  /private/var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/fm-lab.obC5tk/projects/demo
+  Trust this folder? Codex can read, edit, and run files here, subject to your permission settings. Folder settings can run code automatically, even without a model request. Continue only if you
+  trust these files. Your trust decision will be saved.
+› 1. Trust and continue
+  2. Quit
+  enter continue · esc quit
+--- with sail-s1 running on teach:
+$ fm-sailor.sh check teach gpt-6-sol
+refused: sailor teach is at capacity (1 of 1 tasks)
+[exit 1]
+$ fm-sailor.sh pick --grade specialist
+refused: no sailor of grade specialist or above can take it now:
+  teach/gpt-6-sol: sailor teach is at capacity (1 of 1 tasks)
+[exit 1]
+$ fm-sailor.sh check teach gpt-6-sol --task sail-s1
+ok: sailor teach runs gpt-6-sol on its codex login (0 of 1 tasks busy; signed in)
+[exit 0]
