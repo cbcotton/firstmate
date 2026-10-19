@@ -2059,16 +2059,16 @@ claude_launch_brief_arg() {  # <launch>
   )
 }
 
-# The --add-dir segment every Claude worker launch now carries between the
-# permission flag and --settings, real-path resolved the way the spawn's
-# claude_add_dirs_flag resolves it. Prints a trailing space so callers can
-# drop it straight into an expected command.
+# The --add-dir segment and the --name <id> session name every Claude worker
+# launch carries between the permission flag and --settings, real-path resolved
+# the way the spawn's claude_add_dirs_flag resolves it. Prints a trailing space
+# so callers can drop it straight into an expected command.
 claude_worker_add_dirs() {  # <home> <id>
   local state_real data_real root_real
   state_real=$(cd "$1/state" && pwd -P)
   data_real=$(cd "$1/data" && pwd -P)
   root_real=$(cd "$ROOT" && pwd -P)
-  printf '%s ' "--add-dir '$state_real/operational-inbox' --add-dir '$state_real/$2.inbox' --add-dir '$data_real/$2' --add-dir '$root_real/.agents/skills'"
+  printf '%s ' "--add-dir '$state_real/operational-inbox' --add-dir '$state_real/$2.inbox' --add-dir '$data_real/$2' --add-dir '$root_real/.agents/skills' --name '$2'"
 }
 
 claude_expected_launch() {  # <launch> <home> <id> <permission-flag>

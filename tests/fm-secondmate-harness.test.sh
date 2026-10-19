@@ -718,15 +718,16 @@ SH
   printf '%s\n' "$fakebin"
 }
 
-# The --add-dir grant a Claude secondmate launch carries between its
-# permission flag and --settings: only the PARENT home's state/<id>.inbox,
-# real-path resolved the way the spawn's claude_add_dirs_flag resolves it.
+# The --add-dir grant and the session name a Claude secondmate launch carries
+# between its permission flag and --settings: only the PARENT home's
+# state/<id>.inbox, real-path resolved the way the spawn's claude_add_dirs_flag
+# resolves it, then --name <id>.
 # Prints a trailing space so callers can drop it straight into an expected
 # command.
 sm_claude_add_dir() {  # <world> <id>
   local real
   real=$(cd "$1/home/state" && pwd -P)
-  printf "%s " "--add-dir '$real/$2.inbox'"
+  printf "%s " "--add-dir '$real/$2.inbox' --name '$2'"
 }
 
 # spawn_secondmate_capture <world> <id> <home> <launchlog> [extra fm-spawn.sh args...]
