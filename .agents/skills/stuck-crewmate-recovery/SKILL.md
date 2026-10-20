@@ -66,8 +66,9 @@ Only positive socket refusal or absence is a daemon-down finding; escalate that 
 
 ## A worker refusing a step firstmate ruled on
 
-A Claude worker in auto mode that reports a step firstmate ruled on refused by its permission check is not wedged: the ruling lives in the inbox record, and in live checks naming the step in the typed line did not clear it either ([`docs/verification/runtime-backends.md`](../../../docs/verification/runtime-backends.md#auto-mode-ruled-steps)).
-Do not re-send the ruling, reword the step, or relaunch the worker with a note to get past it, because none of those establishes consent the check can see.
+A Claude worker in auto mode that reports a step firstmate ruled on refused by its permission check is not wedged.
+In a limited live check (project-only settings with no user allow rule, no `--append-system-prompt` trust statement, one sample per step, single plain commands not tested separately), naming the step in the typed line did not clear the refusal ([`docs/verification/runtime-backends.md`](../../../docs/verification/runtime-backends.md#auto-mode-ruled-steps)); it does not establish why the check refuses or that production workers behave the same.
+Do not re-send the ruling, reword the step, or relaunch the worker with a note to get past it.
 Escalate the refusal to the captain as a blocker naming the exact command, so the captain authorizes or runs the step; never switch the worker to bypass mode or broaden its permissions to get past it.
 
 ## Live-endpoint escalation

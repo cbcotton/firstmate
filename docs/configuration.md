@@ -836,7 +836,7 @@ The token is the file's whitespace-trimmed content.
 
 An absent file defaults to bypass, so an unconfigured home launches with the bypass permission flag.
 Auto is Claude Code's classifier-reviewed permission mode, for a captain who refuses to run workers in bypass mode.
-Its classifier can refuse a step firstmate ruled on, because the ruling lives in the steering inbox's records and naming the step in the typed line did not clear it in live checks ([Auto-mode ruled steps](verification/runtime-backends.md#auto-mode-ruled-steps)); the worker reports that refusal as blocked, naming the exact command, and the captain authorizes or runs the step.
+Its classifier can refuse a step firstmate ruled on; in a limited live check with project-only settings, no user allow rule, no `--append-system-prompt` trust statement, and one sample per step, naming the step in the typed line did not clear it, and single plain commands were not tested separately ([Auto-mode ruled steps](verification/runtime-backends.md#auto-mode-ruled-steps)); the worker reports that refusal as blocked, naming the exact command, and the captain authorizes or runs the step.
 Only the permission flag changes between the two modes.
 The environment prefix, inline settings, model, effort flags, and the task-channel `--add-dir` grant below stay the same in both.
 
