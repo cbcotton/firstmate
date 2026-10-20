@@ -1664,10 +1664,28 @@ test_attach_refuses_without_a_session() {
   pass "attach refuses when the Privateer session is not running"
 }
 
-# serve_dir <dir> <log>: a loopback http server over <dir>; prints its pid and port.
+# serve_dir <dir> <log>: a loopback http server over <dir> that also answers
+# POST */chat/completions with a one-token completion, as check's message-shape
+# probe asks; prints its pid and port.
 serve_dir() {
   local pid port
-  ( cd "$1" && exec python3 -u -m http.server 0 --bind 127.0.0.1 ) > "$2" 2>&1 &
+  ( cd "$1" && exec python3 -u -c '
+import http.server, json
+class H(http.server.SimpleHTTPRequestHandler):
+    def do_POST(self):
+        self.rfile.read(int(self.headers.get("Content-Length") or 0))
+        if not self.path.endswith("/chat/completions"):
+            return self.send_error(404)
+        body = json.dumps({"choices": [{"index": 0, "message": {"role": "assistant", "content": "OK"}}]}).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), H)
+print("Serving HTTP on 127.0.0.1 port %d" % server.server_address[1], flush=True)
+server.serve_forever()
+' ) > "$2" 2>&1 &
   pid=$!
   for _ in $(seq 100); do
     port=$(sed -n 's/.*port \([0-9][0-9]*\).*/\1/p' "$2" | head -1)
