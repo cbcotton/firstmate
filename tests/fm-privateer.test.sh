@@ -104,11 +104,15 @@ run_grant() {
   TMUX=$tmux FM_HOME="$home" "$ROOT/bin/fm-permission-grant.sh" "$@" 2>&1
 }
 
-# fake_sailor_curl <fakebin>: the sailor's model server answering the probe.
+# fake_sailor_curl <fakebin>: the sailor's model server answering the probes.
 fake_sailor_curl() {
   cat > "$1/curl" <<'SH'
 #!/usr/bin/env bash
-printf '%s' '{"data":[{"id":"coder"}]}'
+url=${!#}
+case "$url" in
+  */chat/completions) printf '%s\n200' '{"choices":[{"index":0,"message":{"role":"assistant","content":"OK"}}]}' ;;
+  *) printf '%s' '{"data":[{"id":"coder"}]}' ;;
+esac
 SH
   chmod +x "$1/curl"
 }

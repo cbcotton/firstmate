@@ -4,10 +4,10 @@
 # docs/configuration.md ("Crew dispatch profiles", "Named sailors") owns the
 # schema and what firstmate does with each answer. This header owns the checks:
 # map and reference validation, the placeholder lock, the per-sailor capacity
-# count, the endpoint probe and warm-up, the sign-in check of a login sailor,
-# the choice by grade, the OpenCode provider fragment, the status view, and
-# the health probe; and the registry commands that edit the map, with their
-# refusals.
+# count, the endpoint's model-list and message-shape probes, the warm-up, the
+# sign-in check of a login sailor, the choice by grade, the OpenCode provider
+# fragment, the status view, and the health probe; and the registry commands
+# that edit the map, with their refusals.
 #
 # A sailor is either an endpoint sailor, an OpenAI-compatible `endpoint` that
 # OpenCode drives, or a login sailor, a worker app (`harness`: codex, kimi,
@@ -35,6 +35,12 @@
 # or credentials file above exists.
 # An app that is not installed, times out, or exits non-zero reads as signed
 # out, and every reason names the app and never a value.
+# Before dispatching to an endpoint sailor, check also sends one tiny chat
+# completion in the shape OpenCode sends once its plugins add system text:
+# max_tokens 1, two leading system messages, then the user message. A refusal
+# names the endpoint's error, so a server that lists a model but rejects that
+# shape is refused rather than reported live. status and health never ask for
+# a completion.
 #
 # Usage:
 #   fm-sailor.sh validate
@@ -122,12 +128,16 @@
 #   4. a sailor with auth_env has its token;
 #   5. GET <endpoint>/models answers within FM_SAILOR_PROBE_TIMEOUT seconds
 #      (default 3) with an OpenAI-style model list that includes <model>, or,
-#      for a sailor with unlisted_models, with any model list.
-# For a login sailor, steps 4 and 5 are its full sign-in check (above). It prints `ok: ...` and exits 0, or prints `refused: ...`
-# and exits 1. When the model list carries a `loaded` flag, the ok line says
-# whether the model is loaded or only listed. No probe here or in status or
-# health ever asks an endpoint for a completion, so none spends a paid
-# endpoint's credits.
+#      for a sailor with unlisted_models, with any model list;
+#   6. POST <endpoint>/chat/completions answers a one-token request in
+#      OpenCode's message shape, two leading system messages then the user
+#      message, within FM_SAILOR_SMOKE_TIMEOUT seconds (default 120).
+# For a login sailor, steps 4 and 5 are its full sign-in check (above); step 6
+# is for an endpoint sailor alone. It prints `ok: ...` and exits 0, or prints
+# `refused: ...` and exits 1. When the model list carries a `loaded` flag, the
+# ok line says whether the model is loaded or only listed. Step 6 is the one
+# request check sends that asks for a completion, so a check spends at most
+# one tiny request on a paid endpoint; status and health never ask for one.
 #
 # pick chooses the sailor and model that may take a task now, and prints them
 # as `<sailor> <model>` with exit 0, or prints `refused: ...` and exits 1.
@@ -246,9 +256,9 @@
 # answer with a completion within FM_SAILOR_WARM_TIMEOUT seconds (default 600),
 # so a server that loads models on demand (mlx-serve lists every pulled model,
 # each with a `loaded` flag) loads it now, and a load or memory refusal
-# surfaces here rather than in a worker's first request. The warm-up is the
-# one request this script sends that asks for a completion, so on a paid
-# endpoint it spends that one token. --dry-run prints the
+# surfaces here rather than in a worker's first request. The warm-up and
+# check's message-shape probe are the two requests this script sends that ask
+# for a completion, so each spends one token on a paid endpoint. --dry-run prints the
 # change and writes nothing. It refuses:
 #   - --warm with --dry-run, since a warm-up loads the model;
 #   - an unknown sailor, or --replace naming a model the sailor does not list
@@ -392,8 +402,8 @@ need_curl() {
   command -v curl >/dev/null 2>&1 || die "curl is required to probe a sailor"
 }
 
-# load_timeouts: the probe, warm-up, sign-in check, and test-prompt bounds, in
-# whole seconds.
+# load_timeouts: the probe, warm-up, sign-in check, and test-prompt and
+# message-shape bounds, in whole seconds.
 load_timeouts() {
   PROBE_TIMEOUT=${FM_SAILOR_PROBE_TIMEOUT:-3}
   WARM_TIMEOUT=${FM_SAILOR_WARM_TIMEOUT:-600}
@@ -634,14 +644,15 @@ model_state() {
       else "listed" end' 2>/dev/null || echo missing
 }
 
-# warm_model <endpoint> <model>: one one-token chat completion; on failure
-# prints the reason and returns 1.
-warm_model() {
-  local endpoint=$1 model=$2 out code body reason
-  if ! out=$(jq -nc --arg m "$model" '{model: $m, messages: [{role: "user", content: "Reply with OK."}], max_tokens: 1, stream: false}' |
-    sailor_curl -sS --proto '=http,https' --max-time "$WARM_TIMEOUT" -H 'Content-Type: application/json' \
+# chat_completion <endpoint> <payload> <bound>: POST <payload> to
+# <endpoint>/chat/completions and read a completion within <bound> seconds; on
+# failure prints the reason and returns 1.
+chat_completion() {
+  local endpoint=$1 payload=$2 bound=$3 out code body reason
+  if ! out=$(printf '%s' "$payload" |
+    sailor_curl -sS --proto '=http,https' --max-time "$bound" -H 'Content-Type: application/json' \
       --data-binary @- -w '\n%{http_code}' "${endpoint%/}/chat/completions" 2>/dev/null); then
-    echo "no completion from $endpoint within $WARM_TIMEOUT seconds"
+    echo "no completion from $endpoint within $bound seconds"
     return 1
   fi
   code=${out##*$'\n'}
@@ -653,6 +664,26 @@ warm_model() {
   [ -n "$reason" ] || reason=$(printf '%s' "$body" | tr -s '[:space:]' ' ' | cut -c1-200)
   echo "HTTP $code: $reason"
   return 1
+}
+
+# warm_model <endpoint> <model>: one one-token chat completion; on failure
+# prints the reason and returns 1.
+warm_model() {
+  local payload
+  payload=$(jq -nc --arg m "$2" '{model: $m, messages: [{role: "user", content: "Reply with OK."}], max_tokens: 1, stream: false}')
+  chat_completion "$1" "$payload" "$WARM_TIMEOUT"
+}
+
+# probe_completion <endpoint> <model>: one one-token chat completion in the
+# message shape OpenCode sends, two leading system messages then the user
+# message; on failure prints the reason and returns 1.
+probe_completion() {
+  local payload
+  payload=$(jq -nc --arg m "$2" '{model: $m, messages: [
+    {role: "system", content: "You are a helpful assistant."},
+    {role: "system", content: "Reply with the single word OK."},
+    {role: "user", content: "Reply with the single word OK."}], max_tokens: 1, stream: false}')
+  chat_completion "$1" "$payload" "$SMOKE_TIMEOUT"
 }
 
 # origin_of <url>: scheme and authority, without the path.
@@ -731,7 +762,7 @@ login_up() {
 }
 
 cmd_check() {
-  local sailor=$1 model=$2 exclude=$3 endpoint harness status max busy body state note
+  local sailor=$1 model=$2 exclude=$3 endpoint harness status max busy body state note reason
   sailor_load "$sailor" "$model"
   endpoint=$(sailor_field "$sailor" '.endpoint')
   harness=$(sailor_field "$sailor" '.harness')
@@ -764,6 +795,8 @@ cmd_check() {
     unlisted) note="; model not in the endpoint's list, which this sailor's unlisted_models allows" ;;
     *) note= ;;
   esac
+  reason=$(probe_completion "$endpoint" "$model") ||
+    refuse "sailor $sailor at $endpoint rejected a one-token request with two leading system messages: $reason"
   echo "ok: sailor $sailor serves $model at $endpoint ($busy of $max tasks busy$note)"
 }
 

@@ -36,9 +36,16 @@ make_case() {  # <name> <map-json>
 url=${!#}
 printf '%s\n' "$url" >> "$FM_FAKE_CURL_LOG"
 [ "${FM_FAKE_CURL_DOWN:-0}" = 1 ] && exit 7
-body=${FM_FAKE_MODELS_BODY:-}
-[ -n "$body" ] || body='{"object":"list","data":[{"id":"qwen-coder"},{"id":"qwen-coder-large"}]}'
-printf '%s' "$body"
+case "$url" in
+  */chat/completions)
+    printf '%s\n200' '{"choices":[{"index":0,"message":{"role":"assistant","content":"OK"}}]}'
+    ;;
+  *)
+    body=${FM_FAKE_MODELS_BODY:-}
+    [ -n "$body" ] || body='{"object":"list","data":[{"id":"qwen-coder"},{"id":"qwen-coder-large"}]}'
+    printf '%s' "$body"
+    ;;
+esac
 SH
   chmod +x "$FAKEBIN/curl"
 }
@@ -56,14 +63,15 @@ test_live_sailor_serving_the_model_passes_check() {
   status=$?
   expect_code 0 "$status" "a live sailor that lists the model must pass"
   assert_contains "$out" "ok: sailor tiller serves qwen-coder at http://127.0.0.1:11234/v1" "check did not report the sailor as ready"
-  assert_equals "http://127.0.0.1:11234/v1/models" "$(cat "$CURL_LOG")" "check must probe the endpoint's model list"
-  pass "a live sailor serving the model passes check after one probe of <endpoint>/models"
+  assert_equals "http://127.0.0.1:11234/v1/models
+http://127.0.0.1:11234/v1/chat/completions" "$(cat "$CURL_LOG")" "check must probe the model list, then send one tiny completion in OpenCode's shape"
+  pass "a live sailor serving the model passes check after a model-list probe and one message-shape probe"
 }
 
 test_endpoint_trailing_slash_is_not_doubled() {
   make_case slash "$MAP"
   run_sailor check flint qwen-coder-large >/dev/null
-  assert_equals "http://flint.local:8000/v1/models" "$(cat "$CURL_LOG")" "a trailing slash on the endpoint must not double in the probe URL"
+  assert_equals "http://flint.local:8000/v1/models" "$(head -1 "$CURL_LOG")" "a trailing slash on the endpoint must not double in the probe URL"
   pass "the probe URL joins an endpoint with a trailing slash cleanly"
 }
 
@@ -359,10 +367,11 @@ test_pick_weighs_one_named_sailor_through_the_same_gates() {
 #
 # A python3 server answers GET /v1/models, /metrics, and /health and POST
 # /v1/chat/completions from control files in STUB_DIR and logs one line per
-# request to STUB_DIR/requests.log, so a case can drive loaded versus listed
-# models, a failed warm-up, and the queue gauges, and prove which requests the
-# script made; STUB_DIR/auth.log gets the same request with the Authorization
-# header it carried, or - for none.
+# request, with a completion's message roles, to STUB_DIR/requests.log, so a
+# case can drive loaded versus listed models, a failed warm-up, a server that
+# rejects two leading system messages, and the queue gauges, and prove which
+# requests the script made; STUB_DIR/auth.log gets the same request with the
+# Authorization header it carried, or - for none.
 
 STUB_DIR="$TMP_ROOT/stub"
 STUB_PID=
@@ -428,9 +437,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
             req = json.loads(self.rfile.read(size) or b"{}")
         except ValueError:
             req = {}
-        self.note("POST %s model=%s max_tokens=%s" % (self.path, req.get("model"), req.get("max_tokens")))
+        messages = req.get("messages") if isinstance(req.get("messages"), list) else []
+        roles = [m.get("role") for m in messages if isinstance(m, dict)]
+        self.note("POST %s model=%s max_tokens=%s roles=%s"
+                  % (self.path, req.get("model"), req.get("max_tokens"), ",".join(roles)))
         if self.path != "/v1/chat/completions":
             self.reply(404, '{"error":"not found"}')
+            return
+        if (read("chat.reject-two-system") or "").strip() == "1" and roles[:2] == ["system", "system"]:
+            self.reply(404, '{"error":{"message":"System message must be at the beginning."}}')
             return
         code = int((read("chat.code") or "200").strip())
         body = read("chat.body") or '{"choices":[{"index":0,"message":{"role":"assistant","content":"OK"}}]}'
@@ -454,10 +469,11 @@ PY
 }
 
 # stub_reset [<models-body>]: serve <models-body> (default STUB_MODELS), no
-# metrics, no /health (a 404), successful completions, and an empty request log.
+# metrics, no /health (a 404), successful completions in any message shape,
+# and an empty request log.
 stub_reset() {
   start_stub
-  rm -f "$STUB_DIR/metrics.txt" "$STUB_DIR/health.json" "$STUB_DIR/chat.code" "$STUB_DIR/chat.body"
+  rm -f "$STUB_DIR/metrics.txt" "$STUB_DIR/health.json" "$STUB_DIR/chat.code" "$STUB_DIR/chat.body" "$STUB_DIR/chat.reject-two-system"
   printf '%s' "${1:-$STUB_MODELS}" > "$STUB_DIR/models.json"
   : > "$STUB_DIR/requests.log"
   : > "$STUB_DIR/auth.log"
@@ -518,10 +534,41 @@ test_check_says_loaded_or_listed() {
   status=$?
   expect_code 0 "$status" "a listed but unloaded model still passes, because the server loads it on demand"
   assert_contains "$out" "model listed but not loaded, so the first request loads it" "check must say an unloaded model is only listed"
-  assert_no_grep "POST" "$STUB_DIR/requests.log" "check must never ask the model for a completion"
+  assert_equals "GET /v1/models
+POST /v1/chat/completions model=qwen-big max_tokens=1 roles=system,system,user" \
+    "$(tail -2 "$STUB_DIR/requests.log")" "check must send one tiny completion in OpenCode's shape"
+  : > "$STUB_DIR/requests.log"
+  run_real status >/dev/null
+  assert_no_grep "POST" "$STUB_DIR/requests.log" "status must never ask the model for a completion"
   run_real check tiller qwen-big --warm >/dev/null
   expect_code 2 "$?" "check takes no --warm; set-model owns the warm-up"
-  pass "check says whether the model is loaded or only listed, and never loads it"
+  pass "check says whether the model is loaded or only listed and sends one tiny completion, while status never does"
+}
+
+test_check_sends_opencodes_message_shape() {
+  local out status
+  stub_reset
+  make_stub_case shape "$(stub_map)"
+  out=$(run_real check tiller qwen-coder)
+  status=$?
+  expect_code 0 "$status" "an endpoint that accepts OpenCode's message shape must pass: $out"
+  assert_equals "GET /v1/models
+POST /v1/chat/completions model=qwen-coder max_tokens=1 roles=system,system,user" "$(cat "$STUB_DIR/requests.log")" \
+    "check must send one one-token completion with two leading system messages and the user message"
+  pass "check passes an endpoint that accepts one tiny completion in OpenCode's two-system-message shape"
+}
+
+test_check_refuses_an_endpoint_that_rejects_the_shape() {
+  local out status
+  stub_reset
+  make_stub_case shape-refused "$(stub_map)"
+  printf '1' > "$STUB_DIR/chat.reject-two-system"
+  out=$(run_real check tiller qwen-coder)
+  status=$?
+  expect_code 1 "$status" "an endpoint that rejects two leading system messages must be refused"
+  assert_equals "refused: sailor tiller at $STUB/v1 rejected a one-token request with two leading system messages: HTTP 404: System message must be at the beginning." "$out" \
+    "the refusal must name the endpoint's error"
+  pass "check refuses an endpoint that answers 404 to OpenCode's two-system message shape, naming its error"
 }
 
 test_status_shows_answer_tasks_queue_and_models() {
@@ -972,7 +1019,8 @@ test_token_rides_every_request_and_is_never_printed() {
   make_stub_case token-plain "$(stub_map)"
   run_real check tiller qwen-coder >/dev/null
   expect_code 0 "$?" "a sailor without auth_env must pass as before"
-  assert_equals "GET /v1/models -" "$(cat "$STUB_DIR/auth.log")" "a sailor without auth_env must send no Authorization header"
+  assert_equals "GET /v1/models -
+POST /v1/chat/completions -" "$(cat "$STUB_DIR/auth.log")" "a sailor without auth_env must send no Authorization header"
 
   stub_reset
   make_stub_case token "$(token_map)"
@@ -987,14 +1035,15 @@ test_token_rides_every_request_and_is_never_printed() {
   bearer=$(grep -c " Bearer $SENTINEL\$" "$STUB_DIR/auth.log")
   [ "$lines" -gt 3 ] || fail "check, status, health, and set-model must each have probed the stub: $(cat "$STUB_DIR/auth.log")"
   assert_equals "$lines" "$bearer" "every request to a token sailor must carry Authorization: Bearer <token>: $(cat "$STUB_DIR/auth.log")"
-  assert_no_grep "POST" "$STUB_DIR/requests.log" "no probe may ask a token sailor for a completion"
+  assert_equals 1 "$(grep -c '^POST' "$STUB_DIR/requests.log")" "check's one completion must be the only completion probe"
   assert_no_leak "$out" "check, status, health, set-model, and list"
 
   : > "$STUB_DIR/auth.log"
   out=$(env "$TOKEN_VAR=from-the-environment" FM_HOME="$CASE_DIR" FM_CONFIG_OVERRIDE="$CASE_DIR/config" FM_STATE_OVERRIDE="$CASE_DIR/state" \
     FM_MLX_SERVE_SERVERS="$CASE_DIR/servers.json" "$SAILOR" check tiller qwen-coder 2>&1)
   expect_code 0 "$?" "a token set in the environment must pass: $out"
-  assert_equals "GET /v1/models Bearer from-the-environment" "$(cat "$STUB_DIR/auth.log")" "the environment's token must win over .env"
+  assert_equals "GET /v1/models Bearer from-the-environment
+POST /v1/chat/completions Bearer from-the-environment" "$(cat "$STUB_DIR/auth.log")" "the environment's token must win over .env"
 
   out=$(run_real provider-json tiller qwen-coder)
   assert_equals "{\"baseURL\":\"$STUB/v1\",\"apiKey\":\"{env:$TOKEN_VAR}\"}" "$(jq -c '.tiller.options' <<<"$out")" \
@@ -1063,6 +1112,7 @@ test_unlisted_models_lets_a_router_serve_ids_it_does_not_list() {
   assert_contains "$out" "model not in the endpoint's list, which this sailor's unlisted_models allows" "check must say the model was not in the endpoint's list"
   out=$(run_real status --all)
   assert_contains "$out" "models=org/routed-model:cheapest(unlisted)" "status must show the unlisted model as unlisted, not missing"
+  : > "$STUB_DIR/requests.log"
   out=$(run_real set-model router org/other-model:fastest)
   expect_code 0 "$?" "set-model must accept an unlisted id on a sailor with unlisted_models: $out"
   cp "$CASE_DIR/config/crew-dispatch.json" "$CASE_DIR/original.json"
@@ -1071,8 +1121,8 @@ test_unlisted_models_lets_a_router_serve_ids_it_does_not_list() {
   expect_code 1 "$?" "set-model must still refuse an unlisted id on a sailor without unlisted_models"
   assert_contains "$out" "does not serve org/other-model:fastest" "the refusal must say the endpoint does not serve it"
   assert_unchanged "the unlisted-model refusal"
-  assert_no_grep "POST" "$STUB_DIR/requests.log" "accepting an unlisted id must never ask for a completion"
-  pass "unlisted_models lets a router serve ids its model list leaves out, with no completion, and only on the sailor that sets it"
+  assert_no_grep "POST" "$STUB_DIR/requests.log" "set-model must never ask for a completion"
+  pass "unlisted_models lets a router serve ids its model list leaves out, with no completion from set-model, and only on the sailor that sets it"
 }
 
 test_registry_records_auth_env_and_unlisted_models() {
@@ -1716,6 +1766,8 @@ test_validate_checks_grades_facets_paid_and_spend
 test_pick_by_grade_takes_the_lowest_sufficient_free_sailor
 test_pick_weighs_one_named_sailor_through_the_same_gates
 test_check_says_loaded_or_listed
+test_check_sends_opencodes_message_shape
+test_check_refuses_an_endpoint_that_rejects_the_shape
 test_status_shows_answer_tasks_queue_and_models
 test_set_model_replace_moves_every_profile_of_that_sailor
 test_set_model_refusals_write_nothing
