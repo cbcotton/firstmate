@@ -34,6 +34,7 @@ Add `--spend` to both `pick` and `bin/fm-spawn.sh` only when the rule says `"spe
 | `has no token` | The captain has not set the token variable it names | Try the next candidate, and tell the captain which variable that sailor needs in `$FM_HOME/.env` |
 | `is not answering` | Its server is down or unreachable | Try the next candidate |
 | `does not serve` | The server runs but lacks that model | Try the next candidate |
+| `did not answer a one-token request` | The server lists the model but failed a tiny test request; the server's own error follows the last colon | Try the next candidate, and tell the captain that sailor's error |
 | `has no grade` or `below` | It is weaker than the task's grade | Try the next candidate |
 | `is paid` | It costs money per request | Skip it; only the captain's okay for this task, or a rule allowing spend, adds `--spend` |
 | `lists several models` | The profile must name a model | Read the file again and add `--model` |
