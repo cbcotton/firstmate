@@ -1,7 +1,7 @@
 ---
 name: stuck-crewmate-recovery
 description: >-
-  Load when the session-start digest reports an ordinary direct report's endpoint dead or metadata windowless; after a stale wake, looping pane, repeated confusion, answered-by-brief question, unresponsive crewmate, or failed steer; and when a live crewmate reports the no-mistakes pipeline dead, unreachable, or timed out.
+  Load when the session-start digest reports an ordinary direct report's endpoint dead or metadata windowless; after a stale wake, looping pane, repeated confusion, answered-by-brief question, unresponsive crewmate, or failed steer; when a crewmate reports a step firstmate ruled on refused by its permission check; and when a live crewmate reports the no-mistakes pipeline dead, unreachable, or timed out.
 user-invocable: false
 metadata:
   internal: true
@@ -63,6 +63,12 @@ Nothing reaches the captain in that case.
 Never restart, stop, or update the shared daemon on a crewmate's claim.
 It is one instance serving every lane and home, so a restart kills other lanes' in-flight runs.
 Only positive socket refusal or absence is a daemon-down finding; escalate that finding, or a failed run record that names a daemon error, to the captain.
+
+## A worker refusing a step firstmate ruled on
+
+A Claude worker in auto mode that reports a step firstmate ruled on refused by its permission check is not wedged: the ruling lives in the inbox record, and in live checks naming the step in the typed line did not clear it either ([`docs/verification/runtime-backends.md`](../../../docs/verification/runtime-backends.md#auto-mode-ruled-steps)).
+Do not re-send the ruling, reword the step, or relaunch the worker with a note to get past it, because none of those establishes consent the check can see.
+Escalate the refusal to the captain as a blocker naming the exact command, so the captain authorizes or runs the step; never switch the worker to bypass mode or broaden its permissions to get past it.
 
 ## Live-endpoint escalation
 

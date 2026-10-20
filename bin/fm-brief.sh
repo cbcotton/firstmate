@@ -387,6 +387,7 @@ IFS= read -r -d '' INBOX_SECTION <<EOF || true
 Firstmate steers you through durable message files in $INBOX_DIR.
 When a terminal message says an instruction is waiting there - and at any natural checkpoint when you are unsure - list $INBOX_DIR/*.msg, read and act on each message in numeric order, then acknowledge each handled message by moving it: \`mv $INBOX_DIR/NNN.msg $INBOX_DIR/handled/\`.
 The move IS the acknowledgement: without it firstmate rings again and eventually treats you as stuck. An empty or absent inbox needs no action.
+When a message rules on a step - a gate response, an axi sync or recovery, a fast-forward merge, a branch from a PR head, a skip re-run - run each exact command it names as its own single command, with no chaining, wrapper, or added flag. If the permission check refuses a step Firstmate ruled on, do not reword it, retry it, or route around it: report \`blocked\`, naming the message and the exact command, and wait for firstmate.
 EOF
 INBOX_SECTION=${INBOX_SECTION%$'\n'}
 
