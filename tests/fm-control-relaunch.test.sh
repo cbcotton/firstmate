@@ -750,7 +750,10 @@ add_sailor_task() {
     > "$dir/home/config/crew-dispatch.json"
   cat > "$dir/fakebin/curl" <<'SH'
 #!/usr/bin/env bash
-printf '%s' '{"data":[{"id":"qwen-coder"}]}'
+case "${!#}" in
+  */chat/completions) printf '%s\n200' '{"choices":[{"index":0,"message":{"role":"assistant","content":"OK"}}]}' ;;
+  *) printf '%s' '{"data":[{"id":"qwen-coder"}]}' ;;
+esac
 SH
   chmod +x "$dir/fakebin/curl"
   printf 'opencode' > "$dir/fake/command"

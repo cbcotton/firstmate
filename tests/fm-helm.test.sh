@@ -75,7 +75,10 @@ for arg in "\$@"; do
     *11235*) grep -qx bonsai '$CASE_DIR/down' && exit 7 ;;
   esac
 done
-printf '%s' '{"data":[{"id":"coder"},{"id":"small"}]}'
+case "\${!#}" in
+  */chat/completions) printf '%s\n200' '{"choices":[{"index":0,"message":{"role":"assistant","content":"OK"}}]}' ;;
+  *) printf '%s' '{"data":[{"id":"coder"},{"id":"small"}]}' ;;
+esac
 SH
   chmod +x "$FAKEBIN_DIR/curl"
   fm_git_worktree "$PROJ_DIR" "$WT_DIR" "wt-$1"
