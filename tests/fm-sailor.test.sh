@@ -368,7 +368,7 @@ test_pick_weighs_one_named_sailor_through_the_same_gates() {
 # A python3 server answers GET /v1/models, /metrics, and /health and POST
 # /v1/chat/completions from control files in STUB_DIR and logs one line per
 # request, with a completion's message roles, to STUB_DIR/requests.log, so a
-# case can drive loaded versus listed models, a failed warm-up, a server that
+# case can drive loaded versus listed models, a failed warm-up, a slow load, a server that
 # rejects two leading system messages, and the queue gauges, and prove which
 # requests the script made; STUB_DIR/auth.log gets the same request with the
 # Authorization header it carried, or - for none.
@@ -389,7 +389,7 @@ start_stub() {
   command -v python3 >/dev/null 2>&1 || fail "python3 is required for the sailor stub"
   mkdir -p "$STUB_DIR"
   cat > "$STUB_DIR/stub.py" <<'PY'
-import http.server, json, os, sys, threading
+import http.server, json, os, sys, threading, time
 
 root = sys.argv[1]
 stop = threading.Timer(float(os.environ.get("FM_TEST_STUB_MAX_BLOCK_SECONDS", "120")), lambda: os._exit(0))
@@ -447,6 +447,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if (read("chat.reject-two-system") or "").strip() == "1" and roles[:2] == ["system", "system"]:
             self.reply(404, '{"error":{"message":"System message must be at the beginning."}}')
             return
+        time.sleep(float((read("chat.delay") or "0").strip()))
         code = int((read("chat.code") or "200").strip())
         body = read("chat.body") or '{"choices":[{"index":0,"message":{"role":"assistant","content":"OK"}}]}'
         self.reply(code, body)
@@ -473,7 +474,7 @@ PY
 # and an empty request log.
 stub_reset() {
   start_stub
-  rm -f "$STUB_DIR/metrics.txt" "$STUB_DIR/health.json" "$STUB_DIR/chat.code" "$STUB_DIR/chat.body" "$STUB_DIR/chat.reject-two-system"
+  rm -f "$STUB_DIR/metrics.txt" "$STUB_DIR/health.json" "$STUB_DIR/chat.code" "$STUB_DIR/chat.body" "$STUB_DIR/chat.reject-two-system" "$STUB_DIR/chat.delay"
   printf '%s' "${1:-$STUB_MODELS}" > "$STUB_DIR/models.json"
   : > "$STUB_DIR/requests.log"
   : > "$STUB_DIR/auth.log"
@@ -533,7 +534,7 @@ test_check_says_loaded_or_listed() {
   out=$(run_real check tiller qwen-big)
   status=$?
   expect_code 0 "$status" "a listed but unloaded model still passes, because the server loads it on demand"
-  assert_contains "$out" "model listed but not loaded, so the first request loads it" "check must say an unloaded model is only listed"
+  assert_contains "$out" "model was listed but not loaded, so the probe loaded it" "check must say its probe loaded an unloaded model"
   assert_equals "GET /v1/models
 POST /v1/chat/completions model=qwen-big max_tokens=1 roles=system,system,user" \
     "$(tail -2 "$STUB_DIR/requests.log")" "check must send one tiny completion in OpenCode's shape"
@@ -543,6 +544,28 @@ POST /v1/chat/completions model=qwen-big max_tokens=1 roles=system,system,user" 
   run_real check tiller qwen-big --warm >/dev/null
   expect_code 2 "$?" "check takes no --warm; set-model owns the warm-up"
   pass "check says whether the model is loaded or only listed and sends one tiny completion, while status never does"
+}
+
+test_check_bounds_an_unloaded_models_probe_by_the_warm_timeout() {
+  local out status
+  stub_reset
+  make_stub_case unloaded-bound "$(stub_map)"
+  printf '2' > "$STUB_DIR/chat.delay"
+  out=$(FM_SAILOR_SMOKE_TIMEOUT=1 FM_SAILOR_WARM_TIMEOUT=10 run_real check tiller qwen-big)
+  status=$?
+  expect_code 0 "$status" "an unloaded model's probe must wait the warm-up bound while the server loads it: $out"
+  assert_contains "$out" "model was listed but not loaded, so the probe loaded it" "the ok line must say the probe loaded the model"
+  out=$(FM_SAILOR_SMOKE_TIMEOUT=1 FM_SAILOR_WARM_TIMEOUT=10 run_real check tiller qwen-coder)
+  status=$?
+  expect_code 1 "$status" "a loaded model's probe must keep the short bound"
+  assert_contains "$out" "no completion from $STUB/v1 within 1 seconds" "a loaded model's refusal must name the short bound"
+  out=$(FM_SAILOR_SMOKE_TIMEOUT=1 FM_SAILOR_WARM_TIMEOUT=1 run_real check tiller qwen-big)
+  status=$?
+  expect_code 1 "$status" "an unloaded model that does not load within the warm-up bound must be refused"
+  assert_contains "$out" "no completion from $STUB/v1 within 1 seconds (the model was listed but not loaded, so the probe also had to load it)" \
+    "the refusal must say the probe had to load the model"
+  rm -f "$STUB_DIR/chat.delay"
+  pass "check bounds an unloaded model's probe by FM_SAILOR_WARM_TIMEOUT and a loaded one's by FM_SAILOR_SMOKE_TIMEOUT"
 }
 
 test_check_sends_opencodes_message_shape() {
@@ -1766,6 +1789,7 @@ test_validate_checks_grades_facets_paid_and_spend
 test_pick_by_grade_takes_the_lowest_sufficient_free_sailor
 test_pick_weighs_one_named_sailor_through_the_same_gates
 test_check_says_loaded_or_listed
+test_check_bounds_an_unloaded_models_probe_by_the_warm_timeout
 test_check_sends_opencodes_message_shape
 test_check_refuses_an_endpoint_that_rejects_the_shape
 test_status_shows_answer_tasks_queue_and_models

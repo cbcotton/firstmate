@@ -131,7 +131,9 @@
 #      for a sailor with unlisted_models, with any model list;
 #   6. POST <endpoint>/chat/completions answers a one-token request in
 #      OpenCode's message shape, two leading system messages then the user
-#      message, within FM_SAILOR_SMOKE_TIMEOUT seconds (default 120).
+#      message, within FM_SAILOR_SMOKE_TIMEOUT seconds (default 120), or
+#      within FM_SAILOR_WARM_TIMEOUT seconds (default 600) when the model list
+#      flags the model as not loaded, since that probe loads it.
 # For a login sailor, steps 4 and 5 are its full sign-in check (above); step 6
 # is for an endpoint sailor alone. It prints `ok: ...` and exits 0, or prints
 # `refused: ...` and exits 1. When the model list carries a `loaded` flag, the
@@ -674,16 +676,16 @@ warm_model() {
   chat_completion "$1" "$payload" "$WARM_TIMEOUT"
 }
 
-# probe_completion <endpoint> <model>: one one-token chat completion in the
+# probe_completion <endpoint> <model> <bound>: one one-token chat completion in the
 # message shape OpenCode sends, two leading system messages then the user
-# message; on failure prints the reason and returns 1.
+# message, within <bound> seconds; on failure prints the reason and returns 1.
 probe_completion() {
   local payload
   payload=$(jq -nc --arg m "$2" '{model: $m, messages: [
     {role: "system", content: "You are a helpful assistant."},
     {role: "system", content: "Reply with the single word OK."},
     {role: "user", content: "Reply with the single word OK."}], max_tokens: 1, stream: false}')
-  chat_completion "$1" "$payload" "$SMOKE_TIMEOUT"
+  chat_completion "$1" "$payload" "$3"
 }
 
 # origin_of <url>: scheme and authority, without the path.
@@ -762,7 +764,7 @@ login_up() {
 }
 
 cmd_check() {
-  local sailor=$1 model=$2 exclude=$3 endpoint harness status max busy body state note reason
+  local sailor=$1 model=$2 exclude=$3 endpoint harness status max busy body state note reason bound
   sailor_load "$sailor" "$model"
   endpoint=$(sailor_field "$sailor" '.endpoint')
   harness=$(sailor_field "$sailor" '.harness')
@@ -789,14 +791,20 @@ cmd_check() {
   state=$(model_state "$body" "$model")
   [ "$state" != missing ] || ! unlisted_models "$sailor" || state=unlisted
   [ "$state" != missing ] || refuse "sailor $sailor at $endpoint does not serve $model"
+  bound=$SMOKE_TIMEOUT
   case "$state" in
     loaded) note="; model loaded" ;;
-    unloaded) note="; model listed but not loaded, so the first request loads it" ;;
+    unloaded)
+      bound=$WARM_TIMEOUT
+      note="; model was listed but not loaded, so the probe loaded it"
+      ;;
     unlisted) note="; model not in the endpoint's list, which this sailor's unlisted_models allows" ;;
     *) note= ;;
   esac
-  reason=$(probe_completion "$endpoint" "$model") ||
+  reason=$(probe_completion "$endpoint" "$model" "$bound") || {
+    [ "$state" != unloaded ] || reason="$reason (the model was listed but not loaded, so the probe also had to load it)"
     refuse "sailor $sailor at $endpoint rejected a one-token request with two leading system messages: $reason"
+  }
   echo "ok: sailor $sailor serves $model at $endpoint ($busy of $max tasks busy$note)"
 }
 
