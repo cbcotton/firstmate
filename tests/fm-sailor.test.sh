@@ -368,8 +368,8 @@ test_pick_weighs_one_named_sailor_through_the_same_gates() {
 # A python3 server answers GET /v1/models, /metrics, and /health and POST
 # /v1/chat/completions from control files in STUB_DIR and logs one line per
 # request, with a completion's message roles, to STUB_DIR/requests.log, so a
-# case can drive loaded versus listed models, a failed warm-up, a slow load, a server that
-# rejects two leading system messages, and the queue gauges, and prove which
+# case can drive loaded versus listed models, a failed warm-up, a slow load, a
+# refused completion, and the queue gauges, and prove which
 # requests the script made; STUB_DIR/auth.log gets the same request with the
 # Authorization header it carried, or - for none.
 
@@ -444,9 +444,6 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if self.path != "/v1/chat/completions":
             self.reply(404, '{"error":"not found"}')
             return
-        if (read("chat.reject-two-system") or "").strip() == "1" and roles[:2] == ["system", "system"]:
-            self.reply(404, '{"error":{"message":"System message must be at the beginning."}}')
-            return
         time.sleep(float((read("chat.delay") or "0").strip()))
         code = int((read("chat.code") or "200").strip())
         body = read("chat.body") or '{"choices":[{"index":0,"message":{"role":"assistant","content":"OK"}}]}'
@@ -474,7 +471,7 @@ PY
 # and an empty request log.
 stub_reset() {
   start_stub
-  rm -f "$STUB_DIR/metrics.txt" "$STUB_DIR/health.json" "$STUB_DIR/chat.code" "$STUB_DIR/chat.body" "$STUB_DIR/chat.reject-two-system" "$STUB_DIR/chat.delay"
+  rm -f "$STUB_DIR/metrics.txt" "$STUB_DIR/health.json" "$STUB_DIR/chat.code" "$STUB_DIR/chat.body" "$STUB_DIR/chat.delay"
   printf '%s' "${1:-$STUB_MODELS}" > "$STUB_DIR/models.json"
   : > "$STUB_DIR/requests.log"
   : > "$STUB_DIR/auth.log"
@@ -536,8 +533,8 @@ test_check_says_loaded_or_listed() {
   expect_code 0 "$status" "a listed but unloaded model still passes, because the server loads it on demand"
   assert_contains "$out" "model was listed but not loaded, so the probe loaded it" "check must say its probe loaded an unloaded model"
   assert_equals "GET /v1/models
-POST /v1/chat/completions model=qwen-big max_tokens=1 roles=system,system,user" \
-    "$(tail -2 "$STUB_DIR/requests.log")" "check must send one tiny completion in OpenCode's shape"
+POST /v1/chat/completions model=qwen-big max_tokens=1 roles=system,user" \
+    "$(tail -2 "$STUB_DIR/requests.log")" "check must send one tiny completion in a sailor worker's shape"
   : > "$STUB_DIR/requests.log"
   run_real status >/dev/null
   assert_no_grep "POST" "$STUB_DIR/requests.log" "status must never ask the model for a completion"
@@ -574,24 +571,25 @@ test_check_sends_opencodes_message_shape() {
   make_stub_case shape "$(stub_map)"
   out=$(run_real check tiller qwen-coder)
   status=$?
-  expect_code 0 "$status" "an endpoint that accepts OpenCode's message shape must pass: $out"
+  expect_code 0 "$status" "an endpoint that accepts a sailor worker's message shape must pass: $out"
   assert_equals "GET /v1/models
-POST /v1/chat/completions model=qwen-coder max_tokens=1 roles=system,system,user" "$(cat "$STUB_DIR/requests.log")" \
-    "check must send one one-token completion with two leading system messages and the user message"
-  pass "check passes an endpoint that accepts one tiny completion in OpenCode's two-system-message shape"
+POST /v1/chat/completions model=qwen-coder max_tokens=1 roles=system,user" "$(cat "$STUB_DIR/requests.log")" \
+    "check must send one one-token completion with one system message and the user message"
+  pass "check passes an endpoint that accepts one tiny completion in a sailor worker's folded message shape"
 }
 
 test_check_refuses_an_endpoint_that_rejects_the_shape() {
   local out status
   stub_reset
   make_stub_case shape-refused "$(stub_map)"
-  printf '1' > "$STUB_DIR/chat.reject-two-system"
+  printf '400' > "$STUB_DIR/chat.code"
+  printf '%s' '{"error":{"message":"System message must be at the beginning."}}' > "$STUB_DIR/chat.body"
   out=$(run_real check tiller qwen-coder)
   status=$?
-  expect_code 1 "$status" "an endpoint that rejects two leading system messages must be refused"
-  assert_equals "refused: sailor tiller at $STUB/v1 did not answer a one-token request in OpenCode's message shape (two leading system messages, then the user message): HTTP 404: System message must be at the beginning." "$out" \
+  expect_code 1 "$status" "an endpoint that refuses the completion must be refused"
+  assert_equals "refused: sailor tiller at $STUB/v1 did not answer a one-token request in a sailor worker's message shape (one system message, then the user message): HTTP 400: System message must be at the beginning." "$out" \
     "the refusal must name the endpoint's error"
-  pass "check refuses an endpoint that answers 404 to OpenCode's two-system message shape, naming its error"
+  pass "check refuses an endpoint that answers an error to a sailor worker's message shape, naming its error"
 }
 
 test_status_shows_answer_tasks_queue_and_models() {

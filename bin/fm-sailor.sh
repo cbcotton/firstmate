@@ -36,10 +36,11 @@
 # An app that is not installed, times out, or exits non-zero reads as signed
 # out, and every reason names the app and never a value.
 # Before dispatching to an endpoint sailor, check also sends one tiny chat
-# completion in the shape OpenCode sends once its plugins add system text:
-# max_tokens 1, two leading system messages, then the user message. A refusal
-# names the endpoint's error, so a server that lists a model but rejects that
-# shape is refused rather than reported live. status and health never ask for
+# completion in the shape a sailor's OpenCode worker sends once the
+# system-fold plugin has folded its system text: max_tokens 1, one system
+# message, then the user message. A refusal names the endpoint's error, so a
+# server that lists a model but rejects that shape is refused rather than
+# reported live. status and health never ask for
 # a completion.
 #
 # Usage:
@@ -130,7 +131,7 @@
 #      (default 3) with an OpenAI-style model list that includes <model>, or,
 #      for a sailor with unlisted_models, with any model list;
 #   6. POST <endpoint>/chat/completions answers a one-token request in
-#      OpenCode's message shape, two leading system messages then the user
+#      a sailor worker's message shape, one system message then the user
 #      message, within FM_SAILOR_SMOKE_TIMEOUT seconds (default 120), or
 #      within FM_SAILOR_WARM_TIMEOUT seconds (default 600) when the model list
 #      flags the model as not loaded, since that probe loads it.
@@ -677,13 +678,12 @@ warm_model() {
 }
 
 # probe_completion <endpoint> <model> <bound>: one one-token chat completion in the
-# message shape OpenCode sends, two leading system messages then the user
-# message, within <bound> seconds; on failure prints the reason and returns 1.
+# message shape a sailor's OpenCode worker sends, one system message then the
+# user message, within <bound> seconds; on failure prints the reason and returns 1.
 probe_completion() {
   local payload
   payload=$(jq -nc --arg m "$2" '{model: $m, messages: [
-    {role: "system", content: "You are a helpful assistant."},
-    {role: "system", content: "Reply with the single word OK."},
+    {role: "system", content: "You are a helpful assistant. Reply with the single word OK."},
     {role: "user", content: "Reply with the single word OK."}], max_tokens: 1, stream: false}')
   chat_completion "$1" "$payload" "$3"
 }
@@ -803,7 +803,7 @@ cmd_check() {
   esac
   reason=$(probe_completion "$endpoint" "$model" "$bound") || {
     [ "$state" != unloaded ] || reason="$reason (the model was listed but not loaded, so the probe also had to load it)"
-    refuse "sailor $sailor at $endpoint did not answer a one-token request in OpenCode's message shape (two leading system messages, then the user message): $reason"
+    refuse "sailor $sailor at $endpoint did not answer a one-token request in a sailor worker's message shape (one system message, then the user message): $reason"
   }
   echo "ok: sailor $sailor serves $model at $endpoint ($busy of $max tasks busy$note)"
 }
