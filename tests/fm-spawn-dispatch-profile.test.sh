@@ -817,7 +817,10 @@ enable_sailors() {  # <home> <fakebin> <tiller-status>
   cat > "$fakebin/curl" <<'SH'
 #!/usr/bin/env bash
 printf '%s\n' "${!#}" >> "${FM_FAKE_CURL_LOG:-/dev/null}"
-printf '%s' '{"data":[{"id":"qwen-coder"}]}'
+case "${!#}" in
+  */chat/completions) printf '%s\n200' '{"choices":[{"index":0,"message":{"role":"assistant","content":"OK"}}]}' ;;
+  *) printf '%s' '{"data":[{"id":"qwen-coder"}]}' ;;
+esac
 SH
   chmod +x "$fakebin/curl"
 }

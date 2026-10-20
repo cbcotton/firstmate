@@ -1450,10 +1450,12 @@ A sailor is a named place that ordinary work can run on: an endpoint sailor, an 
   The fold is a worktree plugin that `fm-spawn.sh` writes beside the busy-state plugin; it folds what earlier plugins added and what later ones add, because OpenCode runs plugins in an order it does not document.
   A launch without a sailor drops it, and in a Privateer worker, which loads no global plugins, it changes nothing.
 - A `placeholder` sailor is never dispatched, even when something answers at its address; only the captain changes its status to `live`.
-- A `live` sailor is eligible only while `bin/fm-sailor.sh check <sailor> <model>` passes: it must have its token when it names one, its endpoint must answer within a few seconds and list the model (or only answer, with `unlisted_models`), and this home must hold fewer than `max_concurrent` tasks on it; a login sailor's worker app must instead pass its full sign-in check, with the kimi test prompt.
+- A `live` sailor is eligible only while `bin/fm-sailor.sh check <sailor> <model>` passes: it must have its token when it names one, its endpoint must answer within a few seconds and list the model (or only answer, with `unlisted_models`), answer one one-token chat completion in the shape a sailor's OpenCode worker sends once the system fold above has run (one system message followed by the user message) within `FM_SAILOR_SMOKE_TIMEOUT` seconds (default 120), or within `FM_SAILOR_WARM_TIMEOUT` seconds (default 600) when the model list flags the model as not loaded, since that probe loads it, with a refusal naming the endpoint's error, and this home must hold fewer than `max_concurrent` tasks on it; a login sailor's worker app must instead pass its full sign-in check, with the kimi test prompt.
   The capacity count is per home, so homes that share one machine each count only their own tasks.
   `bin/fm-sailor.sh pick`, under "Sailor grades" below, runs that check for each candidate it weighs.
-- No eligibility, status, or health probe ever asks for a completion: each reads only the model list, an mlx-serve health path, or the server's `/metrics` gauges, so watching a pay-per-token sailor spends nothing; the kimi test prompt in a login sailor's `check` is the one exception.
+- `check` sends an endpoint sailor exactly one one-token chat completion, so a pay-per-token sailor spends one tiny request per check, and `pick` runs that check for each candidate it weighs.
+  `status` and `health` never ask for a completion: they read only the model list, an mlx-serve health path, or the server's `/metrics` gauges, so watching a pay-per-token sailor spends nothing.
+  A login sailor's only check request is the kimi test prompt.
 - `bin/fm-sailor.sh status` shows each live sailor, or every sailor with `--all`: whether it answers the same health probe the watcher uses (below), or `no-token` when its token is missing, this home's tasks on it, the sailor's `grade=<grade>` when it has one, the server's running and waiting requests when it reports them, and, when its model list answers, each listed model as loaded, unloaded, unlisted, or missing.
   A login sailor's line carries `harness=<harness>` in place of its endpoint, each model as signed-in or signed-out, and its `login=<label>` when it has one.
 - The supervision watcher probes every live sailor on the heartbeat's base interval through `bin/fm-sailor.sh health`, at its mlx-serve server's `healthPath` when `~/.mlx-serve/servers.json` lists a server whose `baseURL` the endpoint lies under, and otherwise at the endpoint's model list; a login sailor is read by its local sign-in evidence alone, within the probe timeout, without a prompt or a network request.
@@ -1471,7 +1473,7 @@ A sailor is a named place that ordinary work can run on: an endpoint sailor, an 
 - Each edit writes nothing unless the whole result validates and keeps a dated copy of the file it replaces; `set-model --dry-run` only prints the change, and refuses `--warm`, which would load the model.
   `set-model --replace` and `retire` refuse while a task still runs on what they would remove, and `set-model` refuses a model a live sailor does not serve.
   A change reaches each worker at its next spawn, while running workers keep what they launched with; a Privateer session's egress proxy allows a new or moved endpoint only after [`bin/fm-privateer.sh reload`](#how-a-privateer-session-runs).
-- `set-model --warm` asks the model for one token, so a server that loads models on demand loads it now and a failed load shows up then rather than in a worker's first request; it is the one request these commands send that a paid endpoint bills.
+- `set-model --warm` asks the model for one token, so a server that loads models on demand loads it now and a failed load shows up then rather than in a worker's first request; like `check`'s message-shape probe, it spends one token on a paid endpoint.
 - When every sailor candidate a matched rule or default offers is refused, firstmate uses `sailor_fallback` (one profile object or a non-empty array, never itself a sailor), for example Opus 5.5 in a home orchestrated through Claude Code.
 - Without `sailor_fallback`, sailor work waits in the queue until a sailor answers.
   A home that must never reach Anthropic, such as a Privateer home, declares no `sailor_fallback` and no Claude profile at all ([Privateer quarantine](#privateer-quarantine-configprivateer)).
@@ -1526,7 +1528,7 @@ Put a fine-grained token with the Inference Providers permission in the home's g
 ```
 
 When `~/.mlx-serve/servers.json` names the router, `bin/fm-sailor.sh add hf --from-mlx-serve <server-id> --models '<org>/<model>:cheapest' --auth-env HF_TOKEN --unlisted-models --live` writes the same entry.
-Hugging Face bills Inference Providers pay-as-you-go, with monthly included credits on some plans, so every worker request and `set-model --warm` counts against them, while the probes above do not.
+Hugging Face bills Inference Providers pay-as-you-go, with monthly included credits on some plans, so every worker request, `check`'s message-shape probe, and `set-model --warm` counts against them, while the model-list, status, and health probes do not.
 Its `paid` flag keeps dispatch from choosing it unless spend is allowed, as "Sailor grades" below says.
 
 **Sailor grades**
