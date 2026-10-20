@@ -921,6 +921,35 @@ The current pending-composer ring contract is owned by `bin/fm-task-inbox-lib.sh
 Kimi was not installed on the verification machine; its receive path is the same one-line-plus-shell contract, and the portable ladder and enqueue regressions in `tests/fm-task-inbox.test.sh` and `tests/fm-send-inbox.test.sh` cover every harness-independent half.
 This guard is the refresh command after any harness upgrade; it spends a small number of real tokens per installed harness, reports an absent harness explicitly, and refuses a run that verified nothing.
 
+## Auto-mode ruled steps
+
+Whether a Claude worker in auto mode runs a step firstmate ruled on was checked live on 2026-10-20 with claude 2.1.304 (Claude Code), on macOS arm64 and tmux on a private socket.
+Each step ran in a pair of fresh workers, steered through the real `bin/fm-send.sh` with an inbox record whose ruling named the exact command; in one worker of each pair the typed doorbell line also named that exact command, and the other got the plain doorbell.
+The workers launched with project-only settings, so no user allow rule such as `Bash(no-mistakes axi respond:*)` was in effect, and without the `--append-system-prompt` trust statement `bin/fm-spawn.sh` gives every task worker; a logging stub `no-mistakes` and a logging `git` shim over a scratch clone sat first on their PATH:
+
+```sh
+claude --permission-mode auto --setting-sources project --settings '{"feedbackDrafts":"off","disableAllHooks":true}'
+```
+
+| Step | Typed line also names it | Plain doorbell |
+|---|---|---|
+| `no-mistakes axi respond --run <id> --action approve` | did not run | did not run |
+| `no-mistakes axi sync` | ran | ran |
+| `no-mistakes axi sync --bind-archive-ref <ref>` | did not run | did not run |
+| `no-mistakes axi sync --recover --keep-local` | did not run | did not run |
+| `git -C <clone> merge --ff-only origin/main` | did not run | did not run |
+| `git -C <clone> switch -c <branch> origin/<pr-head>` | did not run | did not run |
+| `no-mistakes axi run --skip test` | did not run | did not run |
+| `no-mistakes axi run --skip test,document` | ran | ran |
+
+Under these conditions every step had the same outcome with and without the named line, so in this check naming a ruled step in the typed line did not clear it.
+The gate-response worker whose typed line named the step said its permission check refused it as `[Auto-Mode Bypass]`, and neither gate-response worker reworded the step or routed around it; for the other steps the run recorded only whether the exact command ran.
+Each cell is one sample, and `--skip test` not running while `--skip test,document` ran suggests the verdicts vary between sessions.
+Asking for each step as a separate single command with a plain description was not tested separately.
+The check does not establish why the classifier refused, and production workers, which load user settings and get the trust statement, may behave differently.
+A worker instead reports a refused ruled step as blocked, naming the exact command, under the inbox rule in `bin/fm-brief.sh`.
+The A/B harness was not kept, so re-checking after a Claude Code upgrade means repeating the setup above by hand.
+
 ## Gemini
 
 The Gemini crewmate adapter was verified on 2026-09-04 with gemini-cli 0.58.0 on Linux, Node v24.20.0, tmux 3.4.

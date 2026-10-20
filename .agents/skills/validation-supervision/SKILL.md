@@ -23,6 +23,7 @@ Once ownership is settled, validate exactly once against that final head so no o
 
 An ask-user finding returns as `needs-decision`; firstmate loads `ask-user-authority` and either decides or escalates per that skill.
 Send the same worker one exact decision naming the decision key, step, action, affected finding IDs, instructions where needed, and exact response command, passing `--resolve-key` so the worker's open decision record closes at answer time.
+Name every command the ruling directs exactly, for the worker to run as its own single command; an auto-mode worker's permission check can still refuse one, and the worker then reports `blocked` naming the exact command, which `stuck-crewmate-recovery` handles.
 Require the matching `resolved` event, forbid `--yes`, and require the worker to process every synchronous return until completion or a genuinely new escalation.
 Resume fleet supervision immediately after the decision lands.
 
