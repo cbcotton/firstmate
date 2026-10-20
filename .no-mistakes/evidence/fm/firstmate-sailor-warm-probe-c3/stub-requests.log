@@ -1,0 +1,9 @@
+[bonsai] GET /v1/models
+[lazy] GET /v1/models
+[broken] GET /v1/models
+[bonsai] GET /metrics
+[lazy] GET /metrics
+[broken] GET /metrics
+[bonsai] GET /v1/models
+[lazy] GET /v1/models
+[broken] GET /v1/models

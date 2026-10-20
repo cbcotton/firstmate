@@ -1,0 +1,130 @@
+[mem] MLX buffer-pool cap 8192 MB (was 124518 MB)
+Logging to /Users/cotton/.mlx-serve/logs/mlx-serve-18234.log (rotates at 32 MB)
+Discovered 5 model(s) under /Users/cotton/.mlx-serve/models:
+  - ARC4NUM/Qwen3.8-Flash-Next-Uncensored-MLX-Serve-4bit (70.1 GB)
+  - Qwen3.8-27B-TURBO-Fable-Cold-Fusion-735-882-Heretic-Uncensored-NM-DAU-mlx-oQ8e-1M (27.9 GB)
+  - YCF-AI/CyberTiel-Coder-35B-MLX (28.3 GB)
+  - lmstudio-community/Qwen3.5-9B-MLX-4bit (5.5 GB)
+  - mlx-community/Qwen3-Embedding-0.6B-8bit (0.6 GB)
+mlx-serve 26.8.11-pre-release.1 (MLX 0.32.2)
+[args] model: 
+[args] drafter: <none>
+[args] serve: 127.0.0.1:18234, ctx-size=0, pld=on, no-vision=false
+[args] kv-quant: off
+[args] kv-attn-mode: auto
+Metal GPU: true
+mlx-serve 26.8.11-pre-release.1 (headless — models load on demand)
+[args] serve: 127.0.0.1:18234
+[registry] max_resident_models=3, max_resident_mem=96.0 GB
+Headless: no primary model loaded; models load on demand.
+Hot prefix cache: requested capacity=32 but disabled by scheduler
+Context size: 4096 tokens (auto: the model's maximum; memory would allow 3650721792) [pinned]
+Request timeout: 300s
+Model context length: 4096 tokens
+Reasoning budget: unlimited
+PLD speculative decoding: ENABLED (draft_len=5, key_len=3; default for new requests)
+
+Server listening on http://127.0.0.1:18234
+  GET  /
+  GET  /health
+  GET  /props
+  GET  /v1/models
+  POST /v1/chat/completions
+  POST /v1/completions
+  POST /v1/embeddings
+  POST /v1/messages (Anthropic)
+  POST /v1/responses (OpenAI Responses)
+  POST /v1/responses/compact
+  GET  /v1/responses/{id}
+  DEL  /v1/responses/{id}
+  POST /tokenize
+  POST /detokenize
+
+RSS: 19M  Mem: 24%  CPU: 16%  GPU: 9%
+  parsed tokenizer (19 MB) in 52ms
+  loaded 248044 vocab entries in 4ms
+  loaded 247587 merges in 12ms
+Tokenizer loaded: 248077 vocab, 247587 merges, 33 special tokens (byte-level BPE)
+[preflight] weights ~5.54 GB, available 85.49 GB
+Loading model-00001-of-00002.safetensors...
+Loading model-00002-of-00002.safetensors...
+Loaded 1260 weights from 2 file(s)
+Precomputing MoE layer weights...
+Batch eval all weights: 413ms
+[suppress] 14 of 21 flagged specials masked from sampling (template + eos exempt)
+[wired] mode=max limit=122880 MB
+MoE routing compiled (kernel fusion enabled)
+GDN gate compiled (kernel fusion enabled)
+[vision] qwen tower prefix: vision_tower.
+[vision] qwen patch_embed layout: channels_last
+Vision encoder: Qwen3-VL ViT (depth=27, hidden=1152, heads=16, merge=2, out_hidden=4096)
+[dtype-trace] moe: residual in = bfloat16, first weight = n/a
+[mlp] fused SwiGLU kernel engaged: n=12288 tg=256
+[attn] fused QK-norm+RoPE (hd-256) engaged: hq=16 hk=4 S=1 rd=64
+[dtype-trace] moe: residual out = bfloat16
+[vqmm] NAX verify lane engaged at 4-bit: M=8 K=4096 N=8192 gs=64 min_m=8 (MLX_SERVE_VERIFY_QMM_NAX=0 restores stock)
+[nax-sdpa] engaged: stock fused sdpa (force_fused) serves hd-256 causal prefill and verify blocks > 8 rows; msv_attn_p256 causal arm declined (MLX_SERVE_NAX_SDPA=0 restores)
+[sdpa-split] engaged: qL=8 kL=8 Hq=16 Hkv=4 (MLX_SERVE_SDPA_SPLIT=0 restores the single dispatch)
+Warmup complete (587 ms).
+[registry] default model -> lmstudio-community/Qwen3.5-9B-MLX-4bit (first chat-capable load on a headless server)
+[registry] model id=lmstudio-community/Qwen3.5-9B-MLX-4bit ready (5.54 GB resident)
+[wired] mode=max limit=122880 MB
+  pld=enabled (draft_len=5, key_len=3)
+POST /v1/chat/completions (2 msgs, max_tokens=1, temp=1.00, top_p=0.95, top_k=20, stream=false, thinking=false, sys=59b, user=30b, tools=0b, tool_msgs=0) 
+  > "Reply with the single word OK."
+  prompt=37 tokens, max_gen=1, ctx=262144
+  spec-gate: ngram-score=0.250 (threshold=0.010)
+[sdpa-split] engaged: qL=6 kL=6 Hq=16 Hkv=4 (MLX_SERVE_SDPA_SPLIT=0 restores the single dispatch)
+[nax-sdpa] force_fused dispatch engaged: qL=31 kL=37 Hq=16 Hkv=4 hd=256
+[gdn] packed prework engaged: Hk=16 Hv=32 S=1
+[gdn] fused norm-gate engaged: Hv=32 S=1 gate=swish
+  [hot-cache] resident=33.13 / 2048.00 MB (1/32 entries)
+  <- 37+1 tokens (250ms) [prefill: 205.4 tok/s, decode: 0.0 tok/s] [length]
+  pld=enabled (draft_len=5, key_len=3)
+POST /v1/chat/completions (2 msgs, max_tokens=1, temp=1.00, top_p=0.95, top_k=20, stream=false, thinking=false, sys=59b, user=30b, tools=0b, tool_msgs=0) 
+  > "Reply with the single word OK."
+  prompt=37 tokens, max_gen=1, ctx=262144
+  spec-gate: ngram-score=0.250 (threshold=0.010)
+  [hot-cache] reused 6/37 tokens (matched 37; entry 1/1)
+  [hot-cache] resident=58.25 / 2048.00 MB (1/32 entries)
+  <- 37+1 tokens (89ms) [prefill: 392.9 tok/s (6 cached / 37 total), decode: 0.0 tok/s] [length]
+  pld=enabled (draft_len=5, key_len=3)
+POST /v1/chat/completions (3 msgs, max_tokens=1, temp=1.00, top_p=0.95, top_k=20, stream=false, thinking=false, sys=2b, user=8b, tools=0b, tool_msgs=0) 
+  > "Reply OK"
+jinja render failed (
+------------
+While executing CallExpression at line 85, column 32 in source:
+...first %}↵            {{- raise_exception('System message must be at the beginnin...
+                                           ^
+Error: Jinja Exception: System message must be at the beginning.), falling back to generic chat format
+  prompt=26 tokens, max_gen=1, ctx=262144
+  spec-gate: ngram-score=0.095 (threshold=0.010)
+  [hot-cache] hybrid miss (no checkpoint ≤ 3 of 26); cold prefill
+  [hot-cache] resident=91.38 / 2048.00 MB (2/32 entries)
+  <- 26+1 tokens (109ms) [prefill: 264.1 tok/s, decode: 0.0 tok/s] [length]
+  pld=enabled (draft_len=5, key_len=3)
+POST /v1/chat/completions (2 msgs, max_tokens=1, temp=1.00, top_p=0.95, top_k=20, stream=false, thinking=false, sys=1b, user=8b, tools=0b, tool_msgs=0) 
+  > "Reply OK"
+  prompt=20 tokens, max_gen=1, ctx=262144
+  spec-gate: ngram-score=0.059 (threshold=0.010)
+  [hot-cache] hybrid miss (no checkpoint ≤ 7 of 20); cold prefill
+  [hot-cache] resident=124.50 / 2048.00 MB (3/32 entries)
+  <- 20+1 tokens (80ms) [prefill: 285.5 tok/s, decode: 0.0 tok/s] [length]
+  pld=enabled (draft_len=5, key_len=3)
+POST /v1/chat/completions (2 msgs, max_tokens=1, temp=1.00, top_p=0.95, top_k=20, stream=false, thinking=false, sys=59b, user=30b, tools=0b, tool_msgs=0) 
+  > "Reply with the single word OK."
+  prompt=37 tokens, max_gen=1, ctx=262144
+  spec-gate: ngram-score=0.250 (threshold=0.010)
+  [hot-cache] reused 36/37 tokens (matched 37; entry 1/3)
+  [hot-cache] resident=124.50 / 2048.00 MB (3/32 entries)
+  <- 37+1 tokens (53ms) [prefill: 23.9 tok/s (36 cached / 37 total), decode: 0.0 tok/s] [length]
+  pld=enabled (draft_len=5, key_len=3)
+POST /v1/chat/completions (2 msgs, max_tokens=1, temp=1.00, top_p=0.95, top_k=20, stream=false, thinking=false, sys=59b, user=30b, tools=0b, tool_msgs=0) 
+  > "Reply with the single word OK."
+  prompt=37 tokens, max_gen=1, ctx=262144
+  spec-gate: ngram-score=0.250 (threshold=0.010)
+  [hot-cache] reused 36/37 tokens (matched 37; entry 1/3)
+  [hot-cache] resident=124.50 / 2048.00 MB (3/32 entries)
+  <- 37+1 tokens (53ms) [prefill: 23.2 tok/s (36 cached / 37 total), decode: 0.0 tok/s] [length]
+
+Shutting down gracefully...

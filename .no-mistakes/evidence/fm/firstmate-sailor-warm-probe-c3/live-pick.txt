@@ -1,0 +1,12 @@
+$ fm-sailor.sh pick --sailor bonsai
+refused: sailor bonsai at http://127.0.0.1:18235/v1 did not answer a one-token request in a sailor worker's message shape (one system message, then the user message): HTTP 404: System message must be at the beginning.
+[exit 1]
+
+$ fm-sailor.sh pick --sailor mlx
+mlx lmstudio-community/Qwen3.5-9B-MLX-4bit
+[exit 0]
+
+# both sailors graded "sailor"; bonsai lists its model but rejects completions
+$ fm-sailor.sh pick --grade sailor
+mlx lmstudio-community/Qwen3.5-9B-MLX-4bit
+[exit 0]

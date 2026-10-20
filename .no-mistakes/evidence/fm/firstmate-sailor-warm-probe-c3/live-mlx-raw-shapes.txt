@@ -1,0 +1,4 @@
+# Unfolded OpenCode shape (two leading system messages) -> real Qwen-template server:
+{"id":"chatcmpl-1792492011913","object":"chat.completion","created":1792492011,"model":"lmstudio-community/Qwen3.5-9B-MLX-4bit","system_fingerprint":"mlx-serve","choices":[{"index":0,"message":{"role":"assistant","content":"OK"},"logprobs":null,"finish_reason":"length"}],"usage":{"prompt_tokens":26,"completion_tokens":1,"total_tokens":27,"prompt_tokens_details":{"cached_tokens":0}},"timings":{"pro
+# Folded shape (what check probes and fold-plugin workers send):
+{"id":"chatcmpl-1792492012014","object":"chat.completion","created":1792492012,"model":"lmstudio-community/Qwen3.5-9B-MLX-4bit","system_fingerprint":"mlx-serve","choices":[{"index":0,"message":{"role":"assistant","content":"OK"},"logprobs":null,"finish_reason":"length"}],"usage":{"prompt_tokens":20,"completion_tokens":1,"total_tokens":21,"prompt_tokens_details":{"cached_tokens":0}},"timings":{"pro

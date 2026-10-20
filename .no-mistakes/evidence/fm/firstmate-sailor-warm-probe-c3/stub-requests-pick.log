@@ -1,0 +1,4 @@
+[broken] GET /v1/models
+[broken] POST /v1/chat/completions {"model": "qwen-coder", "messages": [{"role": "system", "content": "You are a helpful assistant. Reply with the single word OK."}, {"role": "user", "content": "Reply with the single word OK."}], "max_tokens": 1, "stream": false}
+[bonsai] GET /v1/models
+[bonsai] POST /v1/chat/completions {"model": "qwen-coder", "messages": [{"role": "system", "content": "You are a helpful assistant. Reply with the single word OK."}, {"role": "user", "content": "Reply with the single word OK."}], "max_tokens": 1, "stream": false}

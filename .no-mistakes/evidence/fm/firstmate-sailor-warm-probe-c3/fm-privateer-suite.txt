@@ -1,0 +1,6 @@
+=== before fix (target commit) ===
+not ok - the real session must start: fm-privateer: refused: the first mate's sailor cannot take the session: sailor tiller at http://127.0.0.1:50666/v1 did not answer a one-token request in a sailor worker's message shape (one system message, then the user message): HTTP 501: <!DOCTYPE HTML> <html lang="en"> <head> <meta charset="utf-8"> <title>Error response</title> </head> <body> <h1>Error response</h1> <p>Error code: 501</p> <p>Message: Unsupported method ('POST').</p> : expected exit 0, got 1
+
+=== after serve_dir answers POST */chat/completions ===
+ok - project sets, clears, and prints the active project outside the session, and refuses unregistered or clone-less names, the session, and a home without the quarantine
+# all fm-privateer tests passed

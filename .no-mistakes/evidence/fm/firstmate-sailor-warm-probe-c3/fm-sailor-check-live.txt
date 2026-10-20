@@ -1,0 +1,69 @@
+=== BASELINE (base commit 789c3264 fm-sailor.sh) ===
+$ /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T//fm-lab.5Og3jH/fm-sailor-base.sh check broken qwen-coder
+ok: sailor broken serves qwen-coder at http://127.0.0.1:18312/v1 (0 of 1 tasks busy; model loaded)
+[exit 0]
+
+=== CHANGE (HEAD be07fe21 bin/fm-sailor.sh) ===
+$ bin/fm-sailor.sh check broken qwen-coder
+refused: sailor broken at http://127.0.0.1:18312/v1 did not answer a one-token request in a sailor worker's message shape (one system message, then the user message): HTTP 500: out of memory loading model
+[exit 1]
+
+--- stub requests for that check ---
+[broken] GET /v1/models
+[broken] POST /v1/chat/completions {"model": "qwen-coder", "messages": [{"role": "system", "content": "You are a helpful assistant. Reply with the single word OK."}, {"role": "user", "content": "Reply with the single word OK."}], "max_tokens": 1, "stream": false}
+
+$ bin/fm-sailor.sh check bonsai qwen-coder
+ok: sailor bonsai serves qwen-coder at http://127.0.0.1:18311/v1 (0 of 1 tasks busy; model loaded)
+[exit 0]
+
+--- stub requests for that check ---
+[bonsai] GET /v1/models
+[bonsai] POST /v1/chat/completions {"model": "qwen-coder", "messages": [{"role": "system", "content": "You are a helpful assistant. Reply with the single word OK."}, {"role": "user", "content": "Reply with the single word OK."}], "max_tokens": 1, "stream": false}
+
+$ bin/fm-sailor.sh pick --when clear-path code
+usage: fm-sailor.sh validate | list | grades | status [--all] | health
+       fm-sailor.sh check <sailor> <model> [--task <id>]
+       fm-sailor.sh pick (--grade <grade> | --sailor <sailor> [--model <model>]) [--grade <grade>] [--facet <facet>] [--spend] [--task <id>]
+       fm-sailor.sh provider-json <sailor> <model>
+       fm-sailor.sh with-token <variable> <env-file> -- <command> [<arg>...]
+       fm-sailor.sh add <sailor> (--endpoint <url> --models <ids> | --from-mlx-serve <server-id> [--models <ids>])
+                    [--title <text>] [--host <text>] [--max-concurrent <n>] [--auth-env <variable>] [--unlisted-models]
+                    [--live | --placeholder]
+       fm-sailor.sh add <sailor> --harness <codex|kimi|grok> --models <ids> [--login <label>]
+                    [--title <text>] [--max-concurrent <n>] [--live | --placeholder]
+       fm-sailor.sh set <sailor> [--endpoint <url>] [--title <text>] [--host <text>] [--max-concurrent <n>]
+                    [--auth-env <variable> | --no-auth-env] [--unlisted-models | --no-unlisted-models] [--live | --placeholder]
+       fm-sailor.sh set-model <sailor> <model> [--replace <old>] [--first-mate] [--model-limit <context>:<output>]
+                    [--model-options <json>] [--warm] [--dry-run]
+       fm-sailor.sh retire <sailor>
+       fm-sailor.sh sync <registry> --home <key> [--dry-run]
+[exit 2]
+
+$ bin/fm-sailor.sh check lazy qwen-coder
+ok: sailor lazy serves qwen-coder at http://127.0.0.1:18313/v1 (0 of 1 tasks busy; model loaded)
+[exit 0]
+
+$ env FM_SAILOR_SMOKE_TIMEOUT=1 bin/fm-sailor.sh check lazy qwen-big
+ok: sailor lazy serves qwen-big at http://127.0.0.1:18313/v1 (0 of 1 tasks busy; model was listed but not loaded, so the probe loaded it)
+[exit 0]
+
+$ env FM_SAILOR_SMOKE_TIMEOUT=1 FM_SAILOR_WARM_TIMEOUT=1 bin/fm-sailor.sh check lazy qwen-big
+refused: sailor lazy at http://127.0.0.1:18313/v1 did not answer a one-token request in a sailor worker's message shape (one system message, then the user message): no completion from http://127.0.0.1:18313/v1 within 1 seconds (the model was listed but not loaded, so the probe also had to load it)
+[exit 1]
+
+$ bin/fm-sailor.sh status
+bonsai live answering endpoint=http://127.0.0.1:18311/v1 tasks=0/1 models=qwen-coder(loaded)
+broken live answering endpoint=http://127.0.0.1:18312/v1 tasks=0/1 models=qwen-coder(loaded)
+lazy live answering endpoint=http://127.0.0.1:18313/v1 tasks=0/1 models=qwen-coder(loaded),qwen-big(unloaded)
+[exit 0]
+
+--- stub requests during status (expect no POST) ---
+[bonsai] GET /v1/models
+[lazy] GET /v1/models
+[broken] GET /v1/models
+[bonsai] GET /metrics
+[lazy] GET /metrics
+[broken] GET /metrics
+[bonsai] GET /v1/models
+[lazy] GET /v1/models
+[broken] GET /v1/models

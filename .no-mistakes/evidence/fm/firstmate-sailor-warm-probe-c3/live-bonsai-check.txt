@@ -1,0 +1,15 @@
+$ fm-sailor.sh status
+bonsai live answering endpoint=http://127.0.0.1:18235/v1 tasks=0/2 models=bonsai-8b(listed)
+mlx live answering endpoint=http://127.0.0.1:18234/v1 tasks=0/1 models=lmstudio-community/Qwen3.5-9B-MLX-4bit(loaded)
+[exit 0]
+endpoint saw:
+GET /v1/models
+GET /metrics
+GET /v1/models
+
+$ fm-sailor.sh check bonsai bonsai-8b
+refused: sailor bonsai at http://127.0.0.1:18235/v1 did not answer a one-token request in a sailor worker's message shape (one system message, then the user message): HTTP 404: System message must be at the beginning.
+[exit 1]
+endpoint saw:
+GET /v1/models
+POST /v1/chat/completions roles=system,user max_tokens=1

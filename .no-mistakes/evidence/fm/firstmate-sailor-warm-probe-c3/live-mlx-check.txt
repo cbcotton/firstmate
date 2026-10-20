@@ -1,0 +1,10 @@
+$ fm-sailor.sh check mlx lmstudio-community/Qwen3.5-9B-MLX-4bit   # model listed, loaded:false
+ok: sailor mlx serves lmstudio-community/Qwen3.5-9B-MLX-4bit at http://127.0.0.1:18234/v1 (0 of 1 tasks busy; model was listed but not loaded, so the probe loaded it)
+[exit 0]
+
+models after:
+{"id":"lmstudio-community/Qwen3.5-9B-MLX-4bit","loaded":true}
+
+$ fm-sailor.sh check mlx lmstudio-community/Qwen3.5-9B-MLX-4bit   # now loaded
+ok: sailor mlx serves lmstudio-community/Qwen3.5-9B-MLX-4bit at http://127.0.0.1:18234/v1 (0 of 1 tasks busy; model loaded)
+[exit 0]

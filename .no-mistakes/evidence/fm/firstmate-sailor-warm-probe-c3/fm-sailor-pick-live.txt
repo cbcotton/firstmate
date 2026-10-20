@@ -1,0 +1,13 @@
+$ bin/fm-sailor.sh pick --sailor broken
+refused: sailor broken at http://127.0.0.1:18312/v1 did not answer a one-token request in a sailor worker's message shape (one system message, then the user message): HTTP 500: out of memory loading model
+[exit 1]
+
+$ bin/fm-sailor.sh pick --sailor bonsai
+bonsai qwen-coder
+[exit 0]
+
+--- stub requests ---
+[broken] GET /v1/models
+[broken] POST /v1/chat/completions {"model": "qwen-coder", "messages": [{"role": "system", "content": "You are a helpful assistant. Reply with the single word OK."}, {"role": "user", "content": "Reply with the single word OK."}], "max_tokens": 1, "stream": false}
+[bonsai] GET /v1/models
+[bonsai] POST /v1/chat/completions {"model": "qwen-coder", "messages": [{"role": "system", "content": "You are a helpful assistant. Reply with the single word OK."}, {"role": "user", "content": "Reply with the single word OK."}], "max_tokens": 1, "stream": false}
