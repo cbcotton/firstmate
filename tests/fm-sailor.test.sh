@@ -589,7 +589,7 @@ test_check_refuses_an_endpoint_that_rejects_the_shape() {
   out=$(run_real check tiller qwen-coder)
   status=$?
   expect_code 1 "$status" "an endpoint that rejects two leading system messages must be refused"
-  assert_equals "refused: sailor tiller at $STUB/v1 rejected a one-token request with two leading system messages: HTTP 404: System message must be at the beginning." "$out" \
+  assert_equals "refused: sailor tiller at $STUB/v1 did not answer a one-token request in OpenCode's message shape (two leading system messages, then the user message): HTTP 404: System message must be at the beginning." "$out" \
     "the refusal must name the endpoint's error"
   pass "check refuses an endpoint that answers 404 to OpenCode's two-system message shape, naming its error"
 }

@@ -803,7 +803,7 @@ cmd_check() {
   esac
   reason=$(probe_completion "$endpoint" "$model" "$bound") || {
     [ "$state" != unloaded ] || reason="$reason (the model was listed but not loaded, so the probe also had to load it)"
-    refuse "sailor $sailor at $endpoint rejected a one-token request with two leading system messages: $reason"
+    refuse "sailor $sailor at $endpoint did not answer a one-token request in OpenCode's message shape (two leading system messages, then the user message): $reason"
   }
   echo "ok: sailor $sailor serves $model at $endpoint ($busy of $max tasks busy$note)"
 }
