@@ -1,0 +1,15 @@
+== test_term_stops_a_watcher_blocked_in_the_liveness_probe (/bin/bash 3.2, base bin 6ad75f71 + new tests)
+71744 71687 S    bash /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/tmp.BTJEUsfZSl/base/bin/fm-watch.sh
+wait_for_exit: owned pid 71744 survived TERM; sending KILL
+not ok - TERM did not stop a watcher blocked inside the secondmate liveness probe
+elapsed=27s
+== test_term_stops_a_watcher_blocked_in_the_liveness_relaunch (/bin/bash 3.2, base bin 6ad75f71 + new tests)
+78055 77942 S    bash /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/tmp.BTJEUsfZSl/base/bin/fm-watch.sh
+wait_for_exit: owned pid 78055 survived TERM; sending KILL
+not ok - TERM did not stop a watcher blocked inside the secondmate liveness relaunch
+elapsed=26s
+== test_term_stops_a_watcher_blocked_in_a_doorbell_send (/bin/bash 3.2, base bin 6ad75f71 + new tests)
+84937 84879 S    bash /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/tmp.BTJEUsfZSl/base/bin/fm-watch.sh
+wait_for_exit: owned pid 84937 survived TERM; sending KILL
+not ok - TERM did not stop a watcher blocked inside a doorbell send
+elapsed=28s

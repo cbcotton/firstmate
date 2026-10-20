@@ -1,0 +1,13 @@
+== test_term_stops_a_watcher_blocked_in_the_liveness_probe (/bin/bash 3.2, target 4ea702c0)
+ok - TERM stops a watcher blocked inside the secondmate liveness probe and still runs its cleanup
+rc= elapsed=2s
+== test_term_stops_a_watcher_blocked_in_the_liveness_relaunch (/bin/bash 3.2, target 4ea702c0)
+/Users/cotton/.no-mistakes/worktrees/e74e4e411ceb/01M5BPYS1MAZZ2N5PW234YD7HB/bin/fm-watch.sh: line 2272: 66774 Terminated: 15          ( "$@" ) > "$FM_WATCH_READ_FILE"
+ok - TERM stops a watcher blocked inside the secondmate liveness relaunch and still runs its cleanup
+rc= elapsed=2s
+== test_term_stops_a_watcher_blocked_in_a_doorbell_send (/bin/bash 3.2, target 4ea702c0)
+ok - TERM stops a watcher blocked inside a doorbell send and still runs its cleanup
+rc= elapsed=2s
+== test_term_stops_a_watcher_blocked_inside_a_poll (/bin/bash 3.2, target 4ea702c0)
+ok - TERM stops a watcher blocked inside a poll and still runs its cleanup
+rc= elapsed=2s

@@ -1,0 +1,9 @@
+no-watcher_read sm: [$'a\n\nb'] rc=7
+no-watcher_read inbox: [$'a\n\nb'] rc=7
+no-watcher_read ref \$(): [$'a\n\nb']
+watcher_read sm: [$'a\n\nb'] rc=7
+watcher_read inbox: [$'a\n\nb'] rc=7
+watcher_read ref \$(): [$'a\n\nb']
+.fm-watch-read.SvLEfR
+read file created under STATE: /var/folders/3c/4w5d0nf515l_hw4zg0pcvq880000gn/T/tmp.Z5fx5ghg3j/state/.fm-watch-read.SvLEfR
+0
