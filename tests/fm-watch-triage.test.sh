@@ -4634,6 +4634,175 @@ test_term_stops_a_watcher_blocked_inside_a_poll() {
   pass "TERM stops a watcher blocked inside a poll and still runs its cleanup"
 }
 
+# Release the FIFO holder, and a spawn pid this fixture recorded, after the
+# stop has been observed. Both are processes this test started.
+release_blocked_fixture() {  # <holder> [pidfile]
+  local holder=$1 pidfile=${2:-} pid
+  if [ -n "$pidfile" ] && [ -f "$pidfile" ]; then
+    pid=$(cat "$pidfile" 2>/dev/null || true)
+    case "$pid" in
+      ''|*[!0-9]*) ;;
+      *) kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true ;;
+    esac
+  fi
+  [ -n "$holder" ] || return 0
+  kill "$holder" 2>/dev/null || true
+  wait "$holder" 2>/dev/null || true
+}
+
+# TERM a watcher blocked on <marker> and prove the stop ran cleanup. The
+# read child of a nested command substitution may stay blocked until the
+# holder closes the FIFO; that is the waited-read contract, so this asserts
+# the watcher's exit, lock, acknowledgement, and read file only.
+assert_term_stops_blocked_watcher() {  # <pid> <state> <marker> <holder> <out> <what> [pidfile]
+  local pid=$1 state=$2 marker=$3 holder=$4 out=$5 what=$6 pidfile=${7:-}
+  local i=0 rc read_files
+  while [ ! -e "$marker" ] && [ "$i" -lt 300 ]; do
+    sleep 0.1
+    i=$((i + 1))
+  done
+  if [ ! -e "$marker" ] || ! is_live_non_zombie "$pid"; then
+    release_blocked_fixture "$holder" "$pidfile"
+    kill -KILL "$pid" 2>/dev/null || true
+    wait "$pid" 2>/dev/null || true
+    fail "the watcher never blocked $what: $(cat "$out" 2>/dev/null)"
+  fi
+  read_files=$(find "$state" -maxdepth 1 -name '.fm-watch-read.*' -print)
+  kill "$pid" 2>/dev/null || true
+  wait_for_exit "$pid" 100
+  rc=$?
+  release_blocked_fixture "$holder" "$pidfile"
+  [ "$rc" -ne 124 ] || fail "TERM did not stop a watcher blocked $what"
+  [ ! -e "$state/.watch.lock" ] || fail "a watcher stopped $what kept its singleton lock, so its cleanup did not run"
+  ack_stopped_cycle "$state" || fail "could not acknowledge the stop of a watcher blocked $what"
+  [ -n "$read_files" ] || fail "the blocked read wrote no read file under the watcher's state dir ($what)"
+  ! find "$state" -maxdepth 1 -name '.fm-watch-read.*' -print | grep . >/dev/null \
+    || fail "the watcher's cleanup left its read file behind ($what)"
+}
+
+# The liveness probe's agent-state read is a command substitution in the
+# watcher's main shell. Stock bash 3.2 defers TERM for that whole read, so a
+# list-windows that never returns leaves the watcher running until KILL.
+# CI's stock macOS Bash lane runs this case under /bin/bash 3.2.
+test_term_stops_a_watcher_blocked_in_the_liveness_probe() {
+  local dir state fakebin out fifo window holder pid
+  dir=$(make_case term-blocked-liveness-probe); state="$dir/state"; fakebin="$dir/fakebin"
+  out="$dir/watch.out"; fifo="$dir/list.fifo"; window="test:fm-blocked-probe"
+  mkdir -p "$dir/home/config"
+  mkfifo "$fifo"
+  printf 'window=%s\nkind=secondmate\nharness=claude\n' "$window" > "$state/probe.meta"
+  cat > "$fakebin/tmux" <<'SH'
+#!/usr/bin/env bash
+set -u
+if [ "${1:-}" = "list-windows" ]; then
+  cat "${FM_FAKE_TMUX_LIST_FIFO:?}"
+  exit 0
+fi
+exit 1
+SH
+  chmod +x "$fakebin/tmux"
+  ( exec 3> "$fifo"; : > "$dir/probe-blocked"; exec sleep 60 ) &
+  holder=$!
+  PATH="$fakebin:$PATH" FM_HOME="$dir/home" FM_CONFIG_OVERRIDE="$dir/home/config" \
+    FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" \
+    FM_FAKE_TMUX_LIST_FIFO="$fifo" \
+    FM_POLL=1 FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 \
+    FM_HOME_SUMMARY_INTERVAL=99999999 FM_SECONDMATE_LIVENESS_SECS=1 \
+    "$WATCH" > "$out" &
+  pid=$!
+  assert_term_stops_blocked_watcher "$pid" "$state" "$dir/probe-blocked" "$holder" "$out" \
+    "inside the secondmate liveness probe"
+  pass "TERM stops a watcher blocked inside the secondmate liveness probe and still runs its cleanup"
+}
+
+# A dead endpoint's relaunch captures fm-spawn.sh in the watcher's main
+# shell. The timeout stays past this case's stop budget, so the hang is the
+# unread spawn, not the timer. CI's stock macOS Bash lane runs this case
+# under /bin/bash 3.2.
+test_term_stops_a_watcher_blocked_in_the_liveness_relaunch() {
+  local dir state fakebin out fifo window holder pid
+  dir=$(make_case term-blocked-liveness-relaunch); state="$dir/state"; fakebin="$dir/fakebin"
+  out="$dir/watch.out"; fifo="$dir/spawn.fifo"; window="test:fm-blocked-relaunch"
+  mkdir -p "$dir/home/config" "$dir/spawnroot/bin"
+  mkfifo "$fifo"
+  printf 'window=%s\nkind=secondmate\nharness=claude\n' "$window" > "$state/relaunch.meta"
+  cat > "$dir/spawnroot/bin/fm-spawn.sh" <<'SH'
+#!/bin/bash
+printf '%s\n' "$$" > "${FM_TEST_SPAWN_PID:?}"
+cat "${FM_TEST_SPAWN_FIFO:?}"
+exit 0
+SH
+  chmod +x "$dir/spawnroot/bin/fm-spawn.sh"
+  ( exec 3> "$fifo"; : > "$dir/relaunch-blocked"; exec sleep 60 ) &
+  holder=$!
+  PATH="$fakebin:$PATH" FM_HOME="$dir/home" FM_CONFIG_OVERRIDE="$dir/home/config" \
+    FM_ROOT_OVERRIDE="$dir/spawnroot" \
+    FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" \
+    FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CURRENT_COMMAND=bash \
+    FM_TEST_SPAWN_PID="$dir/spawn.pid" FM_TEST_SPAWN_FIFO="$fifo" \
+    FM_POLL=1 FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 \
+    FM_HOME_SUMMARY_INTERVAL=99999999 \
+    FM_SECONDMATE_LIVENESS_SECS=1 FM_SECONDMATE_LIVENESS_TIMEOUT=60 \
+    "$WATCH" > "$out" &
+  pid=$!
+  assert_term_stops_blocked_watcher "$pid" "$state" "$dir/relaunch-blocked" "$holder" "$out" \
+    "inside the secondmate liveness relaunch" "$dir/spawn.pid"
+  pass "TERM stops a watcher blocked inside the secondmate liveness relaunch and still runs its cleanup"
+}
+
+# A due doorbell types through a command substitution in the watcher's main
+# shell. list-windows and capture-pane stay fast, so the hang is send-keys
+# and not the already-stoppable pre-check. CI's stock macOS Bash lane runs
+# this case under /bin/bash 3.2.
+test_term_stops_a_watcher_blocked_in_a_doorbell_send() {
+  local dir state fakebin out fifo window holder pid
+  dir=$(make_case term-blocked-doorbell); state="$dir/state"; fakebin="$dir/fakebin"
+  out="$dir/watch.out"; fifo="$dir/send.fifo"; window="test:fm-blocked-doorbell"
+  mkdir -p "$dir/home/config" "$state/doorbell.inbox"
+  mkfifo "$fifo"
+  printf 'window=%s\nkind=ship\nharness=claude\n' "$window" > "$state/doorbell.meta"
+  printf 'schema=fm-task-inbox.v1\nat=2026-01-01T00:00:00Z\n--\nsteer\n' > "$state/doorbell.inbox/001.msg"
+  cat > "$fakebin/tmux" <<'SH'
+#!/usr/bin/env bash
+set -u
+if [ "${1:-}" = "list-windows" ]; then
+  if [ -n "${FM_FAKE_TMUX_WINDOW:-}" ]; then
+    printf '%s\n' "${FM_FAKE_TMUX_WINDOW#*:}"
+  fi
+  exit 0
+fi
+if [ "${1:-}" = "capture-pane" ]; then
+  printf 'idle pane\n'
+  exit 0
+fi
+if [ "${1:-}" = "display-message" ]; then
+  case "$*" in
+    *pane_current_command*) printf '%s\n' "${FM_FAKE_TMUX_CURRENT_COMMAND:-}"; exit 0 ;;
+  esac
+  exit 1
+fi
+if [ "${1:-}" = "send-keys" ]; then
+  cat "${FM_FAKE_TMUX_SEND_FIFO:?}"
+  exit 0
+fi
+exit 1
+SH
+  chmod +x "$fakebin/tmux"
+  ( exec 3> "$fifo"; : > "$dir/doorbell-blocked"; exec sleep 60 ) &
+  holder=$!
+  PATH="$fakebin:$PATH" FM_HOME="$dir/home" FM_CONFIG_OVERRIDE="$dir/home/config" \
+    FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" \
+    FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CURRENT_COMMAND=claude \
+    FM_FAKE_TMUX_SEND_FIFO="$fifo" FM_TASK_INBOX_GRACE_SECS=0 \
+    FM_POLL=1 FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 \
+    FM_HOME_SUMMARY_INTERVAL=99999999 FM_SECONDMATE_LIVENESS_SECS=99999999 \
+    "$WATCH" > "$out" &
+  pid=$!
+  assert_term_stops_blocked_watcher "$pid" "$state" "$dir/doorbell-blocked" "$holder" "$out" \
+    "inside a doorbell send"
+  pass "TERM stops a watcher blocked inside a doorbell send and still runs its cleanup"
+}
+
 # --- held downtime-marker lock must not wedge a TERM'd watcher -------------
 # fm-watch-triage-r1 flake (serial-1 CI): the EXIT cleanup publishes the
 # downtime marker under .watcher-down.lock through an unbounded acquire, so a
@@ -6627,8 +6796,9 @@ test_paused_until_that_passed_is_rechecked_before_the_cadence() {
   pass "a declared wait whose until time has passed is rechecked at once, then held to the cadence"
 }
 
-# CI's stock macOS Bash lane sets FM_TEST_ONLY to run just the bash-3.2
-# churn-deferral regression. The rest of this file is not a 3.2 snapshot suite.
+# CI's stock macOS Bash lane sets FM_TEST_ONLY to run one bash-3.2 case
+# (the churn-deferral regression, or a TERM-mid-poll regression). The rest
+# of this file is not a 3.2 snapshot suite.
 if [ -n "${FM_TEST_ONLY:-}" ]; then
   "$FM_TEST_ONLY"
   exit 0
@@ -6708,6 +6878,9 @@ test_gone_report_rearms_when_the_endpoint_comes_back
 test_second_death_after_a_same_window_relaunch_reports_in_full
 test_identical_dead_display_of_a_successor_still_reports
 test_term_stops_a_watcher_blocked_inside_a_poll
+test_term_stops_a_watcher_blocked_in_the_liveness_probe
+test_term_stops_a_watcher_blocked_in_the_liveness_relaunch
+test_term_stops_a_watcher_blocked_in_a_doorbell_send
 test_term_stops_a_watcher_whose_cleanup_marker_lock_is_held
 test_cleanup_marker_lock_bound_is_decimal_with_zero_default
 test_busy_pane_below_turn_age_bound_is_absorbed

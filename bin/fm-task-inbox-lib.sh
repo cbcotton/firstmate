@@ -270,6 +270,20 @@ fm_task_inbox_doorbell_line() {  # <record-path>
     "$quoted" "$quoted"
 }
 
+# Stoppable when the watcher defines watcher_read; every other caller keeps
+# the command substitution. bin/fm-watch.sh owns that read.
+fm_task_inbox_capture() {  # <var> <command> [args...]
+  local _inbox_cap_var=$1 _inbox_cap_out='' _inbox_cap_rc=0
+  shift
+  if declare -F watcher_read >/dev/null 2>&1; then
+    watcher_read _inbox_cap_out "$@" || _inbox_cap_rc=$?
+  else
+    _inbox_cap_out=$("$@") || _inbox_cap_rc=$?
+  fi
+  printf -v "$_inbox_cap_var" '%s' "$_inbox_cap_out"
+  return "$_inbox_cap_rc"
+}
+
 # Ring the doorbell, best-effort: one endpoint-liveness pre-check, one advisory
 # composer pre-check, then the backend's submit machinery with a minimal retry
 # budget, verdict discarded.
@@ -289,19 +303,20 @@ fm_task_inbox_doorbell_line() {  # <record-path>
 # rather than skipped; skipping it would block every later ring. On both paths
 # a lost first Enter gets one confirmed retry.
 fm_task_inbox_ring() {  # <backend> <target> <record-path> [expected-label]
-  local backend=$1 target=$2 rec=$3 label=${4:-} line cstate verdict
-  case "$(fm_backend_agent_state "$backend" "$target" 2>/dev/null || true)" in
+  local backend=$1 target=$2 rec=$3 label=${4:-} line cstate verdict agent_state busy=
+  fm_task_inbox_capture agent_state fm_backend_agent_state "$backend" "$target" 2>/dev/null || true
+  case "$agent_state" in
     dead|missing) return 3 ;;
   esac
   if ! line=$(fm_task_inbox_doorbell_line "$rec"); then
     return 2
   fi
-  cstate=$(fm_backend_composer_state "$backend" "$target" "$label" 2>/dev/null) || cstate=unknown
+  fm_task_inbox_capture cstate fm_backend_composer_state "$backend" "$target" "$label" 2>/dev/null || cstate=unknown
   case "$cstate" in
     pending)
-      fm_task_inbox_composer_holds "$backend" "$target" "$line" "$label" \
-        && [ "$(fm_backend_busy_state "$backend" "$target" 2>/dev/null)" != busy ] \
-        || return 1
+      fm_task_inbox_composer_holds "$backend" "$target" "$line" "$label" || return 1
+      fm_task_inbox_capture busy fm_backend_busy_state "$backend" "$target" 2>/dev/null || true
+      [ "$busy" != busy ] || return 1
       fm_backend_send_key "$backend" "$target" Enter "$label" >/dev/null 2>&1 || return 2
       sleep 0.3
       fm_task_inbox_composer_holds "$backend" "$target" "$line" "$label" || return 0
@@ -313,7 +328,7 @@ fm_task_inbox_ring() {  # <backend> <target> <record-path> [expected-label]
   # steps, so an agent exiting after the liveness check could leave a bare
   # shell only a suffix; the `: ` prefix protects complete lines only. Do not
   # add process-bound atomic delivery here unless an incident reopens this.
-  if ! verdict=$(fm_backend_send_text_submit "$backend" "$target" "$line" 2 0.4 0.3 "$label" 2>/dev/null); then
+  if ! fm_task_inbox_capture verdict fm_backend_send_text_submit "$backend" "$target" "$line" 2 0.4 0.3 "$label" 2>/dev/null; then
     return 2
   fi
   # The verdict is read only to report a failed keystroke; every other value
@@ -326,7 +341,7 @@ fm_task_inbox_ring() {  # <backend> <target> <record-path> [expected-label]
 fm_task_inbox_composer_holds() {  # <backend> <target> <line> [expected-label]
   local cap held
   fm_backend_source "$1" || return 1
-  cap=$(fm_backend_capture "$1" "$2" "$FM_COMPOSER_CAPTURE_LINES" "${4:-}" 2>/dev/null) || return 1
+  fm_task_inbox_capture cap fm_backend_capture "$1" "$2" "$FM_COMPOSER_CAPTURE_LINES" "${4:-}" 2>/dev/null || return 1
   held=$(fm_composer_extract_selected_content styled=0 "$cap") || return 1
   [ -n "$held" ] && [ "$(printf '%s' "$held" | tr -d '[:space:]')" = "$(printf '%s' "$3" | tr -d '[:space:]')" ]
 }

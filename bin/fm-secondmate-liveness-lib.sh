@@ -111,6 +111,29 @@ fm_secondmate_liveness_recent_attempts() {  # <id> <window-secs>
     "$ledger" 2>/dev/null
 }
 
+# Stoppable when the watcher defines watcher_read; every other caller keeps
+# the command substitution. bin/fm-watch.sh owns that read.
+fm_sm_live_capture() {  # <var> <command> [args...]
+  local _sm_live_var=$1 _sm_live_out='' _sm_live_rc=0
+  shift
+  if declare -F watcher_read >/dev/null 2>&1; then
+    watcher_read _sm_live_out "$@" || _sm_live_rc=$?
+  else
+    _sm_live_out=$("$@") || _sm_live_rc=$?
+  fi
+  printf -v "$_sm_live_var" '%s' "$_sm_live_out"
+  return "$_sm_live_rc"
+}
+
+# Guarded secondmate spawn with stderr kept in the captured transcript.
+fm_sm_live_spawn() {  # <timeout-or-empty> <id>
+  if [ -n "$1" ]; then
+    FM_SPAWN_NO_GUARD=1 fm_run_timed "$1" "$FM_ROOT/bin/fm-spawn.sh" "$2" --secondmate 2>&1
+  else
+    FM_SPAWN_NO_GUARD=1 "$FM_ROOT/bin/fm-spawn.sh" "$2" --secondmate 2>&1
+  fi
+}
+
 # fm_secondmate_liveness_probe <meta> <id> <full|poll>
 #
 # Read-only probe of one registered secondmate's recorded endpoint. Populates:
@@ -155,7 +178,7 @@ fm_secondmate_liveness_probe() {  # <meta> <id> <full|poll>
         return 0
       fi
     fi
-    if out=$("$FM_SM_LIVE_LIB_DIR/fm-on.sh" "$id" fm-remote-secondmate-control.sh state "$id" < /dev/null 2>/dev/null); then
+    if fm_sm_live_capture out "$FM_SM_LIVE_LIB_DIR/fm-on.sh" "$id" fm-remote-secondmate-control.sh state "$id" < /dev/null 2>/dev/null; then
       remote_rc=0
     else
       remote_rc=$?
@@ -173,7 +196,7 @@ fm_secondmate_liveness_probe() {  # <meta> <id> <full|poll>
     case "$agent_state" in
       alive)
         if [ "$mode" = full ]; then
-          if route_out=$("$FM_SM_LIVE_LIB_DIR/fm-on.sh" "$id" fm-remote-secondmate-control.sh route "$id" < /dev/null 2>/dev/null); then
+          if fm_sm_live_capture route_out "$FM_SM_LIVE_LIB_DIR/fm-on.sh" "$id" fm-remote-secondmate-control.sh route "$id" < /dev/null 2>/dev/null; then
             remote_rc=0
           else
             remote_rc=$?
@@ -214,7 +237,7 @@ fm_secondmate_liveness_probe() {  # <meta> <id> <full|poll>
   backend=$(fm_backend_of_meta "$meta")
   target=$(fm_backend_target_of_meta "$meta")
   [ -n "$target" ] || target="$window"
-  agent_state=$(fm_backend_agent_state "$backend" "$target" 2>/dev/null) || agent_state=unreadable
+  fm_sm_live_capture agent_state fm_backend_agent_state "$backend" "$target" 2>/dev/null || agent_state=unreadable
   case "$harness" in
     claude|codex|opencode|pi|pi-signed|grok|kimi|omp) ;;
     *)
@@ -290,11 +313,7 @@ fm_secondmate_liveness_relaunch() {  # <meta> <id> [timeout-secs]
     [ -z "$target" ] || fm_backend_kill "$backend" "$target" 2>/dev/null || true
   fi
   local rc=0
-  if [ -n "$timeout" ]; then
-    FM_SM_LIVE_OUT=$(FM_SPAWN_NO_GUARD=1 fm_run_timed "$timeout" "$FM_ROOT/bin/fm-spawn.sh" "$id" --secondmate 2>&1) || rc=$?
-  else
-    FM_SM_LIVE_OUT=$(FM_SPAWN_NO_GUARD=1 "$FM_ROOT/bin/fm-spawn.sh" "$id" --secondmate 2>&1) || rc=$?
-  fi
+  fm_sm_live_capture FM_SM_LIVE_OUT fm_sm_live_spawn "$timeout" "$id" || rc=$?
   FM_SM_LIVE_RC=$rc
   if [ "$rc" -eq 0 ]; then
     fm_secondmate_liveness_ledger_add "$id" relaunched || true
